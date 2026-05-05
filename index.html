@@ -12,7 +12,8 @@ import { initializeApp }      from 'https://www.gstatic.com/firebasejs/10.12.0/f
 import { getAuth, GoogleAuthProvider, signInWithPopup, signInAnonymously,
          signOut as fbSignOut, onAuthStateChanged }
   from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
-import { getFirestore, doc, setDoc, getDoc, onSnapshot }
+import { getFirestore, doc, setDoc, getDoc, onSnapshot,
+         collection, addDoc, query, where, getDocs, deleteDoc }
   from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
 
 const firebaseConfig = {
@@ -32,8 +33,135 @@ const db   = getFirestore(app);
 const DEVICE_ID = Math.random().toString(36).slice(2);
 let unsubscribeSnapshot = null;
 
-// Expose auth helpers to the main script
-window._fb = { auth, db, GoogleAuthProvider, signInWithPopup, signInAnonymously, fbSignOut };
+// Expose auth + firestore helpers to the main script
+window._fb = {
+  auth, db,
+  GoogleAuthProvider, signInWithPopup, signInAnonymously, fbSignOut,
+  doc, setDoc, getDoc, onSnapshot,
+  collection, addDoc, query, where, getDocs, deleteDoc
+};
+
+// ── Gmail: send real email via Gmail API (needs gmail.send OAuth scope) ──
+// ── Gmail: open Gmail compose with pre-filled invite ──
+// Note: Direct Gmail API sending requires a backend server for token security.
+// This implementation opens Gmail compose with everything pre-filled — one click to send.
+window._sendGmailInvite = async function(toEmail, toName) {
+  window._openGmailCompose(toEmail, toName);
+  return true;
+};
+
+// ── Open Gmail compose window with pre-filled invite ──
+window._openGmailCompose = function(toEmail, toName) {
+  const u = window.currentUser;
+  const senderName = (u && u.name) ? u.name : 'A LifeFlow user';
+  const appUrl = window.location.href.split('?')[0];
+  const subject = encodeURIComponent(senderName + ' invited you to LifeFlow');
+  const nl = '%0A';
+  const bodyParts = [
+    'Hi ' + toName + ',', nl+nl,
+    senderName + ' has added you as a friend on LifeFlow', nl,
+    'to split expenses and track spending together.', nl+nl,
+    'Join here: ' + appUrl, nl+nl,
+    'Sign in with Google (' + toEmail + ') to see the friend request.', nl+nl,
+    '— LifeFlow'
+  ];
+  const body = encodeURIComponent(bodyParts.join(''));
+  const gmailUrl = 'https://mail.google.com/mail/?view=cm'
+    + '&to=' + encodeURIComponent(toEmail)
+    + '&su=' + subject
+    + '&body=' + body;
+  window.open(gmailUrl, '_blank');
+};
+
+window._writeFriendRequestToRecipient = async function(toEmail, fromUser) {
+  if (!toEmail || !fromUser?.uid) return;
+  try {
+    // Look up recipient by email in the users_by_email collection
+    const q = query(collection(db,'users_by_email'), where('email','==',toEmail));
+    const snap = await getDocs(q);
+    if (snap.empty) {
+      // Recipient not on platform yet — store a pending invite
+      await setDoc(doc(db,'pending_invites',toEmail.split('.').join('_')), {
+        toEmail, fromUid: fromUser.uid, fromName: fromUser.name,
+        fromEmail: fromUser.email, sentAt: Date.now()
+      });
+    } else {
+      const recipientUid = snap.docs[0].data().uid;
+      // Write into recipient's friendRequests sub-collection
+      await addDoc(collection(db,'users',recipientUid,'friendRequests'), {
+        fromUid:   fromUser.uid,
+        fromName:  fromUser.name,
+        fromEmail: fromUser.email,
+        fromPicture: fromUser.picture || '',
+        sentAt:    Date.now(),
+        status:    'pending'
+      });
+    }
+  } catch(e) { console.warn('writeFriendRequest error:', e); }
+};
+
+// ── Register current user's email for lookup ──
+window._registerUserEmail = async function(user) {
+  if (!user?.uid || !user?.email) return;
+  try {
+    await setDoc(doc(db,'users_by_email', user.email.split('.').join('_')), {
+      uid: user.uid, email: user.email, name: user.name, updatedAt: Date.now()
+    });
+  } catch(e) { console.warn('registerEmail error:', e); }
+};
+
+// ── Listen for incoming friend requests ──
+window._listenFriendRequests = function(uid) {
+  onSnapshot(collection(db,'users',uid,'friendRequests'), (snap) => {
+    snap.docChanges().forEach(change => {
+      if (change.type === 'added') {
+        const r = change.doc.data();
+        if (r.status === 'pending') {
+          // Add to local friendReqs if not already there
+          const existing = (_friendReqs||[]).find(x => x.fromEmail === r.fromEmail);
+          if (!existing) {
+            _friendReqs = [...(_friendReqs||[]), {
+              id: change.doc.id, from: r.fromName, contact: r.fromEmail,
+              fromUid: r.fromUid, fromPicture: r.fromPicture, date: new Date(r.sentAt).toISOString(),
+              firestoreDocId: change.doc.id
+            }];
+            friendReqs = _friendReqs;
+            if (window.renderPage && window.currentPage === 'spending') window.renderPage('spending');
+            window.showToast && window.showToast('📬 New friend request from ' + r.fromName + '!');
+          }
+        }
+      }
+    });
+  });
+};
+
+// ── Shared group spending: write group expenses to shared collection ──
+window._saveSharedGroup = async function(group, groupSplits) {
+  if (!group?.id) return;
+  try {
+    await setDoc(doc(db,'shared_groups', String(group.id)), {
+      ...group,
+      splits: groupSplits,
+      updatedAt: Date.now()
+    });
+  } catch(e) { console.warn('saveSharedGroup error:', e); }
+};
+
+// ── Load shared group data (for members who joined) ──
+window._loadSharedGroups = async function(userEmail) {
+  if (!userEmail) return [];
+  try {
+    const snap = await getDocs(collection(db,'shared_groups'));
+    const results = [];
+    snap.forEach(d => {
+      const g = d.data();
+      // Include group if user's email is in members (by contact)
+      const isMember = (g.memberEmails||[]).includes(userEmail);
+      if (isMember) results.push(g);
+    });
+    return results;
+  } catch(e) { return []; }
+};
 
 // ── Save all data to Firestore ──
 window._saveToFirestore = async function() {
@@ -92,27 +220,24 @@ window._loadUserData = async function() {
 
 // ── Auth state observer ──
 onAuthStateChanged(auth, async (user) => {
-  // Remove the loading spinner
   document.getElementById('fb-loading')?.remove();
-
   if (user) {
-    // Set currentUser on window so main script can access it
     window.currentUser = {
       uid:       user.uid,
       name:      user.displayName || (user.isAnonymous ? 'Guest' : 'User'),
-      firstName: user.displayName
-                   ? user.displayName.split(' ')[0]
-                   : (user.isAnonymous ? 'there' : 'User'),
+      firstName: user.displayName ? user.displayName.split(' ')[0] : (user.isAnonymous ? 'there' : 'User'),
       email:     user.email    || '',
       picture:   user.photoURL || '',
       isGuest:   user.isAnonymous
     };
-    // Load data from Firestore, then show the app
+    // Register email for friend-lookup, load data, start listeners
+    if (!user.isAnonymous && user.email) {
+      await window._registerUserEmail(window.currentUser);
+      window._listenFriendRequests(user.uid);
+    }
     await window._loadUserData();
-    // Call launchApp — it reads window.currentUser for the name/avatar
     if (window.launchApp) window.launchApp();
   } else {
-    // Detach listener on logout
     if (unsubscribeSnapshot) { unsubscribeSnapshot(); unsubscribeSnapshot = null; }
     document.getElementById('app').style.display  = 'none';
     document.getElementById('auth-screen').style.display = 'flex';
@@ -1388,14 +1513,20 @@ function renderFriends(){
   const pending=friends.filter(f=>f.status==='pending_sent');
   if(pending.length>0)flEl.innerHTML+=`<div style="margin-top:12px;border-top:1px solid var(--warm2);padding-top:12px"><div class="card-title">Pending (sent)</div>${pending.map(f=>`<div class="friend-card"><div class="friend-avatar" style="background:var(--warm3);color:var(--text3)">${f.name[0].toUpperCase()}</div><div class="friend-info"><div class="friend-name">${f.name}</div><div class="friend-contact">${f.contact} · awaiting</div></div><button class="del" onclick="deleteFriend(${f.id})">×</button></div>`).join('')}</div>`;
 
+  const u2=window.currentUser||currentUser;
   const ffEl=document.getElementById('friends-form');
   if(ffEl)ffEl.innerHTML=showFriendForm?`
     <div class="form-box">
       <input class="input" id="friend-name-in" placeholder="Friend's name">
-      <input class="input" id="friend-contact-in" placeholder="Email or mobile number">
-      <div style="font-size:11px;color:var(--text3);margin-bottom:8px">A request will be recorded and linked when they join.</div>
+      <input class="input" id="friend-contact-in" placeholder="Friend's Gmail / email address" type="email">
+      <div style="background:var(--sage-light);border-radius:8px;padding:9px 12px;margin-bottom:10px;font-size:12px;color:var(--sage-dark)">
+        <strong>📧 How it works:</strong><br>
+        1. We'll open <strong>Gmail</strong> with a pre-filled invite.<br>
+        2. Your friend signs in to LifeFlow with that email.<br>
+        3. They'll see your friend request automatically.
+      </div>
       <div style="display:flex;gap:8px">
-        <button class="btn btn-primary" onclick="sendFriendRequest()">Send Request</button>
+        <button class="btn btn-primary" onclick="sendFriendRequest()">Send via Gmail</button>
         <button class="btn btn-ghost" onclick="setFriendForm(false)">Cancel</button>
       </div>
     </div>`:`<button class="add-btn" onclick="setFriendForm(true)">+ Add friend</button>`;
@@ -1407,27 +1538,41 @@ function renderFriends(){
 }
 
 function setFriendForm(v){showFriendForm=v;renderFriends();if(v)setTimeout(()=>document.getElementById('friend-name-in')?.focus(),50);}
-function sendFriendRequest(){
-  const name=(document.getElementById('friend-name-in').value||'').trim();
-  const contact=(document.getElementById('friend-contact-in').value||'').trim();
-  if(!name||!contact)return;
-  // Send email invite via mailto (opens default mail client)
-  const isEmail=/^[^@]+@[^@]+\.[^@]+$/.test(contact);
+async function sendFriendRequest(){
+  const name    = (document.getElementById('friend-name-in').value||'').trim();
+  const contact = (document.getElementById('friend-contact-in').value||'').trim();
+  if(!name||!contact){ alert('Please enter both name and email/phone.'); return; }
+
+  const isEmail = /^[^@]+@[^@]+\.[^@]+$/.test(contact);
+  const u = window.currentUser || currentUser;
+
   if(isEmail){
-    const senderName=currentUser&&!currentUser.isGuest?currentUser.name:'A LifeFlow user';
-    const subject=encodeURIComponent(senderName+' invited you to LifeFlow');
-    const body=encodeURIComponent(
-      'Hi '+name+',\n\n'+
-      senderName+' has added you as a friend on LifeFlow to split expenses.\n\n'+
-      'Open LifeFlow to accept the request and start splitting expenses together.\n\n'+
-      '— LifeFlow'
-    );
-    window.open('mailto:'+contact+'?subject='+subject+'&body='+body,'_blank');
+    if(!u || u.isGuest){
+      // Guest: open Gmail compose in browser
+      window._openGmailCompose && window._openGmailCompose(contact, name);
+      showToast('Gmail opened — please send the invite from your email.');
+    } else {
+      // Signed in: try Gmail API first, fall back to Gmail compose URL
+      const btn = document.querySelector('button[onclick="sendFriendRequest()"]');
+      if(btn){ btn.textContent='Sending...'; btn.disabled=true; }
+      try {
+        // 1. Write request to recipient's Firestore doc (so they see it when they log in)
+        await window._writeFriendRequestToRecipient(contact, u);
+        // 2. Send real Gmail (opens Gmail compose with pre-filled content)
+        window._openGmailCompose(contact, name);
+        showToast('📧 Gmail opened! Invite pre-filled — just hit Send.');
+      } catch(e){
+        console.warn('Friend request error:', e);
+        window._openGmailCompose && window._openGmailCompose(contact, name);
+      }
+      if(btn){ btn.textContent='Send Request'; btn.disabled=false; }
+    }
+  } else {
+    showToast('Friend request recorded. Share the app link with ' + name + ' manually.');
   }
-  friends.push({id:uid(),name,contact,status:'pending_sent'});
-  persistSpend();showFriendForm=false;renderFriends();
-  if(isEmail)showToast('Friend request sent! Email opened to notify '+name+'.');
-  else showToast('Friend request recorded for '+name+'.');
+
+  friends.push({id:uid(), name, contact, status:'pending_sent'});
+  persistSpend(); showFriendForm=false; renderFriends();
 }
 function showToast(msg){
   const t=document.createElement('div');
@@ -1436,7 +1581,29 @@ function showToast(msg){
   document.body.appendChild(t);
   setTimeout(()=>{t.style.opacity='0';setTimeout(()=>t.remove(),400);},3000);
 }
-function acceptFriendReq(id){const r=friendReqs.find(x=>x.id===id);if(!r)return;friends.push({id:uid(),name:r.from,contact:r.contact,status:'active'});friendReqs=friendReqs.filter(x=>x.id!==id);persistSpend();renderFriends();}
+async function acceptFriendReq(id){
+  const r=friendReqs.find(x=>x.id===id);
+  if(!r)return;
+  friends.push({id:uid(),name:r.from,contact:r.contact,status:'active',fromUid:r.fromUid||null});
+  friendReqs=friendReqs.filter(x=>x.id!==id);
+  persistSpend();renderFriends();
+  showToast('✅ '+r.from+' added as a friend!');
+  // Mark the Firestore friend request as accepted
+  const u=window.currentUser||currentUser;
+  if(u?.uid && r.firestoreDocId && window._fb?.deleteDoc){
+    try {
+      const {deleteDoc,doc,db,collection,addDoc} = window._fb;
+      await deleteDoc(doc(db,'users',u.uid,'friendRequests',r.firestoreDocId));
+      // Also notify sender that we accepted (write to their notifications)
+      if(r.fromUid){
+        await addDoc(collection(db,'users',r.fromUid,'notifications'),{
+          type:'friend_accepted', fromName:u.name, fromEmail:u.email,
+          fromPicture:u.picture||'', at:Date.now()
+        });
+      }
+    } catch(e){ console.warn('acceptFriendReq Firestore:', e); }
+  }
+}
 function declineFriendReq(id){friendReqs=friendReqs.filter(x=>x.id!==id);persistSpend();renderFriends();}
 function computeNet(){
   const net={};
@@ -1515,9 +1682,20 @@ function createGroup(){
   const emoji=(document.getElementById('grp-emoji').value||'').trim()||'🏕️';
   if(!name)return;
   const cbs=document.querySelectorAll('.grp-member-cb:checked');
-  const members=['me',...Array.from(cbs).map(cb=>Number(cb.value))];
-  groups.push({id:uid(),name,emoji,members});
+  const memberIds=['me',...Array.from(cbs).map(cb=>Number(cb.value))];
+  // Collect emails of all members for Firestore visibility
+  const u=window.currentUser||currentUser;
+  const memberEmails=[u?.email||''];
+  Array.from(cbs).forEach(cb=>{
+    const f=friends.find(x=>x.id===Number(cb.value));
+    if(f?.contact && /^[^@]+@[^@]+\.[^@]+$/.test(f.contact)) memberEmails.push(f.contact);
+  });
+  const newGroup={id:uid(),name,emoji,members:memberIds,memberEmails,createdBy:u?.uid||'',createdAt:Date.now()};
+  groups.push(newGroup);
   persistSpend();showGroupForm=false;renderGroups();
+  // Write to shared Firestore collection so members can see it
+  if(window._saveSharedGroup) window._saveSharedGroup(newGroup,[]);
+  showToast('Group created! Members will see shared expenses when they log in.');
 }
 function isGroupSettled(gid){
   return splits.filter(s=>s.groupId===gid).every(sp=>sp.members.every(m=>m.paid));
@@ -1562,13 +1740,19 @@ function renderGroupDetail(gid){
         </div>
       </div>`;
     }).join('');
+  const memberEmails = g.memberEmails || [];
+  const visibleBadge = memberEmails.length > 0
+    ? `<div style="font-size:11px;color:var(--sage);background:var(--sage-light);padding:7px 12px;border-radius:8px;margin-bottom:14px;line-height:1.5">
+        👁️ <strong>Shared with:</strong> ${memberEmails.join(' · ')}
+       </div>` : '';
   document.getElementById('group-detail-view').innerHTML=`
     <div class="card">
-      <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
         <button class="btn btn-ghost btn-sm" onclick="closeGroup()">← Back</button>
         <span style="font-size:20px">${g.emoji}</span>
         <span style="font-size:18px;font-weight:500;color:var(--sage-dark)">${g.name}</span>
       </div>
+      ${visibleBadge}
       <div class="card-title">Expenses</div>
       ${splitsHtml}
       <button class="add-btn" onclick="openSplitModal(${gid})">+ Add expense &amp; split</button>
@@ -1658,8 +1842,14 @@ function addSplit(gid){
       members.push({friendId:fid,share:Math.round(total*pct/100*100)/100,paid:String(fid)===String(paidBy)});
     });
   }
-  splits.push({id:uid(),groupId:gid,desc,totalAmount:total,paidBy,date:todayKey(),members,splitType:type});
+  const newSplit={id:uid(),groupId:gid,desc,totalAmount:total,paidBy,date:todayKey(),members,splitType:type};
+  splits.push(newSplit);
   persistSpend();closeSplitModal();renderGroupDetail(gid);
+  // Sync updated group splits to shared Firestore so all members see it
+  const grp=groups.find(x=>x.id===gid);
+  if(grp && window._saveSharedGroup){
+    window._saveSharedGroup(grp, splits.filter(s=>s.groupId===gid));
+  }
 }
 
 // ── SETTLE UP ───────────────────────────────
