@@ -6,8 +6,112 @@
 <title>LifeFlow — Your Personal Sanctuary</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;1,300;1,400&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
-<!-- Google Sign-In -->
-<script src="https://accounts.google.com/gsi/client" async defer></script>
+<!-- Firebase SDKs -->
+<script type="module">
+import { initializeApp }      from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
+import { getAuth, GoogleAuthProvider, signInWithPopup, signInAnonymously, signOut as fbSignOut, onAuthStateChanged }
+  from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
+import { getFirestore, doc, setDoc, getDoc, onSnapshot }
+  from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
+
+const firebaseConfig = {
+  apiKey:            "AIzaSyCDdVqYg8HXFftvRDDH6KD6Qvcvr3pXDXA",
+  authDomain:        "lifeflow-2f5eb.firebaseapp.com",
+  projectId:         "lifeflow-2f5eb",
+  storageBucket:     "lifeflow-2f5eb.firebasestorage.app",
+  messagingSenderId: "334050349685",
+  appId:             "1:334050349685:web:61c740a65781be7b30de3c"
+};
+
+const app  = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db   = getFirestore(app);
+
+// Expose to global scope
+window._fb = { auth, db, GoogleAuthProvider, signInWithPopup, signInAnonymously, fbSignOut, onAuthStateChanged, doc, setDoc, getDoc, onSnapshot };
+
+// ── Save all data to Firestore ──
+window._saveToFirestore = async function() {
+  const u = window.currentUser;
+  if (!u || !u.uid) return;
+  try {
+    const ts = Date.now();
+    window._lastSaveTime = ts;
+    await setDoc(doc(db,'users',u.uid), {
+      habits:     window._habits     || [],
+      goals:      window._goals      || [],
+      todos:      window._todos      || [],
+      spends:     window._spends     || [],
+      customCats: window._customCats || [],
+      friends:    window._friends    || [],
+      friendReqs: window._friendReqs || [],
+      groups:     window._groups     || [],
+      splits:     window._splits     || [],
+      updatedAt:  ts
+    }, { merge:true });
+  } catch(e){ console.warn('Firestore save error:',e); }
+};
+
+// ── Load data from Firestore ──
+window._loadUserData = async function() {
+  const u = window.currentUser;
+  if (!u || !u.uid) return;
+  try {
+    const snap = await getDoc(doc(db,'users',u.uid));
+    if (snap.exists()) {
+      const d = snap.data();
+      if(d.habits)     window._habits     = d.habits;
+      if(d.goals)      window._goals      = d.goals;
+      if(d.todos)      window._todos      = d.todos;
+      if(d.spends)     window._spends     = d.spends;
+      if(d.customCats) window._customCats = d.customCats;
+      if(d.friends)    window._friends    = d.friends;
+      if(d.friendReqs) window._friendReqs = d.friendReqs;
+      if(d.groups)     window._groups     = d.groups;
+      if(d.splits)     window._splits     = d.splits;
+    }
+    // Real-time listener for cross-device sync
+    onSnapshot(doc(db,'users',u.uid), (snap2) => {
+      if(!snap2.exists()) return;
+      const d2 = snap2.data();
+      if(d2.updatedAt && d2.updatedAt !== window._lastSaveTime) {
+        if(d2.habits)     window._habits     = d2.habits;
+        if(d2.goals)      window._goals      = d2.goals;
+        if(d2.todos)      window._todos      = d2.todos;
+        if(d2.spends)     window._spends     = d2.spends;
+        if(d2.customCats) window._customCats = d2.customCats;
+        if(d2.friends)    window._friends    = d2.friends;
+        if(d2.friendReqs) window._friendReqs = d2.friendReqs;
+        if(d2.groups)     window._groups     = d2.groups;
+        if(d2.splits)     window._splits     = d2.splits;
+        if(window.renderPage && window.currentPage) window.renderPage(window.currentPage);
+        if(window.renderHome) window.renderHome();
+        window.showToast && window.showToast('✨ Data synced from another device');
+      }
+    });
+  } catch(e){ console.warn('Firestore load error:',e); }
+};
+
+// ── Auth state change handler ──
+onAuthStateChanged(auth, async (user) => {
+  document.getElementById('fb-loading')?.remove();
+  if (user) {
+    window.currentUser = {
+      uid:       user.uid,
+      name:      user.displayName || (user.isAnonymous ? 'Guest' : 'User'),
+      firstName: user.displayName ? user.displayName.split(' ')[0] : (user.isAnonymous ? 'there' : 'User'),
+      email:     user.email || '',
+      picture:   user.photoURL || '',
+      isGuest:   user.isAnonymous
+    };
+    await window._loadUserData();
+    window.launchApp && window.launchApp();
+  } else {
+    document.getElementById('app').style.display = 'none';
+    document.getElementById('auth-screen').style.display = 'flex';
+  }
+});
+</script>
 <style>
   :root {
     --sage:#6B8F71; --sage-dark:#3D5C42; --sage-light:#EAF0EB; --sage-mid:#A8C4AC;
@@ -316,26 +420,14 @@
     <div class="auth-logo">LifeFlow</div>
     <div class="auth-tagline">Your personal sanctuary for calm, focused living</div>
 
-    <!-- Google Sign-In button rendered here -->
-    <div id="g_id_onload"
-      data-client_id="818913309121-8j06cutch40brhcqrvq45nftknvh4t50.apps.googleusercontent.com"
-      data-callback="handleGoogleSignIn"
-      data-auto_select="false"
-      data-itp_support="true">
-    </div>
-    <div class="g_id_signin"
-      data-type="standard"
-      data-size="large"
-      data-theme="outline"
-      data-text="sign_in_with"
-      data-shape="rectangular"
-      data-logo_alignment="left"
-      data-width="280">
-    </div>
-
+    <!-- Firebase Google Sign-In -->
+    <button onclick="signInWithGoogle()" style="width:100%;display:flex;align-items:center;justify-content:center;gap:10px;padding:11px 16px;background:white;border:1.5px solid var(--warm3);border-radius:var(--r2);cursor:pointer;font-size:14px;font-weight:500;font-family:'DM Sans',sans-serif;transition:all .2s;color:var(--text)">
+      <svg width="18" height="18" viewBox="0 0 48 48"><path fill="#EA4335" d="M24 9.5c3.5 0 6.6 1.2 9.1 3.2l6.8-6.8C35.8 2.2 30.3 0 24 0 14.6 0 6.6 5.4 2.6 13.3l7.9 6.1C12.4 13.2 17.7 9.5 24 9.5z"/><path fill="#4285F4" d="M46.5 24.5c0-1.6-.1-3.1-.4-4.5H24v8.5h12.7c-.6 3-2.3 5.5-4.8 7.2l7.5 5.8c4.4-4 7.1-10 7.1-17z"/><path fill="#FBBC05" d="M10.5 28.6A14.5 14.5 0 0 1 9.5 24c0-1.6.3-3.1.7-4.6L2.3 13.3A24 24 0 0 0 0 24c0 3.8.9 7.4 2.6 10.6l7.9-6z"/><path fill="#34A853" d="M24 48c6.5 0 11.9-2.1 15.9-5.8l-7.5-5.8c-2.2 1.5-5 2.3-8.4 2.3-6.3 0-11.6-3.7-13.5-9.1l-7.9 6C6.6 42.6 14.6 48 24 48z"/></svg>
+      Sign in with Google
+    </button>
     <div class="auth-divider">or</div>
     <button class="auth-guest" onclick="signInAsGuest()">Continue as Guest</button>
-    <div class="auth-note">Your data stays in your browser. Google Sign-In lets us personalise your greeting.</div>
+    <div class="auth-note">☁️ Your data syncs across all devices when signed in with Google.</div>
   </div>
 </div>
 
@@ -499,33 +591,39 @@
 
 <script>
 // ─────────────────────────────────────────────
-// AUTH
+// AUTH  (Firebase-backed)
 // ─────────────────────────────────────────────
-let currentUser = null; // { name, email, picture, isGuest }
+let currentUser = null;
 
-function handleGoogleSignIn(response) {
-  // Decode JWT payload
-  const payload = JSON.parse(atob(response.credential.split('.')[1]));
-  currentUser = {
-    name: payload.name,
-    firstName: payload.given_name,
-    email: payload.email,
-    picture: payload.picture,
-    isGuest: false
-  };
-  localStorage.setItem('lf3_user', JSON.stringify(currentUser));
-  launchApp();
+async function signInWithGoogle() {
+  const { auth, GoogleAuthProvider, signInWithPopup } = window._fb;
+  const provider = new GoogleAuthProvider();
+  try {
+    await signInWithPopup(auth, provider);
+    // onAuthStateChanged in the module script handles the rest
+  } catch(e) {
+    if (e.code !== 'auth/popup-closed-by-user') {
+      alert('Sign-in failed: ' + e.message);
+    }
+  }
 }
 
-function signInAsGuest() {
-  currentUser = { name: 'there', firstName: 'there', email: '', picture: '', isGuest: true };
-  localStorage.setItem('lf3_user', JSON.stringify(currentUser));
-  launchApp();
+async function signInAsGuest() {
+  const { auth, signInAnonymously } = window._fb;
+  try {
+    await signInAnonymously(auth);
+  } catch(e) {
+    alert('Guest sign-in failed: ' + e.message);
+  }
 }
 
-function signOut() {
-  localStorage.removeItem('lf3_user');
+async function signOut() {
+  const { auth, fbSignOut } = window._fb;
+  await fbSignOut(auth);
   currentUser = null;
+  // Reset in-memory data
+  habits=[]; goals=[]; todos=[]; spends=[];
+  customCats=[]; friends=[]; friendReqs=[]; groups=[]; splits=[];
   document.getElementById('app').style.display = 'none';
   document.getElementById('auth-screen').style.display = 'flex';
 }
@@ -549,25 +647,18 @@ function renderSidebarUser() {
     <div style="min-width:0">
       <div class="user-name">${currentUser.isGuest ? 'Guest' : currentUser.name}</div>
       ${!currentUser.isGuest ? `<div class="user-email">${currentUser.email}</div>` : ''}
-      <button class="sign-out-btn" onclick="signOut()">Sign out</button>
+      <div style="display:flex;align-items:center;gap:8px;margin-top:2px">
+        <span style="font-size:10px;background:${currentUser.isGuest?'var(--warm3)':'var(--sage-light)'};color:${currentUser.isGuest?'var(--text3)':'var(--sage-dark)'};padding:2px 6px;border-radius:6px">${currentUser.isGuest?'Guest':'Synced ☁️'}</span>
+        <button class="sign-out-btn" onclick="signOut()">Sign out</button>
+      </div>
     </div>`;
 }
 
-// Check if already signed in
-window.addEventListener('DOMContentLoaded', () => {
-  const saved = localStorage.getItem('lf3_user');
-  if (saved) {
-    try {
-      currentUser = JSON.parse(saved);
-      launchApp();
-    } catch { /* show auth screen */ }
-  }
-});
-
 // ─────────────────────────────────────────────
-// STATE
+// STATE  (Firebase-backed — localStorage used only as fast local cache)
 // ─────────────────────────────────────────────
 const KEYS={habits:'lf3_habits',goals:'lf3_goals',todos:'lf3_todos',spends:'lf3_spends'};
+// Keep localStorage as offline cache fallback
 function load(k,d){try{const s=localStorage.getItem(k);return s?JSON.parse(s):d;}catch{return d;}}
 function save(k,v){try{localStorage.setItem(k,JSON.stringify(v));}catch{}}
 
@@ -587,31 +678,38 @@ function todayDatetimeLocal(){
   return d.toISOString().slice(0,16);
 }
 
-let habits=load(KEYS.habits,[
+// Private backing variables (exposed via window properties in INIT)
+let _habits=load(KEYS.habits,[
   {id:1,name:'Morning meditation',emoji:'🧘',streak:7,history:[]},
   {id:2,name:'Drink 8 glasses of water',emoji:'💧',streak:3,history:[]},
   {id:3,name:'Evening walk',emoji:'🚶',streak:12,history:[]},
   {id:4,name:'Read for 20 minutes',emoji:'📖',streak:5,history:[]},
 ]);
-let goals=load(KEYS.goals,[
+let _goals=load(KEYS.goals,[
   {id:1,name:'Read 24 books this year',emoji:'📚',current:7,target:24,unit:'books'},
   {id:2,name:'Save ₹1,00,000',emoji:'💰',current:42000,target:100000,unit:'₹'},
   {id:3,name:'Run 500 km',emoji:'🏃',current:87,target:500,unit:'km'},
 ]);
-
 // todos now have: dueDate (ISO string or null), dueTime implicit in dueDate
-let todos=load(KEYS.todos,[
+let _todos=load(KEYS.todos,[
   {id:1,text:'Review quarterly report',done:false,priority:'high',dueDate:todayDatetimeLocal()},
   {id:2,text:'Call dentist for appointment',done:false,priority:'medium',dueDate:todayDatetimeLocal()},
   {id:3,text:'Buy groceries',done:true,priority:'low',dueDate:todayDatetimeLocal()},
   {id:4,text:'Reply to pending emails',done:false,priority:'high',dueDate:todayDatetimeLocal()},
 ]);
-let spends=load(KEYS.spends,[
+let _spends=load(KEYS.spends,[
   {id:1,cat:'Food',desc:'Lunch at restaurant',amount:350,date:todayKey()},
   {id:2,cat:'Travel',desc:'Auto rickshaw',amount:80,date:todayKey()},
   {id:3,cat:'Shopping',desc:'Book purchase',amount:499,date:todayKey()},
 ]);
-function persist(){save(KEYS.habits,habits);save(KEYS.goals,goals);save(KEYS.todos,todos);save(KEYS.spends,spends);}
+// Shorthand aliases — these are reassigned by window property setters
+let habits=_habits, goals=_goals, todos=_todos, spends=_spends;
+function persist(){
+  // Local cache (instant)
+  save(KEYS.habits,habits);save(KEYS.goals,goals);save(KEYS.todos,todos);save(KEYS.spends,spends);
+  // Cloud sync (async, non-blocking)
+  if(window._saveToFirestore) window._lastSaveTime=Date.now(), window._saveToFirestore();
+}
 
 const CAT_COLORS={Food:'#6B8F71',Travel:'#B8845A',Shopping:'#5A78B8',Health:'#B85A4A',Bills:'#8A6BC4',Entertainment:'#5A9898',Other:'#9C9C98'};
 const CAT_BG={Food:'#EAF0EB',Travel:'#F5EAE0',Shopping:'#E5EAF5',Health:'#F5E8E5',Bills:'#EDE5F5',Entertainment:'#E5F0F0',Other:'#F0F0F0'};
@@ -1087,11 +1185,12 @@ function deleteTodo(id){todos=todos.filter(t=>t.id!==id);persist();renderAll();}
 // ─────────────────────────────────────────────
 const XKEYS={customCats:'lf3_custom_cats',friends:'lf3_friends',friendReqs:'lf3_friend_reqs',groups:'lf3_groups',splits:'lf3_splits'};
 const BUILTIN_CATS={Food:{emoji:'🍽️',color:'#6B8F71',bg:'#EAF0EB'},Travel:{emoji:'🚗',color:'#B8845A',bg:'#F5EAE0'},Shopping:{emoji:'🛍️',color:'#5A78B8',bg:'#E5EAF5'},Health:{emoji:'💊',color:'#B85A4A',bg:'#F5E8E5'},Bills:{emoji:'📄',color:'#8A6BC4',bg:'#EDE5F5'},Entertainment:{emoji:'🎬',color:'#5A9898',bg:'#E5F0F0'},Other:{emoji:'📦',color:'#9C9C98',bg:'#F0F0F0'}};
-let customCats=load(XKEYS.customCats,[]);
-let friends=load(XKEYS.friends,[]);
-let friendReqs=load(XKEYS.friendReqs,[]);
-let groups=load(XKEYS.groups,[]);
-let splits=load(XKEYS.splits,[]);
+let _customCats=load(XKEYS.customCats,[]);
+let _friends=load(XKEYS.friends,[]);
+let _friendReqs=load(XKEYS.friendReqs,[]);
+let _groups=load(XKEYS.groups,[]);
+let _splits=load(XKEYS.splits,[]);
+let customCats=_customCats,friends=_friends,friendReqs=_friendReqs,groups=_groups,splits=_splits;
 
 function allCats(){const m={...BUILTIN_CATS};customCats.forEach(c=>{m[c.name]={emoji:c.emoji,color:c.color,bg:c.bg};});return m;}
 function catEmoji(n){return(allCats()[n]||{emoji:'📦'}).emoji;}
@@ -1102,6 +1201,7 @@ function persistSpend(){
   save(KEYS.spends,spends);save(XKEYS.customCats,customCats);
   save(XKEYS.friends,friends);save(XKEYS.friendReqs,friendReqs);
   save(XKEYS.groups,groups);save(XKEYS.splits,splits);
+  if(window._saveToFirestore) window._lastSaveTime=Date.now(), window._saveToFirestore();
 }
 
 let spendTab='personal',showSpendForm=false,showCatForm=false,showFriendForm=false,showGroupForm=false,openGroupId=null;
@@ -1575,6 +1675,35 @@ function settleUp(friendId){
 // ─────────────────────────────────────────────
 // INIT
 // ─────────────────────────────────────────────
+
+// Expose key state arrays globally so the Firebase module can read/write them
+Object.defineProperty(window,'habits',    {get:()=>_habits,    set:v=>{_habits=v;},    enumerable:true});
+Object.defineProperty(window,'goals',     {get:()=>_goals,     set:v=>{_goals=v;},     enumerable:true});
+Object.defineProperty(window,'todos',     {get:()=>_todos,     set:v=>{_todos=v;},     enumerable:true});
+Object.defineProperty(window,'spends',    {get:()=>_spends,    set:v=>{_spends=v;},    enumerable:true});
+Object.defineProperty(window,'customCats',{get:()=>_customCats,set:v=>{_customCats=v;},enumerable:true});
+Object.defineProperty(window,'friends',   {get:()=>_friends,   set:v=>{_friends=v;},   enumerable:true});
+Object.defineProperty(window,'friendReqs',{get:()=>_friendReqs,set:v=>{_friendReqs=v;},enumerable:true});
+Object.defineProperty(window,'groups',    {get:()=>_groups,    set:v=>{_groups=v;},    enumerable:true});
+Object.defineProperty(window,'splits',    {get:()=>_splits,    set:v=>{_splits=v;},    enumerable:true});
+window.currentPage = currentPage;
+window.renderPage  = renderPage;
+window.renderHome  = renderHome;
+window.launchApp   = launchApp;
+window.currentUser = currentUser;
+window._lastSaveTime = 0;
+
+// Show a loading spinner while Firebase initialises
+document.addEventListener('DOMContentLoaded',()=>{
+  const spinner=document.createElement('div');
+  spinner.id='fb-loading';
+  spinner.style.cssText='position:fixed;inset:0;background:var(--warm);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:9999;gap:12px';
+  spinner.innerHTML='<div style="font-family:Cormorant Garamond,serif;font-size:32px;color:var(--sage-dark);font-style:italic">LifeFlow</div><div style="width:32px;height:32px;border:3px solid var(--warm2);border-top-color:var(--sage);border-radius:50%;animation:spin .7s linear infinite"></div><div style="font-size:13px;color:var(--text3)">Loading your sanctuary...</div>';
+  document.body.appendChild(spinner);
+  // Remove spinner after 5s max (fallback)
+  setTimeout(()=>spinner.remove(), 5000);
+});
+
 function initDateTime(){
   const now=new Date();
   const h=now.getHours();
@@ -1587,6 +1716,8 @@ function initDateTime(){
   document.getElementById('topbar-date').textContent=ds;
   document.getElementById('sidebar-date').textContent=ds;
   document.getElementById('today-chip').textContent=now.toLocaleDateString('en-IN',{weekday:'short',day:'numeric',month:'short'});
+  // Remove loading spinner
+  document.getElementById('fb-loading')?.remove();
 }
 
 document.addEventListener('keydown',e=>{
