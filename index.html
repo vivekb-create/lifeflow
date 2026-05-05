@@ -9,7 +9,8 @@
 <!-- Firebase SDKs -->
 <script type="module">
 import { initializeApp }      from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
-import { getAuth, GoogleAuthProvider, signInWithPopup, signInAnonymously, signOut as fbSignOut, onAuthStateChanged }
+import { getAuth, GoogleAuthProvider, signInWithPopup, signInAnonymously,
+         signOut as fbSignOut, onAuthStateChanged }
   from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
 import { getFirestore, doc, setDoc, getDoc, onSnapshot }
   from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
@@ -27,87 +28,93 @@ const app  = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db   = getFirestore(app);
 
-// Expose to global scope
-window._fb = { auth, db, GoogleAuthProvider, signInWithPopup, signInAnonymously, fbSignOut, onAuthStateChanged, doc, setDoc, getDoc, onSnapshot };
+// Unique device ID so we don't re-apply our own saves
+const DEVICE_ID = Math.random().toString(36).slice(2);
+let unsubscribeSnapshot = null;
+
+// Expose auth helpers to the main script
+window._fb = { auth, db, GoogleAuthProvider, signInWithPopup, signInAnonymously, fbSignOut };
 
 // ── Save all data to Firestore ──
 window._saveToFirestore = async function() {
   const u = window.currentUser;
   if (!u || !u.uid) return;
   try {
+    const state = window._getState ? window._getState() : {};
     const ts = Date.now();
     window._lastSaveTime = ts;
-    await setDoc(doc(db,'users',u.uid), {
-      habits:     window._habits     || [],
-      goals:      window._goals      || [],
-      todos:      window._todos      || [],
-      spends:     window._spends     || [],
-      customCats: window._customCats || [],
-      friends:    window._friends    || [],
-      friendReqs: window._friendReqs || [],
-      groups:     window._groups     || [],
-      splits:     window._splits     || [],
-      updatedAt:  ts
-    }, { merge:true });
-  } catch(e){ console.warn('Firestore save error:',e); }
+    await setDoc(doc(db, 'users', u.uid), {
+      ...state,
+      updatedAt: ts,
+      updatedBy: DEVICE_ID
+    }, { merge: true });
+  } catch(e) {
+    console.warn('Firestore save error:', e);
+  }
 };
 
-// ── Load data from Firestore ──
+// ── Start real-time listener ──
+function startListener(uid) {
+  if (unsubscribeSnapshot) unsubscribeSnapshot(); // clear old listener
+  unsubscribeSnapshot = onSnapshot(
+    doc(db, 'users', uid),
+    (snap) => {
+      if (!snap.exists()) return;
+      const d = snap.data();
+      // Skip if this update came from this device (our own save echoing back)
+      if (d.updatedBy === DEVICE_ID) return;
+      // Apply the remote data into the app state and re-render
+      if (window._applySync) {
+        window._applySync(d);
+        window.showToast && window.showToast('✨ Synced from another device');
+      }
+    },
+    (err) => console.warn('Snapshot error:', err)
+  );
+}
+
+// ── Load user data once on login, then start listener ──
 window._loadUserData = async function() {
   const u = window.currentUser;
   if (!u || !u.uid) return;
   try {
-    const snap = await getDoc(doc(db,'users',u.uid));
+    const snap = await getDoc(doc(db, 'users', u.uid));
     if (snap.exists()) {
-      const d = snap.data();
-      if(d.habits)     window._habits     = d.habits;
-      if(d.goals)      window._goals      = d.goals;
-      if(d.todos)      window._todos      = d.todos;
-      if(d.spends)     window._spends     = d.spends;
-      if(d.customCats) window._customCats = d.customCats;
-      if(d.friends)    window._friends    = d.friends;
-      if(d.friendReqs) window._friendReqs = d.friendReqs;
-      if(d.groups)     window._groups     = d.groups;
-      if(d.splits)     window._splits     = d.splits;
+      // Apply saved data into the app (initial load)
+      if (window._applySync) window._applySync(snap.data());
     }
-    // Real-time listener for cross-device sync
-    onSnapshot(doc(db,'users',u.uid), (snap2) => {
-      if(!snap2.exists()) return;
-      const d2 = snap2.data();
-      if(d2.updatedAt && d2.updatedAt !== window._lastSaveTime) {
-        if(d2.habits)     window._habits     = d2.habits;
-        if(d2.goals)      window._goals      = d2.goals;
-        if(d2.todos)      window._todos      = d2.todos;
-        if(d2.spends)     window._spends     = d2.spends;
-        if(d2.customCats) window._customCats = d2.customCats;
-        if(d2.friends)    window._friends    = d2.friends;
-        if(d2.friendReqs) window._friendReqs = d2.friendReqs;
-        if(d2.groups)     window._groups     = d2.groups;
-        if(d2.splits)     window._splits     = d2.splits;
-        if(window.renderPage && window.currentPage) window.renderPage(window.currentPage);
-        if(window.renderHome) window.renderHome();
-        window.showToast && window.showToast('✨ Data synced from another device');
-      }
-    });
-  } catch(e){ console.warn('Firestore load error:',e); }
+    // Now start live listener for cross-device updates
+    startListener(u.uid);
+  } catch(e) {
+    console.warn('Firestore load error:', e);
+  }
 };
 
-// ── Auth state change handler ──
+// ── Auth state observer ──
 onAuthStateChanged(auth, async (user) => {
+  // Remove the loading spinner
   document.getElementById('fb-loading')?.remove();
+
   if (user) {
+    // Set currentUser on window so main script can access it
     window.currentUser = {
       uid:       user.uid,
       name:      user.displayName || (user.isAnonymous ? 'Guest' : 'User'),
-      firstName: user.displayName ? user.displayName.split(' ')[0] : (user.isAnonymous ? 'there' : 'User'),
-      email:     user.email || '',
+      firstName: user.displayName
+                   ? user.displayName.split(' ')[0]
+                   : (user.isAnonymous ? 'there' : 'User'),
+      email:     user.email    || '',
       picture:   user.photoURL || '',
       isGuest:   user.isAnonymous
     };
+    // Load data from Firestore, then show the app
     await window._loadUserData();
-    window.launchApp && window.launchApp();
+    // Call launchApp — it reads window.currentUser for the name/avatar
+    if (window.launchApp) window.launchApp();
   } else {
-    document.getElementById('app').style.display = 'none';
+    // Detach listener on logout
+    if (unsubscribeSnapshot) { unsubscribeSnapshot(); unsubscribeSnapshot = null; }
+    document.getElementById('app').style.display  = 'none';
     document.getElementById('auth-screen').style.display = 'flex';
   }
 });
@@ -618,10 +625,15 @@ async function signInAsGuest() {
 }
 
 async function signOut() {
-  const { auth, fbSignOut } = window._fb;
-  await fbSignOut(auth);
+  try {
+    const { auth, fbSignOut } = window._fb;
+    await fbSignOut(auth);
+  } catch(e) { console.warn('signOut error:', e); }
   currentUser = null;
+  window.currentUser = null;
   // Reset in-memory data
+  _habits=[]; _goals=[]; _todos=[]; _spends=[];
+  _customCats=[]; _friends=[]; _friendReqs=[]; _groups=[]; _splits=[];
   habits=[]; goals=[]; todos=[]; spends=[];
   customCats=[]; friends=[]; friendReqs=[]; groups=[]; splits=[];
   document.getElementById('app').style.display = 'none';
@@ -629,6 +641,8 @@ async function signOut() {
 }
 
 function launchApp() {
+  // Always read the freshest user from window.currentUser (set by Firebase module)
+  if (window.currentUser) currentUser = window.currentUser;
   document.getElementById('auth-screen').style.display = 'none';
   document.getElementById('app').style.display = 'flex';
   initDateTime();
@@ -637,18 +651,24 @@ function launchApp() {
 }
 
 function renderSidebarUser() {
+  // Use window.currentUser as source of truth — it's set by Firebase module
+  const u = window.currentUser || currentUser;
   const el = document.getElementById('sidebar-user');
-  if (!currentUser) return;
-  const avatar = currentUser.picture
-    ? `<img class="user-avatar" src="${currentUser.picture}" alt="">`
-    : `<div class="user-avatar-initials">${(currentUser.name||'G')[0].toUpperCase()}</div>`;
+  if (!u || !el) return;
+  const avatar = u.picture
+    ? `<img class="user-avatar" src="${u.picture}" alt="" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">`
+    : '';
+  const initials = `<div class="user-avatar-initials" style="${u.picture?'display:none':''}">
+    ${(u.name||'G')[0].toUpperCase()}</div>`;
   el.innerHTML = `
-    ${avatar}
-    <div style="min-width:0">
-      <div class="user-name">${currentUser.isGuest ? 'Guest' : currentUser.name}</div>
-      ${!currentUser.isGuest ? `<div class="user-email">${currentUser.email}</div>` : ''}
-      <div style="display:flex;align-items:center;gap:8px;margin-top:2px">
-        <span style="font-size:10px;background:${currentUser.isGuest?'var(--warm3)':'var(--sage-light)'};color:${currentUser.isGuest?'var(--text3)':'var(--sage-dark)'};padding:2px 6px;border-radius:6px">${currentUser.isGuest?'Guest':'Synced ☁️'}</span>
+    <div style="position:relative;flex-shrink:0">${avatar}${initials}</div>
+    <div style="min-width:0;flex:1">
+      <div class="user-name">${u.isGuest ? 'Guest' : (u.name||'User')}</div>
+      ${!u.isGuest && u.email ? `<div class="user-email">${u.email}</div>` : ''}
+      <div style="display:flex;align-items:center;gap:8px;margin-top:3px">
+        <span style="font-size:10px;background:${u.isGuest?'var(--warm3)':'var(--sage-light)'};color:${u.isGuest?'var(--text3)':'var(--sage-dark)'};padding:2px 6px;border-radius:6px;font-weight:500">
+          ${u.isGuest ? '👤 Guest' : '☁️ Synced'}
+        </span>
         <button class="sign-out-btn" onclick="signOut()">Sign out</button>
       </div>
     </div>`;
@@ -705,10 +725,13 @@ let _spends=load(KEYS.spends,[
 // Shorthand aliases — these are reassigned by window property setters
 let habits=_habits, goals=_goals, todos=_todos, spends=_spends;
 function persist(){
-  // Local cache (instant)
-  save(KEYS.habits,habits);save(KEYS.goals,goals);save(KEYS.todos,todos);save(KEYS.spends,spends);
+  // Keep _private vars in sync with aliases
+  _habits=habits; _goals=goals; _todos=todos; _spends=spends;
+  // Local cache (instant, for offline fallback)
+  save(KEYS.habits,habits); save(KEYS.goals,goals);
+  save(KEYS.todos,todos);   save(KEYS.spends,spends);
   // Cloud sync (async, non-blocking)
-  if(window._saveToFirestore) window._lastSaveTime=Date.now(), window._saveToFirestore();
+  if (window._saveToFirestore) window._saveToFirestore();
 }
 
 const CAT_COLORS={Food:'#6B8F71',Travel:'#B8845A',Shopping:'#5A78B8',Health:'#B85A4A',Bills:'#8A6BC4',Entertainment:'#5A9898',Other:'#9C9C98'};
@@ -1198,10 +1221,17 @@ function catColor(n){return(allCats()[n]||{color:'#9C9C98'}).color;}
 function catBg(n){return(allCats()[n]||{bg:'#F0F0F0'}).bg;}
 
 function persistSpend(){
-  save(KEYS.spends,spends);save(XKEYS.customCats,customCats);
-  save(XKEYS.friends,friends);save(XKEYS.friendReqs,friendReqs);
-  save(XKEYS.groups,groups);save(XKEYS.splits,splits);
-  if(window._saveToFirestore) window._lastSaveTime=Date.now(), window._saveToFirestore();
+  // Keep _private vars in sync with aliases
+  _spends=spends; _customCats=customCats; _friends=friends;
+  _friendReqs=friendReqs; _groups=groups; _splits=splits;
+  // Also sync the core vars
+  _habits=habits; _goals=goals; _todos=todos;
+  // Local cache
+  save(KEYS.spends,spends);       save(XKEYS.customCats,customCats);
+  save(XKEYS.friends,friends);    save(XKEYS.friendReqs,friendReqs);
+  save(XKEYS.groups,groups);      save(XKEYS.splits,splits);
+  // Cloud sync
+  if (window._saveToFirestore) window._saveToFirestore();
 }
 
 let spendTab='personal',showSpendForm=false,showCatForm=false,showFriendForm=false,showGroupForm=false,openGroupId=null;
@@ -1676,21 +1706,47 @@ function settleUp(friendId){
 // INIT
 // ─────────────────────────────────────────────
 
-// Expose key state arrays globally so the Firebase module can read/write them
-Object.defineProperty(window,'habits',    {get:()=>_habits,    set:v=>{_habits=v;},    enumerable:true});
-Object.defineProperty(window,'goals',     {get:()=>_goals,     set:v=>{_goals=v;},     enumerable:true});
-Object.defineProperty(window,'todos',     {get:()=>_todos,     set:v=>{_todos=v;},     enumerable:true});
-Object.defineProperty(window,'spends',    {get:()=>_spends,    set:v=>{_spends=v;},    enumerable:true});
-Object.defineProperty(window,'customCats',{get:()=>_customCats,set:v=>{_customCats=v;},enumerable:true});
-Object.defineProperty(window,'friends',   {get:()=>_friends,   set:v=>{_friends=v;},   enumerable:true});
-Object.defineProperty(window,'friendReqs',{get:()=>_friendReqs,set:v=>{_friendReqs=v;},enumerable:true});
-Object.defineProperty(window,'groups',    {get:()=>_groups,    set:v=>{_groups=v;},    enumerable:true});
-Object.defineProperty(window,'splits',    {get:()=>_splits,    set:v=>{_splits=v;},    enumerable:true});
-window.currentPage = currentPage;
+// ── Bridge: expose all mutable state and render functions to Firebase module ──
+// The Firebase module calls window._applySync(data) on every Firestore update.
+// This function writes into the _private vars and re-renders immediately.
+window._applySync = function(data) {
+  if (!data) return;
+  let changed = false;
+  const keys = [
+    ['_habits',habits,'habits'],['_goals',goals,'goals'],
+    ['_todos',todos,'todos'],['_spends',spends,'spends'],
+    ['_customCats',customCats,'customCats'],['_friends',friends,'friends'],
+    ['_friendReqs',friendReqs,'friendReqs'],['_groups',groups,'groups'],
+    ['_splits',splits,'splits']
+  ];
+  if (data.habits     !== undefined) { _habits=data.habits;         habits=_habits;         changed=true; }
+  if (data.goals      !== undefined) { _goals=data.goals;           goals=_goals;           changed=true; }
+  if (data.todos      !== undefined) { _todos=data.todos;           todos=_todos;           changed=true; }
+  if (data.spends     !== undefined) { _spends=data.spends;         spends=_spends;         changed=true; }
+  if (data.customCats !== undefined) { _customCats=data.customCats; customCats=_customCats; changed=true; }
+  if (data.friends    !== undefined) { _friends=data.friends;       friends=_friends;       changed=true; }
+  if (data.friendReqs !== undefined) { _friendReqs=data.friendReqs; friendReqs=_friendReqs; changed=true; }
+  if (data.groups     !== undefined) { _groups=data.groups;         groups=_groups;         changed=true; }
+  if (data.splits     !== undefined) { _splits=data.splits;         splits=_splits;         changed=true; }
+  if (changed) {
+    renderHome();
+    renderPage(currentPage);
+  }
+};
+
+// Expose read helpers so Firebase module can snapshot current state for saving
+window._getState = function() {
+  return {
+    habits:_habits, goals:_goals, todos:_todos, spends:_spends,
+    customCats:_customCats, friends:_friends, friendReqs:_friendReqs,
+    groups:_groups, splits:_splits
+  };
+};
+
+// Expose render and nav functions
 window.renderPage  = renderPage;
 window.renderHome  = renderHome;
 window.launchApp   = launchApp;
-window.currentUser = currentUser;
 window._lastSaveTime = 0;
 
 // Show a loading spinner while Firebase initialises
