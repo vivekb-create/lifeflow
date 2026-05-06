@@ -41,36 +41,37 @@ window._fb = {
   collection, addDoc, query, where, getDocs, deleteDoc
 };
 
-// ── Gmail: send real email via Gmail API (needs gmail.send OAuth scope) ──
-// ── Gmail: open Gmail compose with pre-filled invite ──
-// Note: Direct Gmail API sending requires a backend server for token security.
-// This implementation opens Gmail compose with everything pre-filled — one click to send.
-window._sendGmailInvite = async function(toEmail, toName) {
-  window._openGmailCompose(toEmail, toName);
-  return true;
-};
+// ── Backend email sender via Cloudflare Worker + Resend ──
+// IMPORTANT: Replace this URL with your deployed Cloudflare Worker URL
+// after you deploy the worker (see SETUP.md for instructions).
+const WORKER_URL = 'https://lifeflow-email-worker.YOUR-SUBDOMAIN.workers.dev';
 
-// ── Open Gmail compose window with pre-filled invite ──
-window._openGmailCompose = function(toEmail, toName) {
+window._sendInviteEmail = async function(toEmail, toName) {
   const u = window.currentUser;
-  const senderName = (u && u.name) ? u.name : 'A LifeFlow user';
-  const appUrl = window.location.href.split('?')[0];
-  const subject = encodeURIComponent(senderName + ' invited you to LifeFlow');
-  const nl = '%0A';
-  const bodyParts = [
-    'Hi ' + toName + ',', nl+nl,
-    senderName + ' has added you as a friend on LifeFlow', nl,
-    'to split expenses and track spending together.', nl+nl,
-    'Join here: ' + appUrl, nl+nl,
-    'Sign in with Google (' + toEmail + ') to see the friend request.', nl+nl,
-    '— LifeFlow'
-  ];
-  const body = encodeURIComponent(bodyParts.join(''));
-  const gmailUrl = 'https://mail.google.com/mail/?view=cm'
-    + '&to=' + encodeURIComponent(toEmail)
-    + '&su=' + subject
-    + '&body=' + body;
-  window.open(gmailUrl, '_blank');
+  const appUrl = window.location.origin + window.location.pathname.replace('index.html','');
+  try {
+    const res = await fetch(WORKER_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        toEmail:   toEmail,
+        toName:    toName,
+        fromName:  (u && u.name)  ? u.name  : 'A LifeFlow user',
+        fromEmail: (u && u.email) ? u.email : '',
+        appUrl:    appUrl
+      })
+    });
+    const data = await res.json();
+    if (data.success) {
+      return { ok: true };
+    } else {
+      console.warn('Email worker error:', data);
+      return { ok: false, error: data.error || 'Unknown error' };
+    }
+  } catch(e) {
+    console.warn('Email send failed:', e);
+    return { ok: false, error: e.message };
+  }
 };
 
 window._writeFriendRequestToRecipient = async function(toEmail, fromUser) {
@@ -509,6 +510,41 @@ onAuthStateChanged(auth, async (user) => {
   .todo-count-badge{display:inline-block;background:rgba(255,255,255,.3);border-radius:10px;padding:0 6px;font-size:10px;margin-left:4px;}
   .todo-tab:not(.active) .todo-count-badge{background:var(--warm3);color:var(--text3);}
 
+  /* ── TODO FEATURES ── */
+  /* Priority radio buttons */
+  .priority-radio-group{display:flex;gap:6px;margin-bottom:8px;flex-wrap:wrap;}
+  .priority-radio-label{display:flex;align-items:center;gap:5px;padding:6px 12px;border-radius:8px;cursor:pointer;font-size:13px;border:1.5px solid var(--warm3);transition:all .15s;user-select:none;}
+  .priority-radio-label:hover{border-color:var(--sage-mid);}
+  .priority-radio-label input[type=radio]{display:none;}
+  .priority-radio-label.selected-high{background:var(--red-l);border-color:var(--red);color:var(--red);}
+  .priority-radio-label.selected-medium{background:var(--accent-l);border-color:var(--accent);color:var(--accent);}
+  .priority-radio-label.selected-low{background:var(--sage-light);border-color:var(--sage);color:var(--sage-dark);}
+
+  /* Todo category chips */
+  .todo-cat-bar{display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap;align-items:center;}
+  .todo-cat-chip{padding:5px 13px;border-radius:16px;font-size:12px;font-weight:500;cursor:pointer;border:1.5px solid var(--warm3);background:var(--warm2);color:var(--text2);transition:all .15s;white-space:nowrap;}
+  .todo-cat-chip:hover{background:var(--warm3);}
+  .todo-cat-chip.active{background:var(--sage);color:white;border-color:var(--sage);}
+  .todo-cat-chip.add-cat{background:transparent;border-style:dashed;color:var(--sage-dark);}
+  .todo-cat-chip.add-cat:hover{background:var(--sage-light);}
+
+  /* Todo row — draggable */
+  .todo-row{display:flex;align-items:flex-start;gap:10px;padding:10px 6px;border-bottom:1px solid var(--warm2);border-radius:6px;transition:background .1s;cursor:default;}
+  .todo-row:last-of-type{border-bottom:none;}
+  .todo-row.dragging{opacity:.4;background:var(--sage-light);}
+  .todo-row.drag-over{background:var(--sage-light);border-top:2px solid var(--sage);}
+  .drag-handle{cursor:grab;color:var(--warm3);font-size:16px;padding:2px 0;flex-shrink:0;line-height:1.4;}
+  .drag-handle:hover{color:var(--sage-mid);}
+  .drag-handle:active{cursor:grabbing;}
+
+  /* Edit inline */
+  .todo-edit-input{flex:1;padding:5px 8px;border:1.5px solid var(--sage);border-radius:6px;font-size:14px;font-family:'DM Sans',sans-serif;background:var(--warm);color:var(--text);outline:none;}
+
+  /* Share todo list */
+  .share-todo-btn{display:flex;align-items:center;gap:6px;padding:7px 14px;background:var(--blue-l);color:var(--blue);border:1.5px solid var(--blue);border-radius:20px;font-size:12px;font-weight:500;cursor:pointer;font-family:'DM Sans',sans-serif;transition:all .15s;}
+  .share-todo-btn:hover{background:var(--blue);color:white;}
+  .shared-badge{display:inline-flex;align-items:center;gap:4px;font-size:11px;background:var(--blue-l);color:var(--blue);padding:3px 8px;border-radius:10px;font-weight:500;}
+
   /* ── DUE DATE CHIP ── */
   .due-chip{display:inline-flex;align-items:center;gap:3px;padding:2px 7px;border-radius:6px;font-size:11px;white-space:nowrap;}
   .due-chip.overdue{background:var(--red-l);color:var(--red);}
@@ -640,9 +676,16 @@ onAuthStateChanged(auth, async (user) => {
         </div>
       </div>
 
-      <!-- TODOS — new tabbed layout -->
+      <!-- TODOS -->
       <div class="page" id="page-todos">
-        <div class="section-head"><div class="section-title">To-Do</div></div>
+        <div class="section-head">
+          <div class="section-title">To-Do</div>
+          <button class="share-todo-btn" onclick="openShareTodoModal()" id="share-todo-btn">
+            🔗 Share List
+          </button>
+        </div>
+        <div id="todo-shared-banner"></div>
+        <div class="todo-cat-bar" id="todo-cat-bar"></div>
         <div class="todo-tabs" id="todo-tab-bar"></div>
         <div class="card">
           <div id="todos-main-content"></div>
@@ -837,10 +880,10 @@ let _goals=load(KEYS.goals,[
 ]);
 // todos now have: dueDate (ISO string or null), dueTime implicit in dueDate
 let _todos=load(KEYS.todos,[
-  {id:1,text:'Review quarterly report',done:false,priority:'high',dueDate:todayDatetimeLocal()},
-  {id:2,text:'Call dentist for appointment',done:false,priority:'medium',dueDate:todayDatetimeLocal()},
-  {id:3,text:'Buy groceries',done:true,priority:'low',dueDate:todayDatetimeLocal()},
-  {id:4,text:'Reply to pending emails',done:false,priority:'high',dueDate:todayDatetimeLocal()},
+  {id:1,text:'Review quarterly report',done:false,priority:'high',dueDate:todayDatetimeLocal(),cat:'General'},
+  {id:2,text:'Call dentist for appointment',done:false,priority:'medium',dueDate:todayDatetimeLocal(),cat:'Personal'},
+  {id:3,text:'Buy groceries',done:true,priority:'low',dueDate:todayDatetimeLocal(),cat:'Shopping'},
+  {id:4,text:'Reply to pending emails',done:false,priority:'high',dueDate:todayDatetimeLocal(),cat:'Work'},
 ]);
 let _spends=load(KEYS.spends,[
   {id:1,cat:'Food',desc:'Lunch at restaurant',amount:350,date:todayKey()},
@@ -850,12 +893,12 @@ let _spends=load(KEYS.spends,[
 // Shorthand aliases — these are reassigned by window property setters
 let habits=_habits, goals=_goals, todos=_todos, spends=_spends;
 function persist(){
-  // Keep _private vars in sync with aliases
   _habits=habits; _goals=goals; _todos=todos; _spends=spends;
-  // Local cache (instant, for offline fallback)
   save(KEYS.habits,habits); save(KEYS.goals,goals);
   save(KEYS.todos,todos);   save(KEYS.spends,spends);
-  // Cloud sync (async, non-blocking)
+  // Persist todo categories and shared lists
+  save('lf3_todo_cats', todoCategories);
+  save('lf3_shared_todo_lists', sharedTodoLists);
   if (window._saveToFirestore) window._saveToFirestore();
 }
 
@@ -1202,25 +1245,66 @@ function saveGoalProgress(id){
 function deleteGoal(id){goals=goals.filter(g=>g.id!==id);persist();renderAll();}
 
 // ─────────────────────────────────────────────
-// TODOS — tabbed + due date + auto-sort
+// TODOS — edit, radio priority, categories, drag, share
 // ─────────────────────────────────────────────
-let showTodoForm=false;
-let todoTab='all'; // 'all' | 'today' | 'week' | 'month' | 'overdue'
+let showTodoForm  = false;
+let todoTab       = 'all';
+let todoCat       = 'General';
+let editingTodoId = null;
+let selectedPriority = 'low';
+let dragSrcId     = null;
+let sharedTodoLists = [];
+let todoCategories = ['General','Home','Work','Shopping','Personal'];
+
+function renderTodoCatBar(){
+  const catBar=document.getElementById('todo-cat-bar');
+  if(!catBar)return;
+  catBar.innerHTML=todoCategories.map(cat=>
+    `<button class="todo-cat-chip ${todoCat===cat?'active':''}" onclick="setTodoCat('${cat}')">${cat}</button>`
+  ).join('')+
+  `<button class="todo-cat-chip add-cat" onclick="promptAddTodoCat()">+ Category</button>`;
+}
+
+function setTodoCat(cat){todoCat=cat;renderTodos();}
+
+function promptAddTodoCat(){
+  const name=(prompt('New category name:','')||'').trim();
+  if(!name)return;
+  if(todoCategories.includes(name)){showToast('Category already exists.');return;}
+  todoCategories.push(name);
+  persist();
+  todoCat=name;
+  renderTodos();
+}
+
+function renderSharedBanner(){
+  const el=document.getElementById('todo-shared-banner');
+  if(!el)return;
+  const shared=sharedTodoLists.filter(s=>s.cat===todoCat);
+  if(shared.length===0){el.innerHTML='';return;}
+  el.innerHTML=`<div style="background:var(--blue-l);border:1px solid var(--blue);border-radius:var(--r2);padding:9px 14px;margin-bottom:12px;font-size:12px;color:var(--blue);display:flex;align-items:center;gap:8px">
+    <span>&#128065;&#65039;</span>
+    <span><strong>${todoCat}</strong> list shared with: ${shared.map(s=>s.sharedWith).join(', ')}</span>
+  </div>`;
+}
 
 function renderTodos(){
-  const pending=sortTodos(todos.filter(t=>!t.done));
-  const done=todos.filter(t=>t.done);
+  renderTodoCatBar();
+  renderSharedBanner();
 
-  // Count per tab
+  const catTodos=todos.filter(t=>(t.cat||'General')===todoCat);
+  const pending=sortTodos(catTodos.filter(t=>!t.done));
+  const done=catTodos.filter(t=>t.done);
+
+  const allPending=sortTodos(todos.filter(t=>!t.done));
   const counts={
-    all: pending.length,
-    overdue: pending.filter(t=>getDueCategory(t)==='overdue').length,
-    today: pending.filter(t=>getDueCategory(t)==='today').length,
-    week: pending.filter(t=>['today','week'].includes(getDueCategory(t))).length,
-    month: pending.filter(t=>['today','week','month'].includes(getDueCategory(t))).length,
+    all:allPending.length,
+    overdue:allPending.filter(t=>getDueCategory(t)==='overdue').length,
+    today:allPending.filter(t=>getDueCategory(t)==='today').length,
+    week:allPending.filter(t=>['today','week'].includes(getDueCategory(t))).length,
+    month:allPending.filter(t=>['today','week','month'].includes(getDueCategory(t))).length,
   };
 
-  // Tab bar
   const tabs=[
     {id:'all',label:'All'},
     {id:'today',label:'Today'},
@@ -1232,63 +1316,96 @@ function renderTodos(){
     const cnt=counts[tab.id]||0;
     const isOverdue=tab.id==='overdue';
     const overdueStyle=isOverdue
-      ? (todoTab===tab.id ? 'style="background:var(--red);color:white;border-color:var(--red)"' : 'style="background:var(--red-l);color:var(--red);border-color:var(--red-l)"')
-      : '';
+      ?(todoTab===tab.id?'style="background:var(--red);color:white;border-color:var(--red)"':'style="background:var(--red-l);color:var(--red);border-color:var(--red-l)"')
+      :'';
     return `<button class="todo-tab ${todoTab===tab.id?'active':''}" onclick="setTodoTab('${tab.id}')" ${overdueStyle}>${tab.label}${cnt>0?`<span class="todo-count-badge">${cnt}</span>`:''}</button>`;
   }).join('');
 
-  // Filter by tab
   let filtered;
-  if(todoTab==='today') filtered=pending.filter(t=>getDueCategory(t)==='today'||getDueCategory(t)==='overdue');
-  else if(todoTab==='week') filtered=pending.filter(t=>['overdue','today','week'].includes(getDueCategory(t)));
-  else if(todoTab==='month') filtered=pending.filter(t=>['overdue','today','week','month'].includes(getDueCategory(t)));
-  else if(todoTab==='overdue') filtered=pending.filter(t=>getDueCategory(t)==='overdue');
+  if(todoTab==='today')    filtered=pending.filter(t=>['today','overdue'].includes(getDueCategory(t)));
+  else if(todoTab==='week')   filtered=pending.filter(t=>['overdue','today','week'].includes(getDueCategory(t)));
+  else if(todoTab==='month')  filtered=pending.filter(t=>['overdue','today','week','month'].includes(getDueCategory(t)));
+  else if(todoTab==='overdue')filtered=pending.filter(t=>getDueCategory(t)==='overdue');
   else filtered=pending;
 
-  // Group by due category for display
   const groups={overdue:[],today:[],week:[],month:[],later:[]};
   filtered.forEach(t=>{
     const cat=getDueCategory(t);
-    if(groups[cat]) groups[cat].push(t);
+    if(groups[cat])groups[cat].push(t);
     else groups.later.push(t);
   });
-  const groupLabels={overdue:'⚠️ Overdue',today:'📅 Due Today',week:'📆 This Week',month:'🗓️ This Month',later:'🌱 Later'};
+  const groupLabels={overdue:'Overdue',today:'Due Today',week:'This Week',month:'This Month',later:'Later'};
+  const groupIcons={overdue:'',today:'',week:'',month:'',later:''};
 
   let html='';
   let hasAny=false;
   Object.entries(groups).forEach(([grp,items])=>{
-    if(items.length===0) return;
+    if(items.length===0)return;
     hasAny=true;
-    html+=`<div class="todo-section-label">${groupLabels[grp]}</div>`;
-    html+=items.map(t=>`
-      <div class="row" style="${grp==='overdue'?'background:rgba(184,90,74,.03);border-radius:8px;padding:10px 8px;':''}">
-        <div class="check" onclick="toggleTodo(${t.id})"></div>
+    const icon={overdue:'',today:'',week:'',month:'',later:''}[grp]||'';
+    html+=`<div class="todo-section-label">${icon} ${groupLabels[grp]}</div>`;
+    html+=items.map(t=>{
+      if(editingTodoId===t.id){
+        return `<div class="todo-row" id="todo-row-${t.id}">
+          <span class="drag-handle">&#10243;</span>
+          <div class="check ${t.done?'done':''}" onclick="toggleTodo(${t.id})"></div>
+          <input class="todo-edit-input" id="todo-edit-${t.id}" value="${t.text.replace(/"/g,'&quot;').replace(/</g,'&lt;')}" onkeydown="handleEditKey(event,${t.id})">
+          <button class="btn btn-primary btn-sm" onclick="saveEditTodo(${t.id})" style="flex-shrink:0">Save</button>
+          <button class="btn btn-ghost btn-sm" onclick="cancelEditTodo()" style="flex-shrink:0">X</button>
+        </div>`;
+      }
+      return `<div class="todo-row" id="todo-row-${t.id}"
+          draggable="true"
+          ondragstart="onDragStart(event,${t.id})"
+          ondragover="onDragOver(event,${t.id})"
+          ondragleave="onDragLeave(event,${t.id})"
+          ondrop="onDrop(event,${t.id})"
+          ondragend="onDragEnd()"
+          style="${grp==='overdue'?'background:rgba(184,90,74,.03);':''}">
+        <span class="drag-handle" title="Drag to reorder">&#10243;</span>
+        <div class="check ${t.done?'done':''}" onclick="toggleTodo(${t.id})"></div>
         <div style="flex:1;min-width:0">
           <div class="row-text" style="margin-bottom:3px">${t.text}</div>
           <div style="display:flex;gap:5px;align-items:center;flex-wrap:wrap">
             <span class="badge ${t.priority}">${t.priority}</span>
+            ${t.cat&&t.cat!=='General'?`<span style="font-size:10px;background:var(--warm2);color:var(--text3);padding:2px 6px;border-radius:6px">${t.cat}</span>`:''}
             ${formatDue(t)||''}
           </div>
         </div>
-        <button class="del" onclick="deleteTodo(${t.id})">×</button>
-      </div>`).join('');
+        <button class="del" title="Edit" onclick="startEditTodo(${t.id})" style="color:var(--text3);font-size:14px">&#9998;</button>
+        <button class="del" onclick="deleteTodo(${t.id})">x</button>
+      </div>`;
+    }).join('');
   });
-  if(!hasAny) html='<div class="empty"><div class="empty-icon">✅</div>Nothing here. You\'re all clear!</div>';
+  if(!hasAny)html='<div class="empty"><div class="empty-icon"></div>Nothing here — all clear!</div>';
   document.getElementById('todos-main-content').innerHTML=html;
 
-  // Add form
+  const prioOptions=[{v:'high',emoji:'',label:'High'},{v:'medium',emoji:'',label:'Medium'},{v:'low',emoji:'',label:'Low'}];
   document.getElementById('todos-form').innerHTML=showTodoForm?`
     <div class="form-box">
       <input class="input" id="todo-text-in" placeholder="New task...">
-      <div class="input-row" style="margin-bottom:8px">
-        <select class="input" id="todo-priority-in" style="flex:1">
-          <option value="high">🔴 High priority</option>
-          <option value="medium" selected>🟡 Medium</option>
-          <option value="low">🟢 Low</option>
+      <div style="margin-bottom:8px">
+        <div style="font-size:12px;color:var(--text3);margin-bottom:6px">Priority</div>
+        <div class="priority-radio-group">
+          <label class="priority-radio-label ${selectedPriority==='high'?'selected-high':''}" id="prio-label-high">
+            <input type="radio" name="todo-priority" value="high" ${selectedPriority==='high'?'checked':''} onchange="selectPriority('high')"> High
+          </label>
+          <label class="priority-radio-label ${selectedPriority==='medium'?'selected-medium':''}" id="prio-label-medium">
+            <input type="radio" name="todo-priority" value="medium" ${selectedPriority==='medium'?'checked':''} onchange="selectPriority('medium')"> Medium
+          </label>
+          <label class="priority-radio-label ${selectedPriority==='low'?'selected-low':''}" id="prio-label-low">
+            <input type="radio" name="todo-priority" value="low" ${selectedPriority==='low'?'checked':''} onchange="selectPriority('low')"> Low
+          </label>
+        </div>
+      </div>
+      <div style="margin-bottom:8px">
+        <div style="font-size:12px;color:var(--text3);margin-bottom:6px">Category</div>
+        <select class="input" id="todo-cat-select" style="margin-bottom:0">
+          ${todoCategories.map(cat=>`<option value="${cat}" ${cat===todoCat?'selected':''}>${cat}</option>`).join('')}
         </select>
       </div>
       <div style="margin-bottom:8px">
-        <label style="font-size:12px;color:var(--text3);display:block;margin-bottom:4px">Due date &amp; time (optional)</label>
+        <label style="font-size:12px;color:var(--text3);display:block;margin-bottom:4px">Due date and time (optional)</label>
         <input class="input" id="todo-due-in" type="datetime-local" value="${todayDatetimeLocal()}" style="margin-bottom:0">
       </div>
       <div style="display:flex;gap:8px">
@@ -1298,34 +1415,156 @@ function renderTodos(){
     </div>`
     :`<button class="add-btn" onclick="setTodoForm(true)">+ Add task</button>`;
 
-  // Completed
   const dc=document.getElementById('todos-done-card');
   if(done.length>0){
     dc.style.display='block';
-    document.getElementById('todos-done-title').textContent=`Completed · ${done.length}`;
+    document.getElementById('todos-done-title').textContent='Completed - '+done.length;
     document.getElementById('todos-done-list').innerHTML=done.map(t=>`
-      <div class="row">
+      <div class="todo-row">
         <div class="check done" onclick="toggleTodo(${t.id})"></div>
         <span class="row-text done">${t.text}</span>
-        <button class="del" onclick="deleteTodo(${t.id})">×</button>
+        <button class="del" onclick="deleteTodo(${t.id})">x</button>
       </div>`).join('');
-  } else { dc.style.display='none'; }
+  } else {dc.style.display='none';}
+}
+
+function selectPriority(v){
+  selectedPriority=v;
+  ['high','medium','low'].forEach(p=>{
+    const el=document.getElementById('prio-label-'+p);
+    if(el)el.className='priority-radio-label'+(p===v?' selected-'+p:'');
+  });
 }
 
 function setTodoTab(tab){todoTab=tab;renderTodos();}
 function setTodoForm(v){showTodoForm=v;renderTodos();if(v)setTimeout(()=>document.getElementById('todo-text-in')?.focus(),50);}
+
 function toggleTodo(id){const t=todos.find(x=>x.id===id);if(t)t.done=!t.done;persist();renderAll();}
+
 function addTodo(){
   const text=document.getElementById('todo-text-in').value.trim();
-  const priority=document.getElementById('todo-priority-in').value;
+  const cat=document.getElementById('todo-cat-select')?.value||todoCat;
   const dueRaw=document.getElementById('todo-due-in').value;
-  // Default to end of today if not provided
   const dueDate=dueRaw||todayDatetimeLocal();
   if(!text)return;
-  todos.push({id:uid(),text,done:false,priority,dueDate});
+  todos.unshift({id:uid(),text,done:false,priority:selectedPriority,dueDate,cat});
   persist();showTodoForm=false;renderAll();
 }
+
 function deleteTodo(id){todos=todos.filter(t=>t.id!==id);persist();renderAll();}
+
+function startEditTodo(id){editingTodoId=id;renderTodos();setTimeout(()=>document.getElementById('todo-edit-'+id)?.focus(),50);}
+function cancelEditTodo(){editingTodoId=null;renderTodos();}
+function handleEditKey(e,id){if(e.key==='Enter')saveEditTodo(id);if(e.key==='Escape')cancelEditTodo();}
+function saveEditTodo(id){
+  const inp=document.getElementById('todo-edit-'+id);
+  const newText=(inp?inp.value:'').trim();
+  if(!newText){cancelEditTodo();return;}
+  const t=todos.find(x=>x.id===id);
+  if(t)t.text=newText;
+  editingTodoId=null;persist();renderAll();
+}
+
+function onDragStart(e,id){
+  dragSrcId=id;
+  e.dataTransfer.effectAllowed='move';
+  e.dataTransfer.setData('text/plain',String(id));
+  setTimeout(()=>{const el=document.getElementById('todo-row-'+id);if(el)el.classList.add('dragging');},0);
+}
+function onDragOver(e,id){
+  e.preventDefault();
+  e.dataTransfer.dropEffect='move';
+  if(id===dragSrcId)return;
+  const el=document.getElementById('todo-row-'+id);
+  if(el)el.classList.add('drag-over');
+}
+function onDragLeave(e,id){const el=document.getElementById('todo-row-'+id);if(el)el.classList.remove('drag-over');}
+function onDrop(e,targetId){
+  e.preventDefault();
+  if(!dragSrcId||dragSrcId===targetId)return;
+  const srcIdx=todos.findIndex(t=>t.id===dragSrcId);
+  const tgtIdx=todos.findIndex(t=>t.id===targetId);
+  if(srcIdx<0||tgtIdx<0)return;
+  const [moved]=todos.splice(srcIdx,1);
+  todos.splice(tgtIdx,0,moved);
+  persist();renderTodos();
+  showToast('Task moved!');
+}
+function onDragEnd(){
+  dragSrcId=null;
+  document.querySelectorAll('.todo-row').forEach(el=>el.classList.remove('dragging','drag-over'));
+}
+
+function openShareTodoModal(){
+  const u=window.currentUser||currentUser;
+  if(!u||u.isGuest){showToast('Please sign in with Google to share your list.');return;}
+  const activeFriends=friends.filter(f=>f.status==='active');
+  const existing=sharedTodoLists.filter(s=>s.cat===todoCat);
+  const existingHtml=existing.length>0
+    ?`<div style="margin-bottom:12px"><div style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.08em;margin-bottom:6px">Shared with</div>
+      ${existing.map(s=>`<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--warm2)">
+        <span style="flex:1;font-size:13px">${s.sharedWith}</span>
+        <button class="btn btn-ghost btn-sm" onclick="unshareList('${s.shareId}')">Remove</button>
+      </div>`).join('')}</div>`:'';
+  const modal=document.createElement('div');
+  modal.className='modal-overlay';modal.id='share-todo-modal';
+  modal.innerHTML=`<div class="modal">
+    <button class="modal-close" onclick="document.getElementById('share-todo-modal').remove()">x</button>
+    <div class="modal-title">Share "${todoCat}" list</div>
+    ${existingHtml}
+    ${activeFriends.length===0
+      ?`<div class="empty"><div class="empty-icon"></div>Add friends first to share a list.</div>`
+      :`<div style="font-size:12px;color:var(--text3);margin-bottom:10px">Select a friend — they will see all tasks in "${todoCat}" in real time.</div>
+        <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:14px">
+          ${activeFriends.map(f=>{
+            const alreadyShared=existing.some(s=>s.sharedWith===f.name);
+            return `<div style="display:flex;align-items:center;gap:10px;padding:8px;border:1px solid var(--warm2);border-radius:var(--r2)">
+              <div class="friend-avatar">${f.name[0].toUpperCase()}</div>
+              <span style="flex:1;font-size:13px">${f.name}</span>
+              ${alreadyShared?`<span class="shared-badge">Shared</span>`:`<button class="btn btn-primary btn-sm" onclick="shareTodoWith(${f.id},'${f.name}','${f.contact}')">Share</button>`}
+            </div>`;
+          }).join('')}
+        </div>`}
+    <div style="display:flex;justify-content:flex-end">
+      <button class="btn btn-ghost" onclick="document.getElementById('share-todo-modal').remove()">Close</button>
+    </div>
+  </div>`;
+  document.body.appendChild(modal);
+}
+
+async function shareTodoWith(friendId,friendName,friendEmail){
+  const shareId=uid();
+  sharedTodoLists.push({shareId:String(shareId),cat:todoCat,sharedWith:friendName,friendId,friendEmail});
+  persist();
+  if(window._fb&&window.currentUser){
+    const {db,setDoc,doc}=window._fb;
+    try{
+      const u=window.currentUser;
+      await setDoc(doc(db,'shared_todo_lists',String(shareId)),{
+        shareId:String(shareId),cat:todoCat,
+        ownerUid:u.uid,ownerName:u.name,ownerEmail:u.email,
+        sharedWithEmail:friendEmail,
+        tasks:todos.filter(t=>(t.cat||'General')===todoCat),
+        updatedAt:Date.now()
+      });
+      showToast('List shared with '+friendName+'!');
+    }catch(e){console.warn('shareTodo error:',e);showToast('Shared locally.');}
+  }else{showToast('List shared with '+friendName+'!');}
+  document.getElementById('share-todo-modal')?.remove();
+  renderTodos();
+}
+
+function unshareList(shareId){
+  sharedTodoLists=sharedTodoLists.filter(s=>s.shareId!==String(shareId));
+  persist();
+  if(window._fb&&window.currentUser){
+    const {db,deleteDoc,doc}=window._fb;
+    deleteDoc(doc(db,'shared_todo_lists',String(shareId))).catch(()=>{});
+  }
+  renderTodos();
+  document.getElementById('share-todo-modal')?.remove();
+}
+
 
 
 // ─────────────────────────────────────────────
@@ -1521,12 +1760,12 @@ function renderFriends(){
       <input class="input" id="friend-contact-in" placeholder="Friend's Gmail / email address" type="email">
       <div style="background:var(--sage-light);border-radius:8px;padding:9px 12px;margin-bottom:10px;font-size:12px;color:var(--sage-dark)">
         <strong>📧 How it works:</strong><br>
-        1. We'll open <strong>Gmail</strong> with a pre-filled invite.<br>
-        2. Your friend signs in to LifeFlow with that email.<br>
-        3. They'll see your friend request automatically.
+        1. We send a <strong>real email</strong> from LifeFlow directly.<br>
+        2. Your friend clicks the link and signs in with Google.<br>
+        3. Their request appears automatically — no tab opens on your end.
       </div>
       <div style="display:flex;gap:8px">
-        <button class="btn btn-primary" onclick="sendFriendRequest()">Send via Gmail</button>
+        <button class="btn btn-primary" id="friend-send-btn" onclick="sendFriendRequest()">Send Invite</button>
         <button class="btn btn-ghost" onclick="setFriendForm(false)">Cancel</button>
       </div>
     </div>`:`<button class="add-btn" onclick="setFriendForm(true)">+ Add friend</button>`;
@@ -1541,38 +1780,49 @@ function setFriendForm(v){showFriendForm=v;renderFriends();if(v)setTimeout(()=>d
 async function sendFriendRequest(){
   const name    = (document.getElementById('friend-name-in').value||'').trim();
   const contact = (document.getElementById('friend-contact-in').value||'').trim();
-  if(!name||!contact){ alert('Please enter both name and email/phone.'); return; }
+  if(!name || !contact){ alert('Please enter both a name and email address.'); return; }
 
-  const isEmail = /^[^@]+@[^@]+\.[^@]+$/.test(contact);
-  const u = window.currentUser || currentUser;
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  const isEmail    = emailRegex.test(contact);
+  const u          = window.currentUser || currentUser;
+
+  // Add friend locally immediately so UI updates
+  friends.push({id:uid(), name, contact, status:'pending_sent'});
 
   if(isEmail){
-    if(!u || u.isGuest){
-      // Guest: open Gmail compose in browser
-      window._openGmailCompose && window._openGmailCompose(contact, name);
-      showToast('Gmail opened — please send the invite from your email.');
-    } else {
-      // Signed in: try Gmail API first, fall back to Gmail compose URL
-      const btn = document.querySelector('button[onclick="sendFriendRequest()"]');
-      if(btn){ btn.textContent='Sending...'; btn.disabled=true; }
-      try {
-        // 1. Write request to recipient's Firestore doc (so they see it when they log in)
+    // Show spinner on button
+    const btn = document.getElementById('friend-send-btn');
+    if(btn){ btn.textContent='Sending...'; btn.disabled=true; }
+
+    try {
+      // 1. Write Firestore request so recipient sees it on login
+      if(window._writeFriendRequestToRecipient) {
         await window._writeFriendRequestToRecipient(contact, u);
-        // 2. Send real Gmail (opens Gmail compose with pre-filled content)
-        window._openGmailCompose(contact, name);
-        showToast('📧 Gmail opened! Invite pre-filled — just hit Send.');
-      } catch(e){
-        console.warn('Friend request error:', e);
-        window._openGmailCompose && window._openGmailCompose(contact, name);
       }
-      if(btn){ btn.textContent='Send Request'; btn.disabled=false; }
+
+      // 2. Send email silently via backend worker
+      const result = await window._sendInviteEmail(contact, name);
+
+      if(result && result.ok){
+        showToast('✅ Invite sent to ' + name + ' at ' + contact);
+      } else {
+        // Worker not configured yet — fall back gracefully
+        showToast('📬 Friend request saved! Share the app link with ' + name + ' to invite them.');
+        console.info('Email worker not configured. Deploy the worker and update WORKER_URL.');
+      }
+    } catch(e){
+      console.warn('sendFriendRequest error:', e);
+      showToast('📬 Friend request saved! Share the app link with ' + name + ' manually.');
     }
+
+    if(btn){ btn.textContent='Send Invite'; btn.disabled=false; }
   } else {
-    showToast('Friend request recorded. Share the app link with ' + name + ' manually.');
+    showToast('Friend request saved. Share the app link with ' + name + ' manually.');
   }
 
-  friends.push({id:uid(), name, contact, status:'pending_sent'});
-  persistSpend(); showFriendForm=false; renderFriends();
+  persistSpend();
+  showFriendForm = false;
+  renderFriends();
 }
 function showToast(msg){
   const t=document.createElement('div');
