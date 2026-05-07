@@ -578,6 +578,110 @@ onAuthStateChanged(auth, async (user) => {
     .todo-tabs{gap:4px;}
     .todo-tab{padding:6px 12px;font-size:12px;}
   }
+
+  /* ══════════════════════════════════════════
+     JOURNAL
+  ══════════════════════════════════════════ */
+  /* Lock screen */
+  .journal-lock{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:60vh;gap:16px;text-align:center;}
+  .lock-icon{font-size:52px;margin-bottom:4px;}
+  .lock-title{font-family:'Cormorant Garamond',serif;font-size:28px;color:var(--sage-dark);font-weight:300;}
+  .lock-sub{font-size:13px;color:var(--text3);margin-bottom:8px;}
+  .pin-dots{display:flex;gap:12px;justify-content:center;margin:12px 0;}
+  .pin-dot{width:14px;height:14px;border-radius:50%;border:2px solid var(--sage-mid);background:transparent;transition:all .2s;}
+  .pin-dot.filled{background:var(--sage);border-color:var(--sage);}
+  .pin-keypad{display:grid;grid-template-columns:repeat(3,64px);gap:8px;justify-content:center;margin-top:8px;}
+  .pin-key{width:64px;height:64px;border-radius:50%;border:1.5px solid var(--warm3);background:var(--card);font-size:20px;font-weight:500;cursor:pointer;font-family:'DM Sans',sans-serif;transition:all .15s;color:var(--text);}
+  .pin-key:hover{background:var(--sage-light);border-color:var(--sage);}
+  .pin-key:active{background:var(--sage);color:white;}
+  .pin-key.del-key{font-size:16px;}
+  .pin-error{color:var(--red);font-size:13px;animation:shake .4s ease;}
+  @keyframes shake{0%,100%{transform:translateX(0)}25%{transform:translateX(-8px)}75%{transform:translateX(8px)}}
+  .pin-setup-wrap{max-width:320px;margin:0 auto;}
+  .biometric-btn{display:flex;align-items:center;gap:8px;padding:10px 20px;background:var(--sage-light);border:1.5px solid var(--sage-mid);border-radius:20px;color:var(--sage-dark);font-size:13px;font-weight:500;cursor:pointer;font-family:'DM Sans',sans-serif;margin:0 auto;transition:all .15s;}
+  .biometric-btn:hover{background:var(--sage);color:white;}
+
+  /* Journal list view */
+  .journal-toolbar{display:flex;align-items:center;gap:10px;margin-bottom:16px;flex-wrap:wrap;}
+  .journal-search{flex:1;min-width:160px;padding:8px 12px 8px 32px;border:1.5px solid var(--warm3);border-radius:20px;font-size:13px;font-family:'DM Sans',sans-serif;background:var(--warm);color:var(--text);outline:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%239C9C98' stroke-width='2'%3E%3Ccircle cx='11' cy='11' r='8'/%3E%3Cpath d='m21 21-4.35-4.35'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:10px center;}
+  .journal-search:focus{border-color:var(--sage);}
+  .journal-filter-chips{display:flex;gap:6px;flex-wrap:wrap;}
+  .journal-chip{padding:5px 12px;border-radius:14px;font-size:11px;font-weight:500;border:1.5px solid var(--warm3);background:var(--warm2);color:var(--text2);cursor:pointer;white-space:nowrap;transition:all .15s;}
+  .journal-chip.active{background:var(--sage);color:white;border-color:var(--sage);}
+  .journal-chip:hover:not(.active){background:var(--warm3);}
+  .new-entry-btn{display:flex;align-items:center;gap:6px;padding:9px 18px;background:var(--sage);color:white;border:none;border-radius:20px;font-size:13px;font-weight:500;cursor:pointer;font-family:'DM Sans',sans-serif;white-space:nowrap;transition:all .15s;}
+  .new-entry-btn:hover{background:var(--sage-dark);}
+  .journal-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:14px;margin-bottom:16px;}
+  .journal-card{background:var(--card);border:1px solid var(--warm2);border-radius:var(--r);padding:18px;cursor:pointer;transition:all .2s;position:relative;}
+  .journal-card:hover{border-color:var(--sage-mid);transform:translateY(-2px);box-shadow:0 4px 16px rgba(0,0,0,.08);}
+  .journal-card-date{font-size:11px;color:var(--text3);margin-bottom:6px;display:flex;align-items:center;gap:6px;}
+  .journal-card-title{font-family:'Cormorant Garamond',serif;font-size:17px;font-weight:400;color:var(--text);margin-bottom:6px;line-height:1.3;}
+  .journal-card-preview{font-size:12px;color:var(--text3);line-height:1.5;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;}
+  .journal-card-footer{display:flex;align-items:center;gap:6px;margin-top:10px;flex-wrap:wrap;}
+  .mood-badge{font-size:16px;}
+  .tag-pill{font-size:10px;background:var(--sage-light);color:var(--sage-dark);padding:2px 7px;border-radius:8px;}
+  .word-count{font-size:10px;color:var(--text3);margin-left:auto;}
+  .journal-card-del{position:absolute;top:10px;right:10px;opacity:0;background:none;border:none;cursor:pointer;color:var(--text3);font-size:16px;transition:opacity .15s;}
+  .journal-card:hover .journal-card-del{opacity:1;}
+  .journal-card-del:hover{color:var(--red);}
+  .journal-empty{text-align:center;padding:60px 20px;color:var(--text3);}
+  .journal-empty-icon{font-size:48px;margin-bottom:12px;}
+  .journal-empty-title{font-family:'Cormorant Garamond',serif;font-size:22px;color:var(--sage-dark);margin-bottom:6px;}
+
+  /* Editor */
+  .journal-editor{display:none;position:fixed;inset:0;background:var(--warm);z-index:150;display:flex;flex-direction:column;}
+  .journal-editor.visible{display:flex;}
+  .editor-topbar{display:flex;align-items:center;gap:12px;padding:14px 24px;background:var(--card);border-bottom:1px solid var(--warm2);}
+  .editor-back{background:none;border:none;cursor:pointer;color:var(--text2);font-size:22px;padding:2px 6px;line-height:1;}
+  .editor-back:hover{color:var(--sage-dark);}
+  .editor-date-title{flex:1;}
+  .editor-date-label{font-size:11px;color:var(--text3);}
+  .editor-title-input{width:100%;font-family:'Cormorant Garamond',serif;font-size:22px;font-weight:400;border:none;background:transparent;color:var(--sage-dark);outline:none;padding:0;}
+  .editor-title-input::placeholder{color:var(--sage-mid);}
+  .editor-actions{display:flex;gap:8px;align-items:center;}
+  .editor-btn{background:none;border:none;cursor:pointer;padding:6px 10px;border-radius:8px;font-size:20px;transition:background .15s;}
+  .editor-btn:hover{background:var(--warm2);}
+  .editor-save-btn{background:var(--sage);color:white;border:none;padding:8px 18px;border-radius:20px;font-size:13px;font-weight:500;cursor:pointer;font-family:'DM Sans',sans-serif;}
+  .editor-save-btn:hover{background:var(--sage-dark);}
+  .editor-meta-bar{display:flex;align-items:center;gap:12px;padding:10px 24px;background:var(--card);border-bottom:1px solid var(--warm2);flex-wrap:wrap;}
+  .editor-mood-select{display:flex;gap:8px;}
+  .mood-opt{font-size:22px;cursor:pointer;opacity:.4;transition:all .15s;padding:2px;}
+  .mood-opt.selected{opacity:1;transform:scale(1.2);}
+  .editor-tags-input{flex:1;min-width:100px;font-size:12px;border:none;background:transparent;outline:none;font-family:'DM Sans',sans-serif;color:var(--text);}
+  .editor-tags-input::placeholder{color:var(--text3);}
+  .tag-pill-remove{display:inline-flex;align-items:center;gap:3px;background:var(--sage-light);color:var(--sage-dark);padding:2px 8px;border-radius:8px;font-size:11px;cursor:pointer;}
+  .tag-pill-remove:hover{background:var(--sage);color:white;}
+  .editor-format-bar{display:flex;gap:4px;padding:8px 24px;background:var(--warm);border-bottom:1px solid var(--warm2);overflow-x:auto;}
+  .fmt-btn{background:none;border:1px solid var(--warm3);border-radius:6px;padding:4px 10px;font-size:12px;cursor:pointer;font-family:'DM Sans',sans-serif;white-space:nowrap;transition:all .15s;color:var(--text2);}
+  .fmt-btn:hover{background:var(--sage-light);border-color:var(--sage);color:var(--sage-dark);}
+  .fmt-btn.active-fmt{background:var(--sage-light);border-color:var(--sage);color:var(--sage-dark);}
+  .editor-body{flex:1;overflow-y:auto;padding:24px;}
+  .editor-content{max-width:680px;margin:0 auto;}
+  .editor-textarea{width:100%;min-height:400px;border:none;background:transparent;font-family:'Cormorant Garamond',serif;font-size:18px;line-height:1.8;color:var(--text);outline:none;resize:none;padding:0;}
+  .editor-textarea::placeholder{color:var(--warm4);font-style:italic;}
+  .editor-word-count{font-size:11px;color:var(--text3);text-align:right;padding:4px 0 0;}
+  .editor-streak-badge{font-size:12px;color:var(--accent);background:var(--accent-l);padding:3px 10px;border-radius:10px;}
+  /* Prompts */
+  .prompt-bar{max-width:680px;margin:0 auto 20px;background:var(--sage-light);border-radius:var(--r2);padding:12px 16px;display:flex;align-items:flex-start;gap:10px;}
+  .prompt-text{font-family:'Cormorant Garamond',serif;font-size:15px;font-style:italic;color:var(--sage-dark);flex:1;}
+  .prompt-refresh{background:none;border:none;cursor:pointer;font-size:16px;color:var(--sage);padding:0;}
+  /* Templates */
+  .template-row{display:flex;gap:8px;flex-wrap:wrap;max-width:680px;margin:0 auto 20px;}
+  .template-pill{padding:5px 12px;border:1.5px solid var(--warm3);border-radius:12px;font-size:12px;cursor:pointer;background:var(--card);color:var(--text2);transition:all .15s;}
+  .template-pill:hover{border-color:var(--sage);color:var(--sage-dark);background:var(--sage-light);}
+  /* Stats */
+  .journal-stats-row{display:flex;gap:10px;margin-bottom:14px;flex-wrap:wrap;}
+  .journal-stat{flex:1;min-width:90px;background:var(--card);border:1px solid var(--warm2);border-radius:var(--r2);padding:12px;text-align:center;}
+  .journal-stat-val{font-family:'Cormorant Garamond',serif;font-size:26px;color:var(--sage-dark);}
+  .journal-stat-lbl{font-size:11px;color:var(--text3);}
+  /* Responsive */
+  @media(max-width:768px){
+    .journal-grid{grid-template-columns:1fr;}
+    .editor-topbar{padding:12px 16px;}
+    .editor-body{padding:16px;}
+    .editor-format-bar{padding:8px 12px;}
+    .editor-meta-bar{padding:8px 16px;}
+  }
 </style>
 </head>
 <body>
@@ -621,6 +725,8 @@ onAuthStateChanged(auth, async (user) => {
       <button class="nav-item" onclick="navigate('goals',this)"><span class="nav-icon">🎯</span> Goals</button>
       <button class="nav-item" onclick="navigate('todos',this)"><span class="nav-icon">✅</span> To-Do</button>
       <button class="nav-item" onclick="navigate('spending',this)"><span class="nav-icon">₹</span> Spending</button>
+      <div class="nav-section">Personal</div>
+      <button class="nav-item" onclick="navigate('journal',this)"><span class="nav-icon">📔</span> Journal</button>
     </nav>
 
     <div class="sidebar-footer">
@@ -756,6 +862,84 @@ onAuthStateChanged(auth, async (user) => {
           <div class="card">
             <div class="card-title">What you owe / are owed</div>
             <div id="settle-summary"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- JOURNAL -->
+      <div class="page" id="page-journal">
+        <div id="journal-lock-screen"></div>
+        <div id="journal-main" style="display:none">
+          <div class="section-head">
+            <div class="section-title">My Journal</div>
+            <span id="journal-streak-badge" class="editor-streak-badge" style="display:none"></span>
+          </div>
+          <div class="journal-stats-row" id="journal-stats-row"></div>
+          <div class="journal-toolbar">
+            <input class="journal-search" id="journal-search" placeholder="Search entries..." oninput="renderJournalList()">
+            <div class="journal-filter-chips" id="journal-mood-filters"></div>
+            <button class="new-entry-btn" onclick="openJournalEditor(null)">✦ New Entry</button>
+          </div>
+          <div id="journal-list-grid"></div>
+        </div>
+      </div>
+
+      <!-- JOURNAL EDITOR (fixed overlay) -->
+      <div class="journal-editor" id="journal-editor">
+        <div class="editor-topbar">
+          <button class="editor-back" onclick="closeJournalEditor()" title="Back">←</button>
+          <div class="editor-date-title">
+            <div class="editor-date-label" id="editor-date-lbl"></div>
+            <input class="editor-title-input" id="editor-title-in" placeholder="Entry title (optional)">
+          </div>
+          <div class="editor-actions">
+            <span id="editor-autosave-lbl" style="font-size:11px;color:var(--text3)"></span>
+            <button class="editor-save-btn" onclick="saveJournalEntry()">Save</button>
+          </div>
+        </div>
+        <div class="editor-meta-bar">
+          <div>
+            <div style="font-size:10px;color:var(--text3);margin-bottom:4px">Mood</div>
+            <div class="editor-mood-select" id="editor-mood-select"></div>
+          </div>
+          <div style="flex:1;min-width:120px">
+            <div style="font-size:10px;color:var(--text3);margin-bottom:4px">Tags (comma separated)</div>
+            <input class="editor-tags-input" id="editor-tags-in" placeholder="e.g. work, travel, ideas">
+          </div>
+          <div>
+            <div style="font-size:10px;color:var(--text3);margin-bottom:4px">Category</div>
+            <select class="input" id="editor-cat-in" style="padding:4px 8px;font-size:12px;margin-bottom:0;width:auto">
+              <option>Personal</option>
+              <option>Gratitude</option>
+              <option>Work</option>
+              <option>Travel</option>
+              <option>Dreams</option>
+              <option>Reflection</option>
+            </select>
+          </div>
+        </div>
+        <div class="editor-format-bar">
+          <button class="fmt-btn" onclick="insertFmt('bold')"><b>B</b></button>
+          <button class="fmt-btn" onclick="insertFmt('italic')"><i>I</i></button>
+          <button class="fmt-btn" onclick="insertFmt('h1')">H1</button>
+          <button class="fmt-btn" onclick="insertFmt('h2')">H2</button>
+          <button class="fmt-btn" onclick="insertFmt('bullet')">• List</button>
+          <button class="fmt-btn" onclick="insertFmt('divider')">— Divider</button>
+          <button class="fmt-btn" onclick="insertFmt('quote')">❝ Quote</button>
+          <button class="fmt-btn" onclick="insertFmt('checkbox')">☐ Task</button>
+          <button class="fmt-btn" onclick="refreshPrompt()">💡 Prompt</button>
+        </div>
+        <div class="editor-body">
+          <div class="editor-content">
+            <div class="prompt-bar" id="editor-prompt-bar" style="display:none">
+              <div class="prompt-text" id="editor-prompt-text"></div>
+              <button class="prompt-refresh" onclick="refreshPrompt()" title="New prompt">↻</button>
+            </div>
+            <div class="template-row" id="editor-template-row" style="display:none"></div>
+            <textarea class="editor-textarea" id="editor-body-ta"
+              placeholder="Start writing... your thoughts are safe here."
+              oninput="onEditorInput()"></textarea>
+            <div class="editor-word-count" id="editor-wc">0 words</div>
           </div>
         </div>
       </div>
@@ -984,6 +1168,7 @@ function renderPage(p){
   if(p==='goals')renderGoals();
   if(p==='todos')renderTodos();
   if(p==='spending')renderSpending();
+  if(p==='journal')renderJournalPage();
 }
 function renderAll(){renderPage(currentPage);}
 
@@ -2142,6 +2327,537 @@ function settleUp(friendId){
 }
 
 
+
+// ═══════════════════════════════════════════════════════════════════════════
+// JOURNAL — PIN lock, editor, moods, tags, prompts, templates, search, streak
+// ═══════════════════════════════════════════════════════════════════════════
+
+// ── State ──────────────────────────────────────────────────────────────────
+let journalEntries    = load('lf3_journal', []);
+let journalPin        = load('lf3_jpin', null);       // hashed PIN or null
+let journalUnlocked   = false;
+let journalBiometric  = false;
+let currentEntryId    = null;
+let editorAutoSaveTimer = null;
+let editorCurrentMood = '';
+let editorCurrentTags = [];
+let currentJournalFilter = 'all';
+let pinInputBuffer    = '';
+let pinSetupStage     = 0;    // 0=not setting, 1=enter new, 2=confirm
+let pinSetupFirst     = '';
+
+// ── Simple PIN hash (XOR fold, good enough for local storage) ─────────────
+function hashPin(pin){
+  let h=0;
+  for(let i=0;i<pin.length;i++) h=(h*31+pin.charCodeAt(i))>>>0;
+  return h.toString(36);
+}
+
+// ── Writing prompts ─────────────────────────────────────────────────────────
+const PROMPTS = [
+  'What made you smile today?',
+  'What is one thing you are grateful for right now?',
+  'Describe a challenge you faced and what you learned from it.',
+  'What is something you want to remember about today?',
+  'What would make tomorrow even better?',
+  'Write about someone who inspired you recently.',
+  'What fear did you face or want to face?',
+  'What does your ideal day look like?',
+  'What habit are you most proud of building?',
+  'If today were the last page of a chapter, what would the title be?',
+  'What is weighing on your mind? Write it out.',
+  'Three things that went well today and why.',
+  'What are you looking forward to this week?',
+  'Describe a moment of peace you experienced recently.',
+  'What does success mean to you right now?',
+  'Write a letter to your future self.',
+  'What boundary do you need to set or honour?',
+  'What did you learn about yourself this week?',
+  'Describe where you want to be in one year.',
+  'What small act of kindness can you do tomorrow?',
+];
+
+// ── Templates ───────────────────────────────────────────────────────────────
+const TEMPLATES = {
+  'Morning Pages': '## Morning Pages\n\n**Date:** \n\n**How I feel right now:**\n\n**Three things on my mind:**\n1. \n2. \n3. \n\n**Intention for today:**\n\n',
+  'Gratitude Log': '## Gratitude Log\n\nI am grateful for...\n1. \n2. \n3. \n\n**Something beautiful I noticed today:**\n\n**A person I appreciate:**\n\n',
+  'Daily Reflection': '## Daily Reflection\n\n**What went well today:**\n\n**What was challenging:**\n\n**What I learned:**\n\n**Tomorrow I will:**\n\n',
+  'Brain Dump': '## Brain Dump\n\nEverything on my mind right now...\n\n',
+  'Weekly Review': '## Weekly Review\n\n**Wins this week:**\n\n**What I am proud of:**\n\n**What I want to improve:**\n\n**Focus for next week:**\n\n',
+  'Travel Notes': '## Travel Notes\n\n**Location:**\n**Date:**\n\n**What I saw:**\n\n**What I ate:**\n\n**A memorable moment:**\n\n**How it made me feel:**\n\n',
+};
+
+const MOODS = [
+  {emoji:'😄',label:'Happy'},
+  {emoji:'😊',label:'Content'},
+  {emoji:'😐',label:'Neutral'},
+  {emoji:'😔',label:'Sad'},
+  {emoji:'😤',label:'Frustrated'},
+  {emoji:'😰',label:'Anxious'},
+  {emoji:'🤩',label:'Excited'},
+  {emoji:'😴',label:'Tired'},
+  {emoji:'🥰',label:'Grateful'},
+  {emoji:'💪',label:'Motivated'},
+];
+
+// ── Streak calculation ───────────────────────────────────────────────────────
+function calcJournalStreak(){
+  if(!journalEntries.length) return 0;
+  const days = [...new Set(journalEntries.map(e=>e.dateKey))].sort().reverse();
+  let streak=0, prev=null;
+  for(const d of days){
+    if(!prev){
+      const today=todayKey();
+      const yesterday=new Date();yesterday.setDate(yesterday.getDate()-1);
+      const yKey=yesterday.getFullYear()+'-'+(yesterday.getMonth()+1)+'-'+yesterday.getDate();
+      if(d!==today&&d!==yKey) break;
+      streak=1; prev=d;
+    } else {
+      const prevDate=new Date(prev.split('-').join('/'));
+      prevDate.setDate(prevDate.getDate()-1);
+      const expected=prevDate.getFullYear()+'-'+(prevDate.getMonth()+1)+'-'+prevDate.getDate();
+      if(d===expected){streak++;prev=d;}
+      else break;
+    }
+  }
+  return streak;
+}
+
+// ── Main journal page render ─────────────────────────────────────────────────
+function renderJournalPage(){
+  if(!journalUnlocked){
+    renderJournalLock();
+    document.getElementById('journal-main').style.display='none';
+  } else {
+    document.getElementById('journal-lock-screen').innerHTML='';
+    document.getElementById('journal-main').style.display='block';
+    renderJournalStats();
+    renderJournalMoodFilters();
+    renderJournalList();
+  }
+}
+
+// ── Stats bar ────────────────────────────────────────────────────────────────
+function renderJournalStats(){
+  const streak=calcJournalStreak();
+  const total=journalEntries.length;
+  const thisMonth=journalEntries.filter(e=>{
+    const d=new Date(e.date);
+    const n=new Date();
+    return d.getMonth()===n.getMonth()&&d.getFullYear()===n.getFullYear();
+  }).length;
+  const totalWords=journalEntries.reduce((a,e)=>a+countWords(e.body),0);
+  const el=document.getElementById('journal-stats-row');
+  if(el) el.innerHTML=`
+    <div class="journal-stat"><div class="journal-stat-val">${total}</div><div class="journal-stat-lbl">Total Entries</div></div>
+    <div class="journal-stat"><div class="journal-stat-val">${streak}</div><div class="journal-stat-lbl">Day Streak 🔥</div></div>
+    <div class="journal-stat"><div class="journal-stat-val">${thisMonth}</div><div class="journal-stat-lbl">This Month</div></div>
+    <div class="journal-stat"><div class="journal-stat-val">${totalWords>999?Math.round(totalWords/1000)+'k':totalWords}</div><div class="journal-stat-lbl">Words Written</div></div>`;
+  const badge=document.getElementById('journal-streak-badge');
+  if(badge){
+    if(streak>0){badge.textContent='🔥 '+streak+' day streak';badge.style.display='inline';}
+    else badge.style.display='none';
+  }
+}
+
+// ── Mood filters ─────────────────────────────────────────────────────────────
+function renderJournalMoodFilters(){
+  const usedMoods=[...new Set(journalEntries.map(e=>e.mood).filter(Boolean))];
+  const el=document.getElementById('journal-mood-filters');
+  if(!el)return;
+  el.innerHTML=['all',...usedMoods].map(m=>`
+    <button class="journal-chip ${currentJournalFilter===m?'active':''}" onclick="setJournalFilter('${m}')">
+      ${m==='all'?'All entries':m}
+    </button>`).join('');
+}
+
+function setJournalFilter(f){currentJournalFilter=f;renderJournalList();renderJournalMoodFilters();}
+
+// ── Entry list ────────────────────────────────────────────────────────────────
+function renderJournalList(){
+  const q=(document.getElementById('journal-search')?.value||'').toLowerCase();
+  let entries=[...journalEntries].sort((a,b)=>b.date-a.date);
+  if(currentJournalFilter!=='all') entries=entries.filter(e=>e.mood===currentJournalFilter);
+  if(q) entries=entries.filter(e=>(e.title+e.body+(e.tags||[]).join(' ')).toLowerCase().includes(q));
+  const el=document.getElementById('journal-list-grid');
+  if(!el)return;
+  if(entries.length===0){
+    el.innerHTML=`<div class="journal-empty">
+      <div class="journal-empty-icon">📔</div>
+      <div class="journal-empty-title">${q?'No entries found':'Start your journey'}</div>
+      <div style="font-size:13px;color:var(--text3);margin:6px 0 16px">${q?'Try a different search term':'Your first entry is waiting to be written'}</div>
+      ${!q?'<button class="new-entry-btn" onclick="openJournalEditor(null)">✦ Write first entry</button>':''}
+    </div>`;
+    return;
+  }
+  el.innerHTML=`<div class="journal-grid">${entries.map(e=>{
+    const d=new Date(e.date);
+    const dateStr=d.toLocaleDateString('en-IN',{weekday:'short',day:'numeric',month:'short',year:'numeric'});
+    const preview=e.body.replace(/^#{1,3}\s/gm,'').replace(/\*\*/g,'').replace(/\*/g,'').slice(0,120);
+    return `<div class="journal-card" onclick="openJournalEditor(${e.id})">
+      <button class="journal-card-del" onclick="event.stopPropagation();deleteJournalEntry(${e.id})" title="Delete">×</button>
+      <div class="journal-card-date">
+        ${e.mood?`<span>${e.mood}</span>`:''}
+        <span>${dateStr}</span>
+        ${e.category?`<span class="tag-pill">${e.category}</span>`:''}
+      </div>
+      <div class="journal-card-title">${e.title||'Untitled entry'}</div>
+      <div class="journal-card-preview">${preview}</div>
+      <div class="journal-card-footer">
+        ${(e.tags||[]).slice(0,3).map(t=>`<span class="tag-pill">#${t}</span>`).join('')}
+        <span class="word-count">${countWords(e.body)} words</span>
+      </div>
+    </div>`;
+  }).join('')}</div>`;
+}
+
+function countWords(text){ return (text||'').trim().split(/\s+/).filter(Boolean).length; }
+
+// ── Open / close editor ───────────────────────────────────────────────────────
+function openJournalEditor(id){
+  currentEntryId=id;
+  const existing=id?journalEntries.find(e=>e.id===id):null;
+  const ed=document.getElementById('journal-editor');
+  ed.classList.add('visible');
+  document.getElementById('editor-date-lbl').textContent=
+    new Date().toLocaleDateString('en-IN',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
+  document.getElementById('editor-title-in').value=existing?existing.title:'';
+  document.getElementById('editor-body-ta').value=existing?existing.body:'';
+  document.getElementById('editor-tags-in').value=existing?(existing.tags||[]).join(', '):'';
+  const catEl=document.getElementById('editor-cat-in');
+  if(catEl) catEl.value=existing?existing.category||'Personal':'Personal';
+  editorCurrentMood=existing?existing.mood||'':'';
+  editorCurrentTags=existing?existing.tags||[]:[];
+  renderEditorMoodSelect();
+  updateWordCount();
+  // Show prompt for new entries
+  const pbar=document.getElementById('editor-prompt-bar');
+  const trow=document.getElementById('editor-template-row');
+  if(!existing){
+    if(pbar){pbar.style.display='flex';refreshPrompt();}
+    if(trow){trow.style.display='flex';renderTemplateRow();}
+  } else {
+    if(pbar)pbar.style.display='none';
+    if(trow)trow.style.display='none';
+  }
+  setTimeout(()=>document.getElementById('editor-body-ta')?.focus(),100);
+}
+
+function closeJournalEditor(){
+  clearTimeout(editorAutoSaveTimer);
+  document.getElementById('journal-editor').classList.remove('visible');
+  currentEntryId=null;
+  renderJournalPage();
+}
+
+// ── Mood select ─────────────────────────────────────────────────────────────
+function renderEditorMoodSelect(){
+  const el=document.getElementById('editor-mood-select');
+  if(!el)return;
+  el.innerHTML=MOODS.map(m=>`
+    <span class="mood-opt ${editorCurrentMood===m.emoji?'selected':''}"
+      title="${m.label}" onclick="selectMood('${m.emoji}')">${m.emoji}</span>`).join('');
+}
+
+function selectMood(emoji){
+  editorCurrentMood=editorCurrentMood===emoji?'':emoji;
+  renderEditorMoodSelect();
+}
+
+// ── Prompts & Templates ─────────────────────────────────────────────────────
+function refreshPrompt(){
+  const p=PROMPTS[Math.floor(Math.random()*PROMPTS.length)];
+  const el=document.getElementById('editor-prompt-text');
+  if(el)el.textContent=p;
+}
+function renderTemplateRow(){
+  const el=document.getElementById('editor-template-row');
+  if(!el)return;
+  el.innerHTML=Object.keys(TEMPLATES).map(k=>
+    `<button class="template-pill" onclick="applyTemplate('${k}')">${k}</button>`).join('');
+}
+function applyTemplate(name){
+  const ta=document.getElementById('editor-body-ta');
+  if(ta){ta.value=TEMPLATES[name];updateWordCount();}
+  const pbar=document.getElementById('editor-prompt-bar');
+  const trow=document.getElementById('editor-template-row');
+  if(pbar)pbar.style.display='none';
+  if(trow)trow.style.display='none';
+  ta?.focus();
+}
+
+// ── Format bar ─────────────────────────────────────────────────────────────
+function insertFmt(type){
+  const ta=document.getElementById('editor-body-ta');
+  if(!ta)return;
+  const start=ta.selectionStart, end=ta.selectionEnd;
+  const sel=ta.value.slice(start,end);
+  const before=ta.value.slice(0,start), after=ta.value.slice(end);
+  let insert='', cursorOffset=0;
+  switch(type){
+    case 'bold':    insert=sel?'**'+sel+'**':'**bold text**'; cursorOffset=sel?0:2; break;
+    case 'italic':  insert=sel?'*'+sel+'*':'*italic text*';  cursorOffset=sel?0:1; break;
+    case 'h1':      insert='\n# '+(sel||'Heading 1')+'\n'; break;
+    case 'h2':      insert='\n## '+(sel||'Heading 2')+'\n'; break;
+    case 'bullet':  insert='\n- '+(sel||'item')+'\n'; break;
+    case 'divider': insert='\n\n---\n\n'; break;
+    case 'quote':   insert='\n> '+(sel||'Quote here')+'\n'; break;
+    case 'checkbox':insert='\n- [ ] '+(sel||'Task')+'\n'; break;
+  }
+  ta.value=before+insert+after;
+  const pos=start+insert.length-cursorOffset;
+  ta.setSelectionRange(pos,pos);
+  ta.focus();
+  updateWordCount();
+}
+
+// ── Word count + autosave ──────────────────────────────────────────────────
+function updateWordCount(){
+  const ta=document.getElementById('editor-body-ta');
+  const wc=countWords(ta?ta.value:'');
+  const el=document.getElementById('editor-wc');
+  if(el)el.textContent=wc+' word'+(wc===1?'':'s');
+}
+function onEditorInput(){
+  updateWordCount();
+  clearTimeout(editorAutoSaveTimer);
+  document.getElementById('editor-autosave-lbl').textContent='';
+  editorAutoSaveTimer=setTimeout(()=>{
+    autoSaveJournalEntry();
+    document.getElementById('editor-autosave-lbl').textContent='Saved';
+    setTimeout(()=>{const el=document.getElementById('editor-autosave-lbl');if(el)el.textContent='';},2000);
+  },1500);
+}
+
+// ── Save entry ───────────────────────────────────────────────────────────────
+function autoSaveJournalEntry(){ saveJournalEntry(true); }
+function saveJournalEntry(silent){
+  const title=document.getElementById('editor-title-in')?.value.trim()||'';
+  const body=document.getElementById('editor-body-ta')?.value||'';
+  const tagsRaw=document.getElementById('editor-tags-in')?.value||'';
+  const category=document.getElementById('editor-cat-in')?.value||'Personal';
+  const tags=tagsRaw.split(',').map(t=>t.trim()).filter(Boolean);
+  const now=new Date();
+  if(!body.trim())return;
+  if(currentEntryId){
+    const idx=journalEntries.findIndex(e=>e.id===currentEntryId);
+    if(idx>=0){
+      journalEntries[idx]={...journalEntries[idx],title,body,tags,mood:editorCurrentMood,category,updatedAt:Date.now()};
+    }
+  } else {
+    const newEntry={
+      id:uid(),title,body,tags,mood:editorCurrentMood,category,
+      date:Date.now(),dateKey:todayKey(),createdAt:Date.now(),updatedAt:Date.now()
+    };
+    journalEntries.unshift(newEntry);
+    currentEntryId=newEntry.id;
+  }
+  saveJournalLocal();
+  if(!silent){closeJournalEditor();}
+}
+
+function saveJournalLocal(){
+  save('lf3_journal',journalEntries);
+  if(window._saveToFirestore) window._saveToFirestore();
+}
+
+function deleteJournalEntry(id){
+  if(!confirm('Delete this entry? This cannot be undone.'))return;
+  journalEntries=journalEntries.filter(e=>e.id!==id);
+  saveJournalLocal();
+  renderJournalPage();
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// PIN LOCK SYSTEM
+// ═══════════════════════════════════════════════════════════════════════════
+function renderJournalLock(){
+  const el=document.getElementById('journal-lock-screen');
+  if(!el)return;
+  if(!journalPin){
+    // No PIN set — offer to set one or skip
+    el.innerHTML=`<div class="journal-lock">
+      <div class="lock-icon">📔</div>
+      <div class="lock-title">Your Private Journal</div>
+      <div class="lock-sub">Set a PIN to protect your entries, or skip to access directly.</div>
+      <div style="display:flex;gap:10px;margin-top:8px;flex-wrap:wrap;justify-content:center">
+        <button class="btn btn-primary" onclick="startPinSetup()">Set PIN</button>
+        <button class="btn btn-ghost" onclick="unlockJournalDirect()">Skip — Access directly</button>
+      </div>
+    </div>`;
+  } else {
+    // PIN is set — show keypad
+    renderPinKeypad('');
+  }
+}
+
+function unlockJournalDirect(){
+  journalUnlocked=true;
+  renderJournalPage();
+}
+
+// ── PIN Keypad ─────────────────────────────────────────────────────────────
+function renderPinKeypad(errorMsg){
+  pinInputBuffer='';
+  const el=document.getElementById('journal-lock-screen');
+  if(!el)return;
+  el.innerHTML=`<div class="journal-lock">
+    <div class="lock-icon">🔐</div>
+    <div class="lock-title">Enter PIN</div>
+    <div class="lock-sub">Enter your 4-digit PIN to access your journal</div>
+    <div class="pin-dots" id="pin-dots">
+      <div class="pin-dot" id="pd0"></div>
+      <div class="pin-dot" id="pd1"></div>
+      <div class="pin-dot" id="pd2"></div>
+      <div class="pin-dot" id="pd3"></div>
+    </div>
+    ${errorMsg?`<div class="pin-error">${errorMsg}</div>`:'<div style="height:20px"></div>'}
+    <div class="pin-keypad">
+      ${[1,2,3,4,5,6,7,8,9,'',0,'⌫'].map(k=>`
+        <button class="pin-key ${k===''?'':''}${k==='⌫'?'del-key':''}"
+          onclick="${k===''?'':k==='⌫'?'pinBackspace()':'pinPress('+k+')'}"
+          ${k===''?'style="visibility:hidden"':''}>
+          ${k}
+        </button>`).join('')}
+    </div>
+    <div style="display:flex;gap:10px;margin-top:16px;flex-wrap:wrap;justify-content:center">
+      <button class="btn btn-ghost btn-sm" onclick="forgotPin()">Forgot PIN?</button>
+    </div>
+  </div>`;
+}
+
+function updatePinDots(){
+  for(let i=0;i<4;i++){
+    const dot=document.getElementById('pd'+i);
+    if(dot)dot.className='pin-dot'+(i<pinInputBuffer.length?' filled':'');
+  }
+}
+
+function pinPress(digit){
+  if(pinInputBuffer.length>=4)return;
+  pinInputBuffer+=digit;
+  updatePinDots();
+  if(pinInputBuffer.length===4){
+    setTimeout(()=>{
+      if(pinSetupStage===1){
+        pinSetupFirst=pinInputBuffer;
+        pinInputBuffer='';
+        pinSetupStage=2;
+        renderPinSetupConfirm();
+      } else if(pinSetupStage===2){
+        if(hashPin(pinInputBuffer)===hashPin(pinSetupFirst)){
+          journalPin=hashPin(pinInputBuffer);
+          save('lf3_jpin',journalPin);
+          pinSetupStage=0;
+          journalUnlocked=true;
+          showToast('PIN set successfully!');
+          renderJournalPage();
+        } else {
+          pinSetupStage=1;
+          pinSetupFirst='';
+          pinInputBuffer='';
+          renderPinSetupFirst('PINs did not match. Try again.');
+        }
+      } else {
+        // Normal unlock
+        if(hashPin(pinInputBuffer)===journalPin){
+          journalUnlocked=true;
+          renderJournalPage();
+        } else {
+          renderPinKeypad('Incorrect PIN. Try again.');
+        }
+      }
+    },120);
+  }
+}
+
+function pinBackspace(){
+  if(pinInputBuffer.length>0){
+    pinInputBuffer=pinInputBuffer.slice(0,-1);
+    updatePinDots();
+  }
+}
+
+// ── PIN Setup flow ─────────────────────────────────────────────────────────
+function startPinSetup(){
+  pinSetupStage=1;
+  pinInputBuffer='';
+  pinSetupFirst='';
+  renderPinSetupFirst('');
+}
+
+function renderPinSetupFirst(errorMsg){
+  pinInputBuffer='';
+  const el=document.getElementById('journal-lock-screen');
+  if(!el)return;
+  el.innerHTML=`<div class="journal-lock pin-setup-wrap">
+    <div class="lock-icon">🔒</div>
+    <div class="lock-title">Set a PIN</div>
+    <div class="lock-sub">Choose a 4-digit PIN for your journal</div>
+    <div class="pin-dots" id="pin-dots">
+      <div class="pin-dot" id="pd0"></div><div class="pin-dot" id="pd1"></div>
+      <div class="pin-dot" id="pd2"></div><div class="pin-dot" id="pd3"></div>
+    </div>
+    ${errorMsg?`<div class="pin-error">${errorMsg}</div>`:'<div style="height:20px"></div>'}
+    <div class="pin-keypad">
+      ${[1,2,3,4,5,6,7,8,9,'',0,'⌫'].map(k=>`
+        <button class="pin-key ${k==='⌫'?'del-key':''}"
+          onclick="${k===''?'':k==='⌫'?'pinBackspace()':'pinPress('+k+')'}"
+          ${k===''?'style="visibility:hidden"':''}>
+          ${k}
+        </button>`).join('')}
+    </div>
+    <button class="btn btn-ghost btn-sm" style="margin-top:16px" onclick="cancelPinSetup()">Cancel</button>
+  </div>`;
+}
+
+function renderPinSetupConfirm(){
+  pinInputBuffer='';
+  const el=document.getElementById('journal-lock-screen');
+  if(!el)return;
+  el.innerHTML=`<div class="journal-lock pin-setup-wrap">
+    <div class="lock-icon">✅</div>
+    <div class="lock-title">Confirm PIN</div>
+    <div class="lock-sub">Enter the same PIN again to confirm</div>
+    <div class="pin-dots" id="pin-dots">
+      <div class="pin-dot" id="pd0"></div><div class="pin-dot" id="pd1"></div>
+      <div class="pin-dot" id="pd2"></div><div class="pin-dot" id="pd3"></div>
+    </div>
+    <div style="height:20px"></div>
+    <div class="pin-keypad">
+      ${[1,2,3,4,5,6,7,8,9,'',0,'⌫'].map(k=>`
+        <button class="pin-key ${k==='⌫'?'del-key':''}"
+          onclick="${k===''?'':k==='⌫'?'pinBackspace()':'pinPress('+k+')'}"
+          ${k===''?'style="visibility:hidden"':''}>
+          ${k}
+        </button>`).join('')}
+    </div>
+    <button class="btn btn-ghost btn-sm" style="margin-top:16px" onclick="cancelPinSetup()">Cancel</button>
+  </div>`;
+}
+
+function cancelPinSetup(){
+  pinSetupStage=0;pinSetupFirst='';pinInputBuffer='';
+  unlockJournalDirect();
+}
+
+function forgotPin(){
+  if(confirm('Reset your PIN? This will remove PIN protection from your journal.')){
+    journalPin=null;
+    save('lf3_jpin',null);
+    unlockJournalDirect();
+    showToast('PIN removed. You can set a new one from the journal.');
+  }
+}
+
+// Lock journal when navigating away
+const _origNavigate=navigate;
+function navigate(page,btn){
+  if(page!=='journal') journalUnlocked=false;
+  _origNavigate(page,btn);
+}
+
+
 // ─────────────────────────────────────────────
 // INIT
 // ─────────────────────────────────────────────
@@ -2168,6 +2884,7 @@ window._applySync = function(data) {
   if (data.friendReqs !== undefined) { _friendReqs=data.friendReqs; friendReqs=_friendReqs; changed=true; }
   if (data.groups     !== undefined) { _groups=data.groups;         groups=_groups;         changed=true; }
   if (data.splits     !== undefined) { _splits=data.splits;         splits=_splits;         changed=true; }
+  if (data.journalEntries !== undefined) { journalEntries=data.journalEntries; changed=true; }
   if (changed) {
     renderHome();
     renderPage(currentPage);
@@ -2179,7 +2896,8 @@ window._getState = function() {
   return {
     habits:_habits, goals:_goals, todos:_todos, spends:_spends,
     customCats:_customCats, friends:_friends, friendReqs:_friendReqs,
-    groups:_groups, splits:_splits
+    groups:_groups, splits:_splits,
+    journalEntries:journalEntries
   };
 };
 
