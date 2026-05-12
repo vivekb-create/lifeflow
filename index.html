@@ -2527,6 +2527,7 @@ function openJournalEditor(id){
   document.getElementById('editor-date-lbl').textContent=
     new Date().toLocaleDateString('en-IN',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
   document.getElementById('editor-title-in').value=existing?existing.title:'';
+  document.getElementById('editor-title-in').placeholder=defaultEntryTitle();
   document.getElementById('editor-body-ta').value=existing?existing.body:'';
   document.getElementById('editor-tags-in').value=existing?(existing.tags||[]).join(', '):'';
   const catEl=document.getElementById('editor-cat-in');
@@ -2549,14 +2550,11 @@ function openJournalEditor(id){
 }
 
 function closeJournalEditor(){
-  clearTimeout(editorAutoSaveTimer);
-  // Auto-save unsaved content before closing
-  const body = document.getElementById('editor-body-ta')?.value||'';
-  if(body.trim()) saveJournalEntry(true);
-  const ed = document.getElementById('journal-editor');
-  if(ed) ed.style.display='none';
-  currentEntryId=null;
-  renderJournalPage();
+  // Save anything typed (even a single word) before going back
+  // If body is empty, just closes silently — no entry created
+  _doSave(true);         // silent=true — saves if content exists, no-ops if empty
+  _hideEditor();         // always hides the editor
+  renderJournalPage();   // always returns to list
 }
 
 // ── Mood select ─────────────────────────────────────────────────────────────
@@ -2630,46 +2628,88 @@ function updateWordCount(){
 function onEditorInput(){
   updateWordCount();
   clearTimeout(editorAutoSaveTimer);
-  document.getElementById('editor-autosave-lbl').textContent='';
+  const lbl=document.getElementById('editor-autosave-lbl');
+  if(lbl)lbl.textContent='';
   editorAutoSaveTimer=setTimeout(()=>{
-    autoSaveJournalEntry();
-    document.getElementById('editor-autosave-lbl').textContent='Saved';
+    _doSave(true);
+    const lbl2=document.getElementById('editor-autosave-lbl');
+    if(lbl2)lbl2.textContent='Autosaved';
     setTimeout(()=>{const el=document.getElementById('editor-autosave-lbl');if(el)el.textContent='';},2000);
   },1500);
 }
 
-// ── Save entry ───────────────────────────────────────────────────────────────
-function autoSaveJournalEntry(){ saveJournalEntry(true); }
-function saveJournalEntry(silent){
-  const title=document.getElementById('editor-title-in')?.value.trim()||'';
-  const body=document.getElementById('editor-body-ta')?.value||'';
-  const tagsRaw=document.getElementById('editor-tags-in')?.value||'';
-  const category=document.getElementById('editor-cat-in')?.value||'Personal';
-  const tags=tagsRaw.split(',').map(t=>t.trim()).filter(Boolean);
-  const now=new Date();
-  if(!body.trim())return;
-  if(currentEntryId){
-    const idx=journalEntries.findIndex(e=>e.id===currentEntryId);
-    if(idx>=0){
-      journalEntries[idx]={...journalEntries[idx],title,body,tags,mood:editorCurrentMood,category,updatedAt:Date.now()};
+// ── Default title helper ────────────────────────────────────────────────────
+function defaultEntryTitle(){
+  return new Date().toLocaleDateString('en-IN',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
+}
+
+// ── Core save — always updates existing entry if currentEntryId is set ──────
+function _doSave(silent){
+  const bodyEl = document.getElementById('editor-body-ta');
+  const titleEl = document.getElementById('editor-title-in');
+  const tagsEl  = document.getElementById('editor-tags-in');
+  const catEl   = document.getElementById('editor-cat-in');
+
+  const body     = (bodyEl  ? bodyEl.value  : '');
+  const tagsRaw  = (tagsEl  ? tagsEl.value  : '');
+  const category = (catEl   ? catEl.value   : 'Personal');
+  const tags     = tagsRaw.split(',').map(t=>t.trim()).filter(Boolean);
+
+  // Fix 2: Default title = today's date if left blank
+  let title = (titleEl ? titleEl.value.trim() : '');
+  if(!title) title = defaultEntryTitle();
+
+  // Even if body is empty, still close — but only persist if there's content
+  const hasContent = body.trim().length > 0;
+
+  if(hasContent){
+    // Fix 3: Use String comparison for ID matching — prevents type mismatch
+    const existingIdx = currentEntryId !== null
+      ? journalEntries.findIndex(e=>String(e.id)===String(currentEntryId))
+      : -1;
+
+    if(existingIdx >= 0){
+      // UPDATE existing entry — never create a duplicate
+      journalEntries[existingIdx] = {
+        ...journalEntries[existingIdx],
+        title, body, tags,
+        mood: editorCurrentMood,
+        category,
+        updatedAt: Date.now()
+      };
+    } else {
+      // CREATE new entry (only when currentEntryId is null, i.e. from "New Entry" button)
+      const newId = uid();
+      const newEntry = {
+        id: newId, title, body, tags,
+        mood: editorCurrentMood, category,
+        date: Date.now(), dateKey: todayKey(),
+        createdAt: Date.now(), updatedAt: Date.now()
+      };
+      journalEntries.unshift(newEntry);
+      currentEntryId = newId; // track so autosave updates, not duplicates
     }
-  } else {
-    const newEntry={
-      id:uid(),title,body,tags,mood:editorCurrentMood,category,
-      date:Date.now(),dateKey:todayKey(),createdAt:Date.now(),updatedAt:Date.now()
-    };
-    journalEntries.unshift(newEntry);
-    currentEntryId=newEntry.id;
+    saveJournalLocal();
   }
-  saveJournalLocal();
+
   if(!silent){
-    const ed=document.getElementById('journal-editor');
-    if(ed){ ed.style.display='none'; ed.classList.remove('visible'); }
-    currentEntryId=null;
+    _hideEditor();
     renderJournalPage();
-    showToast('Entry saved!');
+    if(hasContent) showToast('Entry saved!');
   }
 }
+
+function _hideEditor(){
+  clearTimeout(editorAutoSaveTimer);
+  const ed = document.getElementById('journal-editor');
+  if(ed){ ed.style.display='none'; ed.classList.remove('visible'); }
+  currentEntryId = null;
+}
+
+function autoSaveJournalEntry(){ _doSave(true); }
+
+// Public save — called by Save button
+function saveJournalEntry(silent){ _doSave(silent===true); }
 
 function saveJournalLocal(){
   save('lf3_journal',journalEntries);
