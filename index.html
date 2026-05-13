@@ -682,7 +682,68 @@ onAuthStateChanged(auth, async (user) => {
     .editor-format-bar{padding:8px 12px;}
     .editor-meta-bar{padding:8px 16px;}
   }
+
+  /* ── INVITE LINK / QR ── */
+  .invite-modal-wrap{max-width:400px;}
+  .invite-link-box{display:flex;align-items:center;gap:8px;background:var(--warm);border:1.5px solid var(--warm3);border-radius:var(--r2);padding:10px 12px;margin:12px 0;}
+  .invite-link-text{flex:1;font-size:12px;color:var(--text2);word-break:break-all;line-height:1.4;}
+  .copy-btn{flex-shrink:0;padding:6px 12px;background:var(--sage);color:white;border:none;border-radius:8px;font-size:12px;font-weight:500;cursor:pointer;font-family:'DM Sans',sans-serif;transition:all .15s;white-space:nowrap;}
+  .copy-btn:hover{background:var(--sage-dark);}
+  .copy-btn.copied{background:var(--sage-dark);}
+  .qr-wrap{display:flex;flex-direction:column;align-items:center;gap:10px;padding:16px;background:white;border-radius:var(--r2);border:1px solid var(--warm2);margin:12px 0;}
+  .qr-wrap canvas{border-radius:8px;}
+  .share-buttons{display:flex;gap:8px;flex-wrap:wrap;margin-top:4px;}
+  .share-btn{flex:1;min-width:100px;display:flex;align-items:center;justify-content:center;gap:6px;padding:9px 12px;border-radius:var(--r2);font-size:13px;font-weight:500;cursor:pointer;border:none;font-family:'DM Sans',sans-serif;transition:all .15s;}
+  .share-btn.whatsapp{background:#25D366;color:white;}
+  .share-btn.whatsapp:hover{background:#1da851;}
+  .share-btn.copy-link{background:var(--sage-light);color:var(--sage-dark);border:1.5px solid var(--sage-mid);}
+  .share-btn.copy-link:hover{background:var(--sage);color:white;}
+  .share-btn.native{background:var(--blue-l);color:var(--blue);border:1.5px solid var(--blue);}
+  .share-btn.native:hover{background:var(--blue);color:white;}
+  .invite-or{text-align:center;font-size:12px;color:var(--text3);margin:8px 0;}
+  .invite-tabs{display:flex;gap:6px;margin-bottom:16px;}
+  .invite-tab{flex:1;padding:8px;border-radius:var(--r2);font-size:13px;font-weight:500;border:1.5px solid var(--warm3);background:var(--warm2);color:var(--text2);cursor:pointer;font-family:'DM Sans',sans-serif;transition:all .15s;text-align:center;}
+  .invite-tab.active{background:var(--sage);color:white;border-color:var(--sage);}
+  .invite-section{display:none;}
+  .invite-section.active{display:block;}
+  .friend-code-display{font-family:monospace;font-size:32px;font-weight:700;letter-spacing:8px;color:var(--sage-dark);text-align:center;padding:16px;background:var(--sage-light);border-radius:var(--r2);margin:12px 0;border:1.5px solid var(--sage-mid);}
+  .enter-code-wrap{display:flex;gap:8px;margin-top:8px;}
+
+  /* ── CSV IMPORT / EXPORT ── */
+  .csv-toolbar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;padding:12px 0 4px;}
+  .csv-btn{display:inline-flex;align-items:center;gap:6px;padding:8px 14px;border-radius:var(--r2);font-size:12px;font-weight:500;cursor:pointer;font-family:'DM Sans',sans-serif;border:none;transition:all .15s;white-space:nowrap;}
+  .csv-btn.download{background:var(--sage-light);color:var(--sage-dark);border:1.5px solid var(--sage-mid);}
+  .csv-btn.download:hover{background:var(--sage);color:white;}
+  .csv-btn.import{background:var(--accent-l);color:var(--accent);border:1.5px solid var(--accent);}
+  .csv-btn.import:hover{background:var(--accent);color:white;}
+  .csv-btn.export{background:var(--blue-l);color:var(--blue);border:1.5px solid var(--blue);}
+  .csv-btn.export:hover{background:var(--blue);color:white;}
+  .csv-file-input{display:none;}
+  .csv-drop-zone{border:2px dashed var(--warm3);border-radius:var(--r);padding:28px 20px;text-align:center;transition:all .2s;cursor:pointer;margin:10px 0;}
+  .csv-drop-zone:hover,.csv-drop-zone.drag-over{border-color:var(--sage);background:var(--sage-light);}
+  .csv-drop-icon{font-size:32px;margin-bottom:8px;}
+  .csv-drop-title{font-size:15px;font-weight:500;color:var(--text);margin-bottom:4px;}
+  .csv-drop-sub{font-size:12px;color:var(--text3);}
+  .csv-preview-table{width:100%;border-collapse:collapse;font-size:12px;margin:10px 0;}
+  .csv-preview-table th{background:var(--sage-light);color:var(--sage-dark);padding:7px 10px;text-align:left;font-weight:600;font-size:11px;letter-spacing:.04em;}
+  .csv-preview-table td{padding:7px 10px;border-bottom:1px solid var(--warm2);color:var(--text);vertical-align:middle;}
+  .csv-preview-table tr:last-child td{border-bottom:none;}
+  .csv-preview-table tr.row-error td{background:var(--red-l);color:var(--red);}
+  .csv-preview-table tr.row-ok td{background:transparent;}
+  .csv-preview-table tr.row-warn td{background:#FFF8E5;}
+  .csv-row-status{display:inline-block;padding:2px 7px;border-radius:6px;font-size:10px;font-weight:600;}
+  .csv-row-status.ok{background:var(--sage-light);color:var(--sage-dark);}
+  .csv-row-status.error{background:var(--red-l);color:var(--red);}
+  .csv-row-status.warn{background:#FFF0B3;color:#A07000;}
+  .csv-row-status.new-cat{background:var(--blue-l);color:var(--blue);}
+  .csv-summary-bar{padding:10px 14px;border-radius:var(--r2);font-size:13px;margin:10px 0;line-height:1.6;}
+  .csv-summary-bar.success{background:var(--sage-light);border:1px solid var(--sage-mid);color:var(--sage-dark);}
+  .csv-summary-bar.partial{background:#FFF8E5;border:1px solid #DEB300;color:#7A5A00;}
+  .csv-summary-bar.error{background:var(--red-l);border:1px solid var(--red);color:var(--red);}
+  .csv-field-hint{font-size:11px;color:var(--text3);margin-top:6px;line-height:1.5;}
+  .csv-preview-scroll{max-height:260px;overflow-y:auto;border-radius:var(--r2);border:1px solid var(--warm2);}
 </style>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 </head>
 <body>
 
@@ -815,6 +876,22 @@ onAuthStateChanged(auth, async (user) => {
         <!-- PERSONAL -->
         <div class="spend-panel active" id="spend-panel-personal">
           <div id="spend-banner"></div>
+          <!-- CSV Toolbar -->
+          <div class="card" style="margin-bottom:16px;padding:14px 20px">
+            <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">
+              <div>
+                <div style="font-size:13px;font-weight:500;color:var(--text);margin-bottom:2px">Import / Export Transactions</div>
+                <div style="font-size:11px;color:var(--text3)">Bulk import from a CSV file or export all transactions</div>
+              </div>
+              <div class="csv-toolbar">
+                <button class="csv-btn download" onclick="downloadCsvTemplate()">⬇ CSV Template</button>
+                <button class="csv-btn import" onclick="document.getElementById('csv-file-input').click()">⬆ Import CSV</button>
+                <button class="csv-btn export" onclick="exportSpendCsv()">📤 Export All</button>
+                <input type="file" id="csv-file-input" class="csv-file-input" accept=".csv,text/csv" onchange="handleCsvFile(event)">
+              </div>
+            </div>
+            <div id="csv-import-area"></div>
+          </div>
           <div class="grid-2">
             <div class="card">
               <div class="card-title">By category — today</div>
@@ -993,13 +1070,14 @@ async function signOut() {
 }
 
 function launchApp() {
-  // Always read the freshest user from window.currentUser (set by Firebase module)
   if (window.currentUser) currentUser = window.currentUser;
   document.getElementById('auth-screen').style.display = 'none';
   document.getElementById('app').style.display = 'flex';
   initDateTime();
   renderSidebarUser();
   renderHome();
+  // Handle invite token if user arrived via invite link
+  setTimeout(handleInviteToken, 800);
 }
 
 function renderSidebarUser() {
@@ -1939,78 +2017,642 @@ function renderFriends(){
   const pending=friends.filter(f=>f.status==='pending_sent');
   if(pending.length>0)flEl.innerHTML+=`<div style="margin-top:12px;border-top:1px solid var(--warm2);padding-top:12px"><div class="card-title">Pending (sent)</div>${pending.map(f=>`<div class="friend-card"><div class="friend-avatar" style="background:var(--warm3);color:var(--text3)">${f.name[0].toUpperCase()}</div><div class="friend-info"><div class="friend-name">${f.name}</div><div class="friend-contact">${f.contact} · awaiting</div></div><button class="del" onclick="deleteFriend(${f.id})">×</button></div>`).join('')}</div>`;
 
-  const u2=window.currentUser||currentUser;
   const ffEl=document.getElementById('friends-form');
-  if(ffEl)ffEl.innerHTML=showFriendForm?`
-    <div class="form-box">
-      <input class="input" id="friend-name-in" placeholder="Friend's name">
-      <input class="input" id="friend-contact-in" placeholder="Friend's Gmail / email address" type="email">
-      <div style="background:var(--sage-light);border-radius:8px;padding:9px 12px;margin-bottom:10px;font-size:12px;color:var(--sage-dark)">
-        <strong>📧 How it works:</strong><br>
-        1. We send a <strong>real email</strong> from LifeFlow directly.<br>
-        2. Your friend clicks the link and signs in with Google.<br>
-        3. Their request appears automatically — no tab opens on your end.
-      </div>
-      <div style="display:flex;gap:8px">
-        <button class="btn btn-primary" id="friend-send-btn" onclick="sendFriendRequest()">Send Invite</button>
-        <button class="btn btn-ghost" onclick="setFriendForm(false)">Cancel</button>
-      </div>
-    </div>`:`<button class="add-btn" onclick="setFriendForm(true)">+ Add friend</button>`;
+  if(ffEl)ffEl.innerHTML=`<button class="add-btn" onclick="openInviteModal()">+ Add friend via Link or QR</button>`;
 
   const frEl=document.getElementById('friend-requests-list');
   if(frEl)frEl.innerHTML=friendReqs.length===0
     ?'<div class="empty"><div class="empty-icon">📬</div>No pending requests</div>'
-    :friendReqs.map(r=>`<div class="req-card"><div class="friend-avatar">${r.from[0].toUpperCase()}</div><div class="friend-info"><div class="friend-name">${r.from}</div><div class="friend-contact">${r.contact}</div></div><button class="btn btn-primary btn-sm" onclick="acceptFriendReq(${r.id})">Accept</button><button class="btn btn-ghost btn-sm" onclick="declineFriendReq(${r.id})">Decline</button></div>`).join('');
+    :friendReqs.map(r=>{
+      const avatar=r.fromPicture
+        ?`<img src="${r.fromPicture}" class="user-avatar" style="width:36px;height:36px">`
+        :`<div class="friend-avatar">${(r.from||'?')[0].toUpperCase()}</div>`;
+      return `<div class="req-card">${avatar}<div class="friend-info"><div class="friend-name">${r.from}</div><div class="friend-contact">${r.contact||''}</div></div><button class="btn btn-primary btn-sm" onclick="acceptFriendReq(${r.id})">Accept</button><button class="btn btn-ghost btn-sm" onclick="declineFriendReq(${r.id})">Decline</button></div>`;
+    }).join('');
 }
 
-function setFriendForm(v){showFriendForm=v;renderFriends();if(v)setTimeout(()=>document.getElementById('friend-name-in')?.focus(),50);}
-async function sendFriendRequest(){
-  const name    = (document.getElementById('friend-name-in').value||'').trim();
-  const contact = (document.getElementById('friend-contact-in').value||'').trim();
-  if(!name || !contact){ alert('Please enter both a name and email address.'); return; }
+function setFriendForm(v){showFriendForm=v;renderFriends();}
 
-  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-  const isEmail    = emailRegex.test(contact);
-  const u          = window.currentUser || currentUser;
+// ── Generate a 6-char friend code from user's UID ──────────────────────────
+function getMyFriendCode(){
+  const u=window.currentUser||currentUser;
+  if(!u||!u.uid)return'NOAUTH';
+  return u.uid.slice(-6).toUpperCase();
+}
 
-  // Add friend locally immediately so UI updates
-  friends.push({id:uid(), name, contact, status:'pending_sent'});
+// ── Build invite URL with token stored in Firestore ───────────────────────
+async function generateInviteLink(){
+  const u=window.currentUser||currentUser;
+  const appUrl=window.location.origin+window.location.pathname;
+  const token=Math.random().toString(36).slice(2,10).toUpperCase();
+  const link=appUrl+'?invite='+token;
+  if(u&&!u.isGuest&&window._fb){
+    const {db,doc,setDoc}=window._fb;
+    try{
+      await setDoc(doc(db,'invite_tokens',token),{
+        fromUid:u.uid, fromName:u.name||'A LifeFlow user',
+        fromEmail:u.email||'', fromPic:u.picture||'',
+        createdAt:Date.now(), expiresAt:Date.now()+7*24*60*60*1000
+      });
+    }catch(e){console.warn('storeToken:',e);}
+  }
+  return link;
+}
 
-  if(isEmail){
-    // Show spinner on button
-    const btn = document.getElementById('friend-send-btn');
-    if(btn){ btn.textContent='Sending...'; btn.disabled=true; }
-
-    try {
-      // 1. Write Firestore request so recipient sees it on login
-      if(window._writeFriendRequestToRecipient) {
-        await window._writeFriendRequestToRecipient(contact, u);
-      }
-
-      // 2. Send email silently via backend worker
-      const result = await window._sendInviteEmail(contact, name);
-
-      if(result && result.ok){
-        showToast('✅ Invite sent to ' + name + ' at ' + contact);
+// ── Invite modal ─────────────────────────────────────────────────────────────
+async function openInviteModal(){
+  const u=window.currentUser||currentUser;
+  if(!u||u.isGuest){showToast('Please sign in with Google to invite friends.');return;}
+  document.getElementById('invite-modal')?.remove();
+  const modal=document.createElement('div');
+  modal.className='modal-overlay'; modal.id='invite-modal';
+  modal.innerHTML=`<div class="modal invite-modal-wrap">
+    <button class="modal-close" onclick="document.getElementById('invite-modal').remove()">x</button>
+    <div class="modal-title">Invite a Friend</div>
+    <p style="font-size:13px;color:var(--text3);margin-bottom:14px">When your friend opens the link and signs in, you are connected automatically — no email needed.</p>
+    <div class="invite-tabs">
+      <button class="invite-tab active" id="itab-link" onclick="switchInviteTab('link')">Link</button>
+      <button class="invite-tab" id="itab-qr" onclick="switchInviteTab('qr')">QR Code</button>
+      <button class="invite-tab" id="itab-code" onclick="switchInviteTab('code')">Friend Code</button>
+    </div>
+    <div class="invite-section active" id="isec-link">
+      <div style="font-size:12px;color:var(--text3);margin-bottom:8px">Generating your unique invite link...</div>
+      <div class="invite-link-box" id="invite-link-box" style="display:none">
+        <span class="invite-link-text" id="invite-link-text"></span>
+        <button class="copy-btn" id="invite-copy-btn" onclick="copyInviteLink()">Copy</button>
+      </div>
+      <div class="share-buttons" id="invite-share-btns" style="display:none">
+        <button class="share-btn whatsapp" onclick="shareWhatsApp()">WhatsApp</button>
+        <button class="share-btn copy-link" onclick="copyInviteLink()">Copy Link</button>
+        <button class="share-btn native" id="native-share-btn" onclick="nativeShare()" style="display:none">Share</button>
+      </div>
+      <div style="font-size:11px;color:var(--text3);margin-top:10px">Link expires in 7 days.</div>
+    </div>
+    <div class="invite-section" id="isec-qr">
+      <div class="qr-wrap">
+        <div id="qr-canvas-wrap" style="min-height:160px;display:flex;align-items:center;justify-content:center">
+          <span style="color:var(--text3);font-size:13px">Generating QR...</span>
+        </div>
+        <div style="font-size:12px;color:var(--text3);text-align:center">Ask your friend to scan this</div>
+      </div>
+      <button class="btn btn-primary" style="width:100%;margin-top:4px" onclick="downloadQR()">Download QR Image</button>
+    </div>
+    <div class="invite-section" id="isec-code">
+      <div style="font-size:13px;color:var(--text2);margin-bottom:4px">Your friend code:</div>
+      <div class="friend-code-display" id="my-friend-code">${getMyFriendCode()}</div>
+      <div style="font-size:12px;color:var(--text3);margin-bottom:14px">Share this code over chat or verbally. Your friend enters it below.</div>
+      <div style="font-size:13px;font-weight:500;color:var(--text);margin-bottom:6px">Enter a friend's code:</div>
+      <div class="enter-code-wrap">
+        <input class="input" id="enter-code-in" placeholder="e.g. AB12CD" maxlength="6"
+          style="text-transform:uppercase;letter-spacing:4px;font-size:16px;text-align:center;margin-bottom:0">
+        <button class="btn btn-primary" onclick="connectByCode()" style="flex-shrink:0">Connect</button>
+      </div>
+    </div>
+  </div>`;
+  document.body.appendChild(modal);
+  // Generate link async
+  generateInviteLink().then(link=>{
+    window._currentInviteLink=link;
+    const linkEl=document.getElementById('invite-link-text');
+    const boxEl=document.getElementById('invite-link-box');
+    const btnsEl=document.getElementById('invite-share-btns');
+    if(linkEl)linkEl.textContent=link;
+    if(boxEl)boxEl.style.display='flex';
+    if(btnsEl)btnsEl.style.display='flex';
+    if(navigator.share){const nb=document.getElementById('native-share-btn');if(nb)nb.style.display='flex';}
+    window._buildQR=function(){
+      const wrap=document.getElementById('qr-canvas-wrap');
+      if(!wrap||wrap.querySelector('canvas,img'))return;
+      wrap.innerHTML='';
+      if(typeof QRCode!=='undefined'){
+        new QRCode(wrap,{text:link,width:180,height:180,colorDark:'#3D5C42',colorLight:'#FFFFFF',correctLevel:QRCode.CorrectLevel.M});
       } else {
-        // Worker not configured yet — fall back gracefully
-        showToast('📬 Friend request saved! Share the app link with ' + name + ' to invite them.');
-        console.info('Email worker not configured. Deploy the worker and update WORKER_URL.');
+        const img=document.createElement('img');
+        img.src='https://chart.googleapis.com/chart?chs=180x180&cht=qr&chl='+encodeURIComponent(link)+'&choe=UTF-8';
+        img.style.borderRadius='8px'; wrap.appendChild(img);
       }
-    } catch(e){
-      console.warn('sendFriendRequest error:', e);
-      showToast('📬 Friend request saved! Share the app link with ' + name + ' manually.');
-    }
+    };
+  });
+}
 
-    if(btn){ btn.textContent='Send Invite'; btn.disabled=false; }
-  } else {
-    showToast('Friend request saved. Share the app link with ' + name + ' manually.');
+function switchInviteTab(tab){
+  ['link','qr','code'].forEach(t=>{
+    const btn=document.getElementById('itab-'+t);
+    const sec=document.getElementById('isec-'+t);
+    if(btn)btn.className='invite-tab'+(t===tab?' active':'');
+    if(sec)sec.className='invite-section'+(t===tab?' active':'');
+  });
+  if(tab==='qr'&&window._buildQR)window._buildQR();
+}
+
+function copyInviteLink(){
+  const link=window._currentInviteLink; if(!link)return;
+  navigator.clipboard.writeText(link).then(()=>{
+    const btn=document.getElementById('invite-copy-btn');
+    if(btn){btn.textContent='Copied!';btn.classList.add('copied');setTimeout(()=>{btn.textContent='Copy';btn.classList.remove('copied');},2000);}
+    showToast('Link copied to clipboard!');
+  }).catch(()=>{
+    const ta=document.createElement('textarea');
+    ta.value=link;ta.style.cssText='position:fixed;opacity:0';
+    document.body.appendChild(ta);ta.select();document.execCommand('copy');document.body.removeChild(ta);
+    showToast('Link copied!');
+  });
+}
+
+function shareWhatsApp(){
+  const link=window._currentInviteLink; if(!link)return;
+  const u=window.currentUser||currentUser;
+  const msg=(u?u.name:'Someone')+' wants to connect with you on LifeFlow! Open this link to accept: '+link;
+  window.open('https://wa.me/?text='+encodeURIComponent(msg),'_blank');
+}
+
+async function nativeShare(){
+  const link=window._currentInviteLink; if(!link||!navigator.share)return;
+  const u=window.currentUser||currentUser;
+  try{await navigator.share({title:'Join me on LifeFlow',text:(u?u.name:'Someone')+' wants to connect with you on LifeFlow!',url:link});}
+  catch(e){if(e.name!=='AbortError')console.warn('share error',e);}
+}
+
+function downloadQR(){
+  const wrap=document.getElementById('qr-canvas-wrap'); if(!wrap)return;
+  const canvas=wrap.querySelector('canvas');
+  if(canvas){const a=document.createElement('a');a.download='lifeflow-invite-qr.png';a.href=canvas.toDataURL('image/png');a.click();showToast('QR downloaded!');}
+  else{const img=wrap.querySelector('img');if(img)window.open(img.src,'_blank');}
+}
+
+async function connectByCode(){
+  const code=(document.getElementById('enter-code-in')?.value||'').trim().toUpperCase();
+  if(code.length!==6){showToast('Please enter a 6-character code.');return;}
+  const u=window.currentUser||currentUser;
+  if(!u||u.isGuest){showToast('Please sign in with Google first.');return;}
+  if(!window._fb){showToast('Not connected to cloud. Try again.');return;}
+  const {db,collection,getDocs,addDoc}=window._fb;
+  showToast('Looking up code...');
+  try{
+    const snap=await getDocs(collection(db,'users_by_email'));
+    let found=null;
+    snap.forEach(d=>{const data=d.data();if(data.uid&&data.uid.slice(-6).toUpperCase()===code&&data.uid!==u.uid)found=data;});
+    if(!found){showToast('Code not found. Ask your friend to share their code from the app.');return;}
+    const already=friends.some(f=>f.contact===found.email||f.fromUid===found.uid);
+    if(already){showToast('Already connected with this person!');return;}
+    friends.push({id:uid(),name:found.name||'Friend',contact:found.email||'',status:'active',fromUid:found.uid});
+    persistSpend();renderFriends();
+    await addDoc(collection(db,'users',found.uid,'friendRequests'),{
+      fromUid:u.uid,fromName:u.name,fromEmail:u.email,fromPicture:u.picture||'',sentAt:Date.now(),status:'pending'
+    });
+    document.getElementById('invite-modal')?.remove();
+    showToast('Connected with '+(found.name||'your friend')+'!');
+  }catch(e){console.warn('connectByCode error:',e);showToast('Error looking up code. Please try again.');}
+}
+
+async function handleInviteToken(){
+  const params=new URLSearchParams(window.location.search);
+  const token=params.get('invite');
+  if(!token||token==='guest')return;
+  const u=window.currentUser||currentUser;
+  if(!u||!u.uid||u.isGuest)return;
+  if(!window._fb)return;
+  const {db,doc,getDoc,addDoc,collection,deleteDoc}=window._fb;
+  try{
+    const snap=await getDoc(doc(db,'invite_tokens',token));
+    if(!snap.exists())return;
+    const data=snap.data();
+    if(data.fromUid===u.uid){history.replaceState({},'',window.location.pathname);return;}
+    const already=friends.some(f=>f.fromUid===data.fromUid||f.contact===data.fromEmail);
+    if(already){showToast('Already connected with '+data.fromName+'!');history.replaceState({},'',window.location.pathname);return;}
+    friends.push({id:uid(),name:data.fromName,contact:data.fromEmail,status:'active',fromUid:data.fromUid});
+    persistSpend();renderFriends();
+    await addDoc(collection(db,'users',data.fromUid,'friendRequests'),{
+      fromUid:u.uid,fromName:u.name,fromEmail:u.email,fromPicture:u.picture||'',sentAt:Date.now(),status:'accepted'
+    });
+    await deleteDoc(doc(db,'invite_tokens',token));
+    showToast('Connected with '+data.fromName+' via invite link!');
+    history.replaceState({},'',window.location.pathname);
+  }catch(e){console.warn('handleInviteToken error:',e);}
+}
+
+
+// ══════════════════════════════════════════════════════════════════════════════
+// CSV IMPORT / EXPORT
+// ══════════════════════════════════════════════════════════════════════════════
+
+// ── CSV Template definition ─────────────────────────────────────────────────
+const CSV_HEADERS = ['Date','Description','Category','Amount','Notes'];
+const CSV_DATE_FORMATS = ['DD/MM/YYYY','MM/DD/YYYY','YYYY-MM-DD','D/M/YY','DD-MM-YYYY'];
+
+const CSV_TEMPLATE_ROWS = [
+  ['15/01/2025','Grocery shopping','Food','450','Weekly groceries'],
+  ['15/01/2025','Uber ride','Travel','180','Office commute'],
+  ['16/01/2025','Amazon order','Shopping','1299','Phone cover'],
+  ['16/01/2025','Gym membership','Health','999','Monthly fee'],
+  ['17/01/2025','Electricity bill','Bills','2100','January bill'],
+  ['17/01/2025','Movie tickets','Entertainment','600','Friday night'],
+  ['18/01/2025','Lunch with team','Food','350','Team lunch'],
+];
+
+// ── Download blank template ──────────────────────────────────────────────────
+function downloadCsvTemplate(){
+  const lines = [
+    '# LifeFlow Spending CSV Template',
+    '# Format: ' + CSV_DATE_FORMATS.join(' | '),
+    '# Amount: numbers only, no currency symbols (e.g. 450 not ₹450)',
+    '# Category: use any name — new ones are created automatically',
+    '# Notes column is optional',
+    '',
+    CSV_HEADERS.join(','),
+    ...CSV_TEMPLATE_ROWS.map(r => r.map(cell =>
+      cell.includes(',') ? '"' + cell + '"' : cell
+    ).join(','))
+  ];
+  const blob = new Blob([lines.join('\n')], {type:'text/csv;charset=utf-8;'});
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href     = url;
+  a.download = 'lifeflow-spending-template.csv';
+  document.body.appendChild(a); a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  showToast('✅ Template downloaded! Fill it in and import it back.');
+}
+
+// ── Export all spends to CSV ─────────────────────────────────────────────────
+function exportSpendCsv(){
+  if(spends.length === 0){
+    showToast('No transactions to export yet.');
+    return;
+  }
+  const rows = [CSV_HEADERS.join(',')];
+  const sorted = [...spends].sort((a,b)=>new Date(a.date||0)-new Date(b.date||0));
+  sorted.forEach(s => {
+    const d = s.date ? new Date(s.date) : new Date();
+    const dateStr = d.getDate().toString().padStart(2,'0') + '/' +
+                    (d.getMonth()+1).toString().padStart(2,'0') + '/' +
+                    d.getFullYear();
+    const cells = [
+      dateStr,
+      '"' + (s.desc||'').replace(/"/g,'""') + '"',
+      s.cat||'Other',
+      s.amount.toString(),
+      '"' + (s.notes||'').replace(/"/g,'""') + '"'
+    ];
+    rows.push(cells.join(','));
+  });
+  const blob = new Blob([rows.join('\n')], {type:'text/csv;charset=utf-8;'});
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href     = url;
+  a.download = 'lifeflow-spending-export-' + todayKey() + '.csv';
+  document.body.appendChild(a); a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  showToast('📤 Exported ' + spends.length + ' transactions!');
+}
+
+// ── File input handler ──────────────────────────────────────────────────────
+function handleCsvFile(e){
+  const file = e.target.files[0];
+  if(!file){ return; }
+  if(!file.name.toLowerCase().endsWith('.csv') && file.type !== 'text/csv'){
+    renderCsvError('Invalid file type. Please upload a .csv file.');
+    e.target.value='';
+    return;
+  }
+  if(file.size > 2 * 1024 * 1024){
+    renderCsvError('File too large. Maximum size is 2 MB.');
+    e.target.value='';
+    return;
+  }
+  const reader = new FileReader();
+  reader.onload = function(evt){
+    parseCsvAndPreview(evt.target.result, file.name);
+    e.target.value=''; // reset so same file can be re-selected
+  };
+  reader.onerror = function(){
+    renderCsvError('Could not read the file. Please try again.');
+  };
+  reader.readAsText(file, 'UTF-8');
+}
+
+// ── Parse CSV text ──────────────────────────────────────────────────────────
+function parseCsvText(text){
+  // Strip BOM if present
+  if(text.charCodeAt(0)===0xFEFF) text=text.slice(1);
+  const lines = text.split(/\r?\n/);
+  const rows = [];
+  let inQuote = false;
+  let current = [];
+  let cell = '';
+
+  for(let li=0; li<lines.length; li++){
+    const line = lines[li];
+    // Skip comment lines (start with #) and empty lines
+    if(line.trim().startsWith('#') || line.trim()==='') continue;
+
+    for(let i=0; i<line.length; i++){
+      const ch = line[i];
+      if(inQuote){
+        if(ch==='"'){
+          if(line[i+1]==='"'){ cell+='"'; i++; }
+          else inQuote=false;
+        } else { cell+=ch; }
+      } else {
+        if(ch==='"'){ inQuote=true; }
+        else if(ch===','){current.push(cell.trim());cell='';}
+        else { cell+=ch; }
+      }
+    }
+    if(!inQuote){
+      current.push(cell.trim());
+      cell='';
+      if(current.some(c=>c!=='')) rows.push(current);
+      current=[];
+    } else {
+      // Multi-line quoted field
+      cell+='\n';
+    }
+  }
+  return rows;
+}
+
+// ── Parse a date string in multiple formats ──────────────────────────────────
+function parseCsvDate(str){
+  if(!str) return null;
+  str = str.trim();
+  let d;
+
+  // Try DD/MM/YYYY or DD-MM-YYYY
+  let m = str.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})$/);
+  if(m){
+    const day=parseInt(m[1]), mon=parseInt(m[2]), yr=parseInt(m[3]);
+    const year = yr < 100 ? 2000+yr : yr;
+    // Heuristic: if day>12, definitely DD/MM; else assume DD/MM
+    d = new Date(year, mon-1, day);
+    if(!isNaN(d.getTime())) return d;
+  }
+  // Try YYYY-MM-DD
+  m = str.match(/^(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})$/);
+  if(m){
+    d = new Date(parseInt(m[1]), parseInt(m[2])-1, parseInt(m[3]));
+    if(!isNaN(d.getTime())) return d;
+  }
+  // Try native parse as last resort
+  d = new Date(str);
+  if(!isNaN(d.getTime())) return d;
+  return null;
+}
+
+// ── Normalise column header ──────────────────────────────────────────────────
+function normaliseHeader(h){
+  return h.toLowerCase().replace(/[^a-z]/g,'');
+}
+
+// ── Main: parse and show preview ─────────────────────────────────────────────
+function parseCsvAndPreview(text, fileName){
+  const el = document.getElementById('csv-import-area');
+  if(!el) return;
+
+  const allRows = parseCsvText(text);
+  if(allRows.length < 2){
+    renderCsvError('The file appears to be empty or has no data rows. Make sure it has a header row followed by data.');
+    return;
   }
 
-  persistSpend();
-  showFriendForm = false;
-  renderFriends();
+  // Identify header row
+  const rawHeaders = allRows[0].map(h=>h.trim());
+  const headerMap  = {};
+  rawHeaders.forEach((h,i)=>{
+    const norm = normaliseHeader(h);
+    if(['date','dt'].includes(norm))           headerMap.date=i;
+    if(['description','desc','details','name','narration','transaction','particulars'].includes(norm)) headerMap.desc=i;
+    if(['category','cat','type','head'].includes(norm)) headerMap.cat=i;
+    if(['amount','amt','debit','credit','sum','value','rs','inr','rupees'].includes(norm)) headerMap.amount=i;
+    if(['notes','note','remarks','memo','comment'].includes(norm)) headerMap.notes=i;
+  });
+
+  // Check required headers
+  const missing = [];
+  if(headerMap.date   === undefined) missing.push('Date');
+  if(headerMap.desc   === undefined) missing.push('Description');
+  if(headerMap.amount === undefined) missing.push('Amount');
+
+  if(missing.length > 0){
+    renderCsvError(
+      'Required columns not found: <strong>' + missing.join(', ') + '</strong>.<br>' +
+      'Your file has columns: <em>' + rawHeaders.join(', ') + '</em>.<br>' +
+      'Expected column names (case-insensitive): Date, Description, Amount. Category and Notes are optional.'
+    );
+    return;
+  }
+
+  // Parse data rows
+  const dataRows = allRows.slice(1);
+  const parsed   = [];
+  const newCats  = new Set();
+  const cats     = allCats();
+
+  dataRows.forEach((row, i) => {
+    const rowNum = i + 2; // 1-indexed, account for header
+    const result = { rowNum, raw: row, errors: [], warnings: [], status: 'ok' };
+
+    // Date
+    const dateRaw = row[headerMap.date] || '';
+    const dateObj = parseCsvDate(dateRaw);
+    if(!dateObj){
+      result.errors.push('Invalid date "' + dateRaw + '". Use DD/MM/YYYY format.');
+    } else {
+      result.date    = dateObj;
+      result.dateKey = dateObj.getFullYear()+'-'+(dateObj.getMonth()+1)+'-'+dateObj.getDate();
+    }
+
+    // Description
+    const desc = (row[headerMap.desc]||'').trim();
+    if(!desc) result.errors.push('Description is empty.');
+    result.desc = desc;
+
+    // Amount
+    const amtRaw = (row[headerMap.amount]||'').replace(/[₹$€£,\s]/g,'').trim();
+    const amt    = parseFloat(amtRaw);
+    if(isNaN(amt) || amt <= 0){
+      result.errors.push('Amount "' + (row[headerMap.amount]||'') + '" is invalid. Use a positive number like 450.');
+    } else if(amt > 10000000){
+      result.warnings.push('Amount ₹' + amt.toLocaleString('en-IN') + ' is unusually large. Please verify.');
+    }
+    result.amount = isNaN(amt) ? 0 : Math.abs(amt);
+
+    // Category — auto-create if new
+    const catRaw = headerMap.cat !== undefined ? (row[headerMap.cat]||'').trim() : 'Other';
+    const cat    = catRaw || 'Other';
+    result.cat   = cat;
+    if(!cats[cat]){
+      newCats.add(cat);
+      result.catIsNew = true;
+      result.warnings.push('New category "' + cat + '" will be created automatically.');
+    }
+
+    // Notes (optional)
+    result.notes = headerMap.notes !== undefined ? (row[headerMap.notes]||'').trim() : '';
+
+    // Final status
+    if(result.errors.length > 0)   result.status = 'error';
+    else if(result.warnings.length > 0) result.status = 'warn';
+
+    parsed.push(result);
+  });
+
+  const validRows   = parsed.filter(r=>r.status !== 'error');
+  const errorRows   = parsed.filter(r=>r.status === 'error');
+  const warnRows    = parsed.filter(r=>r.status === 'warn');
+  const totalOk     = validRows.length;
+
+  // Build preview HTML
+  const previewRows = parsed.slice(0, 50); // show up to 50 rows
+  const tableHtml = `
+    <div class="csv-preview-scroll">
+      <table class="csv-preview-table">
+        <thead><tr>
+          <th>Row</th><th>Date</th><th>Description</th><th>Category</th>
+          <th>Amount</th><th>Status</th>
+        </tr></thead>
+        <tbody>
+          ${previewRows.map(r=>{
+            const statusLabel = r.status==='error'
+              ? '<span class="csv-row-status error">Error</span>'
+              : r.catIsNew
+              ? '<span class="csv-row-status new-cat">New cat</span>'
+              : r.status==='warn'
+              ? '<span class="csv-row-status warn">Warning</span>'
+              : '<span class="csv-row-status ok">OK</span>';
+            const issues = [...(r.errors||[]),...(r.warnings||[])].join(' | ');
+            const dateStr = r.date
+              ? r.date.getDate()+'/'+(r.date.getMonth()+1)+'/'+r.date.getFullYear()
+              : '<span style="color:var(--red)">'+( r.raw[0]||'—')+'</span>';
+            return `<tr class="row-${r.status}" title="${issues}">
+              <td style="color:var(--text3)">${r.rowNum}</td>
+              <td>${dateStr}</td>
+              <td>${r.desc||'<span style="color:var(--red)">Empty</span>'}</td>
+              <td>${r.catIsNew?'<span style="color:var(--blue)">'+r.cat+' ✦</span>':r.cat}</td>
+              <td>${r.amount>0?'₹'+r.amount.toLocaleString('en-IN'):'<span style="color:var(--red)">Invalid</span>'}</td>
+              <td>${statusLabel}${issues?'<div style="font-size:10px;color:var(--text3);margin-top:2px">'+issues+'</div>':''}</td>
+            </tr>`;
+          }).join('')}
+        </tbody>
+      </table>
+    </div>`;
+
+  // Summary bar
+  let summaryHtml = '';
+  if(errorRows.length === 0 && warnRows.length === 0){
+    summaryHtml = `<div class="csv-summary-bar success">
+      ✅ <strong>All ${totalOk} rows are valid</strong> and ready to import.
+      ${newCats.size>0?'<br>✦ '+newCats.size+' new categor'+(newCats.size>1?'ies':'y')+' will be created: <strong>'+[...newCats].join(', ')+'</strong>':''}
+    </div>`;
+  } else if(totalOk > 0){
+    summaryHtml = `<div class="csv-summary-bar partial">
+      ⚠️ <strong>${totalOk} of ${parsed.length} rows</strong> will be imported.
+      ${errorRows.length>0?'<strong>'+errorRows.length+' row'+(errorRows.length>1?'s have':'has')+' errors</strong> (shown in red) and will be skipped. ':''}
+      ${warnRows.length>0?warnRows.length+' row'+(warnRows.length>1?'s have':'has')+' warnings (shown in yellow). ':''}
+      ${newCats.size>0?'<br>✦ New categories will be created: <strong>'+[...newCats].join(', ')+'</strong>':''}
+    </div>`;
+  } else {
+    summaryHtml = `<div class="csv-summary-bar error">
+      ❌ <strong>All ${parsed.length} rows have errors</strong> — nothing can be imported.
+      Please fix the errors and try again, or download the template to see the correct format.
+    </div>`;
+  }
+
+  el.innerHTML = `
+    <div style="margin-top:12px">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+        <div style="font-size:13px;font-weight:500;color:var(--text)">
+          Preview: <em style="color:var(--text3)">${fileName}</em>
+          <span style="color:var(--text3);font-weight:400"> — ${parsed.length} row${parsed.length!==1?'s':''}</span>
+        </div>
+        <button class="del" onclick="clearCsvPreview()" title="Clear preview">×</button>
+      </div>
+      ${summaryHtml}
+      ${tableHtml}
+      ${parsed.length>50?'<div style="font-size:11px;color:var(--text3);margin-top:6px">Showing first 50 rows. All '+ parsed.length +' rows will be processed on import.</div>':''}
+      <div class="csv-field-hint">
+        ✦ = new category &nbsp;|&nbsp; Hover over rows to see details &nbsp;|&nbsp;
+        Dates accepted: ${CSV_DATE_FORMATS.join(', ')}
+      </div>
+      ${totalOk>0?`
+      <div style="display:flex;gap:8px;margin-top:12px">
+        <button class="btn btn-primary" onclick="confirmCsvImport()" id="csv-confirm-btn">
+          Import ${totalOk} transaction${totalOk!==1?'s':''}
+        </button>
+        <button class="btn btn-ghost" onclick="clearCsvPreview()">Cancel</button>
+      </div>`:'<div style="margin-top:10px"><button class="btn btn-ghost" onclick="clearCsvPreview()">Close</button></div>'}
+    </div>`;
+
+  // Store parsed data for confirm
+  window._csvParsed = parsed;
+  window._csvNewCats = [...newCats];
 }
+
+// ── Confirm and execute import ───────────────────────────────────────────────
+function confirmCsvImport(){
+  const btn = document.getElementById('csv-confirm-btn');
+  if(btn){ btn.textContent='Importing...'; btn.disabled=true; }
+
+  const parsed   = window._csvParsed || [];
+  const newCatNames = window._csvNewCats || [];
+  const cats     = allCats();
+
+  // 1. Auto-create missing categories
+  const palette = ['#6B8F71','#B8845A','#5A78B8','#B85A4A','#8A6BC4','#5A9898','#9E6B9E','#9E8A6B'];
+  newCatNames.forEach((name, i) => {
+    if(!cats[name]){
+      const color = palette[i % palette.length];
+      customCats.push({name, emoji:'🏷️', color, bg: color+'22'});
+    }
+  });
+
+  // 2. Import valid rows
+  let imported = 0;
+  parsed.forEach(r => {
+    if(r.status === 'error') return;
+    spends.push({
+      id:    uid(),
+      cat:   r.cat || 'Other',
+      desc:  r.desc,
+      amount:r.amount,
+      date:  r.dateKey || todayKey(),
+      notes: r.notes || ''
+    });
+    imported++;
+  });
+
+  persistSpend();
+  clearCsvPreview();
+  renderPersonal();
+
+  const newCatMsg = newCatNames.length > 0
+    ? ' Created ' + newCatNames.length + ' new categor' + (newCatNames.length>1?'ies':'y') + ': ' + newCatNames.join(', ') + '.'
+    : '';
+  showToast('✅ Imported ' + imported + ' transaction' + (imported!==1?'s':'')+'.'+newCatMsg);
+}
+
+function clearCsvPreview(){
+  const el = document.getElementById('csv-import-area');
+  if(el) el.innerHTML='';
+  window._csvParsed  = null;
+  window._csvNewCats = null;
+}
+
+function renderCsvError(msg){
+  const el = document.getElementById('csv-import-area');
+  if(!el) return;
+  el.innerHTML = `
+    <div class="csv-summary-bar error" style="margin-top:10px">
+      ❌ <strong>Import failed</strong><br>${msg}
+    </div>
+    <div style="display:flex;gap:8px;margin-top:8px">
+      <button class="csv-btn download" onclick="downloadCsvTemplate()">⬇ Download Template</button>
+      <button class="btn btn-ghost btn-sm" onclick="clearCsvPreview()">Close</button>
+    </div>`;
+}
+
 function showToast(msg){
   const t=document.createElement('div');
   t.style.cssText='position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#3D5C42;color:white;padding:10px 20px;border-radius:10px;font-size:13px;z-index:9999;box-shadow:0 4px 16px rgba(0,0,0,.2);transition:opacity .4s';
