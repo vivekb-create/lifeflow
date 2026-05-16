@@ -742,6 +742,68 @@ onAuthStateChanged(auth, async (user) => {
   .csv-summary-bar.error{background:var(--red-l);border:1px solid var(--red);color:var(--red);}
   .csv-field-hint{font-size:11px;color:var(--text3);margin-top:6px;line-height:1.5;}
   .csv-preview-scroll{max-height:260px;overflow-y:auto;border-radius:var(--r2);border:1px solid var(--warm2);}
+
+  /* ══ UPI SETTLE UP ══════════════════════════════════════════════════════════ */
+  .settle-card{background:var(--card);border:1px solid var(--warm2);border-radius:var(--r);margin-bottom:12px;overflow:hidden;box-shadow:var(--shadow);}
+  .settle-card-head{display:flex;align-items:center;gap:12px;padding:16px 18px;cursor:pointer;user-select:none;}
+  .settle-card-head:hover{background:var(--warm);}
+  .settle-avatar{width:40px;height:40px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:600;flex-shrink:0;color:white;}
+  .settle-info{flex:1;}
+  .settle-name{font-size:15px;font-weight:500;color:var(--text);}
+  .settle-subtitle{font-size:12px;color:var(--text3);margin-top:1px;}
+  .settle-amount-badge{font-size:18px;font-weight:700;white-space:nowrap;font-family:'Cormorant Garamond',serif;}
+  .settle-amount-badge.owed{color:var(--sage-dark);}
+  .settle-amount-badge.owes{color:var(--red);}
+  .settle-chevron{font-size:14px;color:var(--text3);transition:transform .2s;flex-shrink:0;}
+  .settle-chevron.open{transform:rotate(180deg);}
+  .settle-body{display:none;padding:0 18px 16px;border-top:1px solid var(--warm2);}
+  .settle-body.open{display:block;animation:fadeIn .2s ease;}
+
+  /* UPI request panel */
+  .upi-panel{background:var(--warm);border-radius:var(--r2);padding:14px;margin-bottom:12px;}
+  .upi-panel-title{font-size:11px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--text3);margin-bottom:10px;}
+  .upi-id-row{display:flex;gap:8px;align-items:center;margin-bottom:10px;}
+  .upi-id-input{flex:1;padding:9px 12px;border:1.5px solid var(--warm3);border-radius:var(--r2);font-size:14px;font-family:'DM Sans',sans-serif;background:var(--card);color:var(--text);outline:none;transition:border-color .2s;}
+  .upi-id-input:focus{border-color:var(--sage);}
+  .upi-save-btn{padding:9px 14px;background:var(--sage-light);color:var(--sage-dark);border:1.5px solid var(--sage-mid);border-radius:var(--r2);font-size:12px;font-weight:500;cursor:pointer;font-family:'DM Sans',sans-serif;white-space:nowrap;transition:all .15s;}
+  .upi-save-btn:hover{background:var(--sage);color:white;}
+  .upi-amount-row{display:flex;gap:8px;align-items:center;margin-bottom:10px;}
+  .upi-amount-input{flex:1;padding:9px 12px;border:1.5px solid var(--warm3);border-radius:var(--r2);font-size:14px;font-family:'DM Sans',sans-serif;background:var(--card);color:var(--text);outline:none;}
+  .upi-amount-input:focus{border-color:var(--sage);}
+  .upi-full-btn{padding:8px 12px;background:var(--warm2);color:var(--text2);border:1.5px solid var(--warm3);border-radius:var(--r2);font-size:12px;font-weight:500;cursor:pointer;font-family:'DM Sans',sans-serif;white-space:nowrap;flex-shrink:0;}
+  .upi-full-btn:hover{background:var(--warm3);}
+  .upi-action-btns{display:flex;gap:8px;flex-wrap:wrap;}
+  .upi-pay-btn{flex:1;min-width:120px;display:flex;align-items:center;justify-content:center;gap:6px;padding:11px 16px;border:none;border-radius:var(--r2);font-size:14px;font-weight:500;cursor:pointer;font-family:'DM Sans',sans-serif;transition:all .15s;}
+  .upi-pay-btn.gpay{background:#4285F4;color:white;}
+  .upi-pay-btn.gpay:hover{background:#2b6fd1;}
+  .upi-pay-btn.phonepe{background:#5f259f;color:white;}
+  .upi-pay-btn.phonepe:hover{background:#4a1b7a;}
+  .upi-pay-btn.paytm{background:#002970;color:white;}
+  .upi-pay-btn.paytm:hover{background:#001e54;}
+  .upi-pay-btn.upi{background:var(--sage-dark);color:white;}
+  .upi-pay-btn.upi:hover{background:var(--sage);}
+  .upi-note{font-size:11px;color:var(--text3);margin-top:8px;line-height:1.5;}
+
+  /* Payment request tracking */
+  .payment-req-row{display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--warm2);}
+  .payment-req-row:last-child{border-bottom:none;}
+  .req-status-dot{width:9px;height:9px;border-radius:50%;flex-shrink:0;}
+  .req-status-dot.pending{background:#DEB300;}
+  .req-status-dot.paid{background:var(--sage);}
+  .req-status-dot.cancelled{background:var(--text3);}
+  .req-amount{font-size:14px;font-weight:600;color:var(--text);}
+  .req-time{font-size:11px;color:var(--text3);}
+  .req-mark-btn{padding:4px 10px;border-radius:6px;font-size:11px;font-weight:500;border:none;cursor:pointer;font-family:'DM Sans',sans-serif;}
+  .req-mark-btn.mark-paid{background:var(--sage-light);color:var(--sage-dark);}
+  .req-mark-btn.mark-paid:hover{background:var(--sage);color:white;}
+  .req-mark-btn.cancel{background:var(--warm2);color:var(--text3);}
+  .req-mark-btn.cancel:hover{background:var(--red-l);color:var(--red);}
+
+  /* Settled strip */
+  .settle-done-strip{display:flex;align-items:center;gap:8px;padding:10px 14px;background:var(--sage-light);border-radius:var(--r2);font-size:13px;color:var(--sage-dark);font-weight:500;}
+
+  /* UPI app icons */
+  .upi-apps-row{display:flex;gap:8px;margin-top:4px;flex-wrap:wrap;}
 </style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 </head>
@@ -936,8 +998,17 @@ onAuthStateChanged(auth, async (user) => {
         </div>
         <!-- SETTLE UP -->
         <div class="spend-panel" id="spend-panel-settle">
+          <!-- My UPI ID setup -->
+          <div class="card" style="margin-bottom:16px">
+            <div class="card-title">My UPI ID</div>
+            <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+              <input class="upi-id-input" id="my-upi-id-input" placeholder="yourname@upi / phone@paytm / phone@okaxis" style="flex:1;min-width:180px">
+              <button class="upi-save-btn" onclick="saveMyUpiId()">Save UPI ID</button>
+            </div>
+            <div style="font-size:11px;color:var(--text3);margin-top:6px">This is shared with friends so they can pay you directly. Examples: <em>vivek@okicici, 9876543210@paytm, vivek@ybl</em></div>
+          </div>
           <div class="card">
-            <div class="card-title">What you owe / are owed</div>
+            <div class="card-title">Balances &amp; UPI Settle Up</div>
             <div id="settle-summary"></div>
           </div>
         </div>
@@ -1078,6 +1149,7 @@ function launchApp() {
   renderHome();
   // Handle invite token if user arrived via invite link
   setTimeout(handleInviteToken, 800);
+  setTimeout(startPaymentReqListener, 1200);
 }
 
 function renderSidebarUser() {
@@ -2932,43 +3004,477 @@ function addSplit(gid){
 }
 
 // ── SETTLE UP ───────────────────────────────
-function renderSettle(){
+// ════════════════════════════════════════════════════════════════════════════
+// UPI SETTLE UP SYSTEM
+// ════════════════════════════════════════════════════════════════════════════
+
+// ── State ──────────────────────────────────────────────────────────────────
+let myUpiId       = load('lf3_my_upi', '');
+let friendUpiIds  = load('lf3_friend_upi_ids', {});  // { friendId: upiId }
+let paymentReqs   = load('lf3_payment_reqs', []);    // [{id,friendId,amount,sentAt,status,upiRef}]
+let openSettleId  = null;  // which friend card is expanded
+
+const UPI_COLORS = ['#4285F4','#5f259f','#002970','#3D5C42','#B8845A','#B85A4A'];
+
+function saveMyUpiId(){
+  const val = (document.getElementById('my-upi-id-input')?.value||'').trim();
+  if(!val){ showToast('Please enter your UPI ID.'); return; }
+  if(!isValidUpiId(val)){
+    showToast('Invalid UPI ID. Format: name@bank (e.g. vivek@okicici)');
+    return;
+  }
+  myUpiId = val;
+  save('lf3_my_upi', myUpiId);
+  // Sync to Firestore so friends can see your UPI ID
+  syncMyUpiToFirestore();
+  showToast('UPI ID saved: ' + myUpiId);
+}
+
+function isValidUpiId(id){
+  return /^[a-zA-Z0-9.\-_]{3,}@[a-zA-Z]{3,}$/.test(id);
+}
+
+async function syncMyUpiToFirestore(){
+  const u = window.currentUser||currentUser;
+  if(!u||!u.uid||!window._fb) return;
+  const {db,doc,setDoc} = window._fb;
+  try{
+    await setDoc(doc(db,'user_upi',u.uid), {upiId:myUpiId, name:u.name, uid:u.uid, updatedAt:Date.now()}, {merge:true});
+  }catch(e){console.warn('syncUpi error:',e);}
+}
+
+async function fetchFriendUpiId(friendId){
+  const f = friends.find(x=>String(x.id)===String(friendId));
+  if(!f) return null;
+  // Already cached?
+  if(friendUpiIds[String(friendId)]) return friendUpiIds[String(friendId)];
+  // Try Firestore lookup by fromUid
+  if(f.fromUid && window._fb){
+    const {db,doc,getDoc} = window._fb;
+    try{
+      const snap = await getDoc(doc(db,'user_upi',f.fromUid));
+      if(snap.exists()){
+        const upiId = snap.data().upiId;
+        friendUpiIds[String(friendId)] = upiId;
+        save('lf3_friend_upi_ids', friendUpiIds);
+        return upiId;
+      }
+    }catch(e){console.warn('fetchFriendUpi:',e);}
+  }
+  return null;
+}
+
+// ── Compute net balances ─────────────────────────────────────────────────────
+function computeSettleNet(){
   const net={};
   splits.forEach(sp=>{
     sp.members.forEach(m=>{
-      if(m.paid)return;
+      if(m.paid) return;
       const fid=String(m.friendId);
-      if(fid==='me')return;
-      if(!net[fid])net[fid]=0;
-      if(String(sp.paidBy)==='me')net[fid]+=m.share;
+      if(fid==='me') return;
+      if(!net[fid]) net[fid]=0;
+      if(String(sp.paidBy)==='me') net[fid]+=m.share;
       else if(String(sp.paidBy)===fid){
         const myM=sp.members.find(x=>String(x.friendId)==='me');
-        if(myM&&!myM.paid)net[fid]-=myM.share;
+        if(myM&&!myM.paid) net[fid]-=myM.share;
       }
     });
   });
-  const entries=Object.entries(net).filter(([,v])=>Math.abs(v)>0.01);
-  const ssEl=document.getElementById('settle-summary');if(!ssEl)return;
-  ssEl.innerHTML=entries.length===0
-    ?'<div class="empty"><div class="empty-icon">🎉</div>All settled up! No outstanding balances.</div>'
-    :entries.map(([fid,bal])=>{
-      const name=mName(Number(fid));
-      const isOwed=bal>0;
-      return `<div class="settle-row"><div><div class="settle-dir">${isOwed?`${name} owes you`:`You owe ${name}`}</div><div style="font-size:11px;color:var(--text3)">${isOwed?'Collect from them':'Pay them'}</div></div><div style="display:flex;align-items:center;gap:10px"><span class="settle-amt ${isOwed?'green':'red'}">₹${fmt(Math.abs(bal))}</span><button class="btn btn-primary btn-sm" onclick="settleUp('${fid}')">Settle Up</button></div></div>`;
-    }).join('');
+  return net;
 }
 
-function settleUp(friendId){
+// ── Init: pre-fill saved UPI ID ─────────────────────────────────────────────
+function initSettlePanel(){
+  const inp = document.getElementById('my-upi-id-input');
+  if(inp && myUpiId) inp.value = myUpiId;
+}
+
+// ── Main render ──────────────────────────────────────────────────────────────
+function renderSettle(){
+  initSettlePanel();
+  const net     = computeSettleNet();
+  const entries = Object.entries(net).filter(([,v])=>Math.abs(v)>0.01);
+  const ssEl    = document.getElementById('settle-summary');
+  if(!ssEl) return;
+
+  if(entries.length===0){
+    ssEl.innerHTML='<div class="empty"><div class="empty-icon">🎉</div><div style="font-size:16px;font-weight:500;color:var(--sage-dark);margin-bottom:4px">All settled up!</div><div>No outstanding balances with any friend.</div></div>';
+    return;
+  }
+
+  ssEl.innerHTML = entries.map(([fid,bal])=>{
+    const name     = mName(Number(fid));
+    const isOwed   = bal > 0;  // friend owes me
+    const absBal   = Math.round(Math.abs(bal)*100)/100;
+    const colorIdx = parseInt(fid) % UPI_COLORS.length;
+    const color    = UPI_COLORS[Math.abs(colorIdx)||0];
+    const isOpen   = openSettleId === fid;
+    const pendingReqs = paymentReqs.filter(r=>String(r.friendId)===fid && r.status==='pending');
+    const hasReq   = pendingReqs.length > 0;
+
+    return `<div class="settle-card" id="settle-card-${fid}">
+      <div class="settle-card-head" onclick="toggleSettleCard('${fid}')">
+        <div class="settle-avatar" style="background:${color}">${name[0].toUpperCase()}</div>
+        <div class="settle-info">
+          <div class="settle-name">${name}</div>
+          <div class="settle-subtitle">
+            ${isOwed ? 'Owes you' : 'You owe'}
+            ${hasReq ? ' · <span style="color:#DEB300;font-weight:500">⏳ Payment requested</span>' : ''}
+          </div>
+        </div>
+        <span class="settle-amount-badge ${isOwed?'owed':'owes'}">
+          ${isOwed?'+':'-'}₹${fmt(absBal)}
+        </span>
+        <span class="settle-chevron ${isOpen?'open':''}">▼</span>
+      </div>
+
+      <div class="settle-body ${isOpen?'open':''}" id="settle-body-${fid}">
+
+        ${isOwed
+          ? renderRequestMoneyPanel(fid, name, absBal)
+          : renderPayPanel(fid, name, absBal)
+        }
+
+        ${renderPaymentHistory(fid)}
+
+        <div style="display:flex;gap:8px;margin-top:10px;padding-top:10px;border-top:1px solid var(--warm2)">
+          <button class="btn btn-primary btn-sm" onclick="markFullySettled('${fid}')">✓ Mark as Fully Settled</button>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// ── Request money panel (when friend owes you) ───────────────────────────────
+function renderRequestMoneyPanel(fid, name, owedAmt){
+  const savedUpi = friendUpiIds[String(fid)] || '';
+  return `<div class="upi-panel">
+    <div class="upi-panel-title">Request ₹${fmt(owedAmt)} from ${name}</div>
+    <div class="upi-id-row">
+      <input class="upi-id-input" id="friend-upi-${fid}" value="${savedUpi}"
+        placeholder="${name}'s UPI ID (e.g. friend@okicici)"
+        oninput="saveFriendUpiCache('${fid}',this.value)">
+    </div>
+    <div class="upi-amount-row">
+      <span style="font-size:15px;color:var(--text3);padding:0 4px">₹</span>
+      <input class="upi-amount-input" id="req-amount-${fid}" type="number" value="${owedAmt}" min="1" max="1000000" placeholder="Amount">
+      <button class="upi-full-btn" onclick="document.getElementById('req-amount-${fid}').value='${owedAmt}'">Full amount</button>
+    </div>
+    <div class="upi-action-btns">
+      <button class="upi-pay-btn gpay" onclick="sendUpiRequest('${fid}','${name}',false,'gpay')">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="white"><path d="M12 0C5.4 0 0 5.4 0 12s5.4 12 12 12 12-5.4 12-12S18.6 0 12 0zm-1.1 16.9H8.8V7.2h2.1v9.7zm4.4 0h-2.1V7.2h2.1v9.7z"/></svg>
+        GPay Request
+      </button>
+      <button class="upi-pay-btn phonepe" onclick="sendUpiRequest('${fid}','${name}',false,'phonepe')">PhonePe</button>
+      <button class="upi-pay-btn upi" onclick="sendUpiRequest('${fid}','${name}',false,'upi')">Any UPI App</button>
+    </div>
+    <div class="upi-note">
+      A UPI deep link will open for ${name} to pay you. Once they pay, click "Mark Paid" or it auto-settles when you confirm receipt.
+    </div>
+  </div>`;
+}
+
+// ── Pay panel (when you owe friend) ─────────────────────────────────────────
+function renderPayPanel(fid, name, oweAmt){
+  const savedUpi = friendUpiIds[String(fid)] || '';
+  return `<div class="upi-panel">
+    <div class="upi-panel-title">Pay ₹${fmt(oweAmt)} to ${name}</div>
+    <div class="upi-id-row">
+      <input class="upi-id-input" id="friend-upi-${fid}" value="${savedUpi}"
+        placeholder="${name}'s UPI ID (e.g. friend@okicici)"
+        oninput="saveFriendUpiCache('${fid}',this.value)">
+    </div>
+    <div class="upi-amount-row">
+      <span style="font-size:15px;color:var(--text3);padding:0 4px">₹</span>
+      <input class="upi-amount-input" id="req-amount-${fid}" type="number" value="${oweAmt}" min="1" placeholder="Amount">
+      <button class="upi-full-btn" onclick="document.getElementById('req-amount-${fid}').value='${oweAmt}'">Full amount</button>
+    </div>
+    <div class="upi-action-btns">
+      <button class="upi-pay-btn gpay" onclick="openUpiPayment('${fid}','${name}','gpay')">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="white"><path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/><path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/></svg>
+        Pay via GPay
+      </button>
+      <button class="upi-pay-btn phonepe" onclick="openUpiPayment('${fid}','${name}','phonepe')">PhonePe</button>
+      <button class="upi-pay-btn paytm"   onclick="openUpiPayment('${fid}','${name}','paytm')">Paytm</button>
+      <button class="upi-pay-btn upi"     onclick="openUpiPayment('${fid}','${name}','upi')">Any UPI</button>
+    </div>
+    <div class="upi-note">Opens your UPI app to pay ${name}. After paying, come back and click "Mark Paid" or your friend can confirm receipt.</div>
+  </div>`;
+}
+
+// ── Payment history for a friend ─────────────────────────────────────────────
+function renderPaymentHistory(fid){
+  const reqs = paymentReqs.filter(r=>String(r.friendId)===fid).slice().reverse();
+  if(reqs.length===0) return '';
+  return `<div style="margin-top:10px">
+    <div style="font-size:11px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--text3);margin-bottom:8px">Payment Requests</div>
+    ${reqs.slice(0,5).map(r=>{
+      const d=new Date(r.sentAt);
+      const timeStr=d.toLocaleDateString('en-IN',{day:'numeric',month:'short'})+' '+d.toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'});
+      const statusDot = `<div class="req-status-dot ${r.status}"></div>`;
+      const statusLabel = r.status==='paid'
+        ?'<span style="font-size:11px;color:var(--sage-dark);font-weight:500">✓ Paid</span>'
+        :r.status==='cancelled'
+        ?'<span style="font-size:11px;color:var(--text3)">Cancelled</span>'
+        :`<div style="display:flex;gap:6px">
+            <button class="req-mark-btn mark-paid" onclick="markReqPaid('${r.id}','${fid}')">Mark Paid</button>
+            <button class="req-mark-btn cancel" onclick="cancelReq('${r.id}')">Cancel</button>
+          </div>`;
+      return `<div class="payment-req-row">
+        ${statusDot}
+        <div style="flex:1">
+          <div class="req-amount">₹${fmt(r.amount)}</div>
+          <div class="req-time">${timeStr} · ${r.app||'UPI'} · ${r.type==='request'?'Requested':'Paid'}</div>
+        </div>
+        ${statusLabel}
+      </div>`;
+    }).join('')}
+  </div>`;
+}
+
+// ── Toggle card expand ────────────────────────────────────────────────────────
+function toggleSettleCard(fid){
+  openSettleId = openSettleId===fid ? null : fid;
+  renderSettle();
+  // Fetch friend's UPI ID from Firestore asynchronously when card opens
+  if(openSettleId===fid) fetchFriendUpiId(fid).then(upiId=>{
+    if(upiId){
+      const inp=document.getElementById('friend-upi-'+fid);
+      if(inp && !inp.value) inp.value=upiId;
+    }
+  });
+}
+
+function saveFriendUpiCache(fid, val){
+  friendUpiIds[String(fid)] = val.trim();
+  save('lf3_friend_upi_ids', friendUpiIds);
+}
+
+// ── Build UPI deep links ──────────────────────────────────────────────────────
+function buildUpiUrl(upiId, amount, name, note, app){
+  const base = 'upi://pay?pa=' + encodeURIComponent(upiId)
+    + '&pn=' + encodeURIComponent(name)
+    + '&am=' + encodeURIComponent(amount)
+    + '&cu=INR'
+    + '&tn=' + encodeURIComponent(note || 'LifeFlow settle up');
+  if(app==='gpay')    return 'tez://upi/pay?pa='+encodeURIComponent(upiId)+'&pn='+encodeURIComponent(name)+'&am='+amount+'&cu=INR&tn='+encodeURIComponent(note||'LifeFlow');
+  if(app==='phonepe') return 'phonepe://pay?pa='+encodeURIComponent(upiId)+'&pn='+encodeURIComponent(name)+'&am='+amount+'&cu=INR&tn='+encodeURIComponent(note||'LifeFlow');
+  if(app==='paytm')   return 'paytmmp://pay?pa='+encodeURIComponent(upiId)+'&pn='+encodeURIComponent(name)+'&am='+amount+'&cu=INR&tn='+encodeURIComponent(note||'LifeFlow');
+  return base;
+}
+
+// ── Open UPI payment (you pay friend) ────────────────────────────────────────
+function openUpiPayment(fid, friendName, app){
+  const upiId = (document.getElementById('friend-upi-'+fid)?.value||'').trim();
+  const amtRaw = parseFloat(document.getElementById('req-amount-'+fid)?.value||0);
+  if(!upiId){ showToast('Please enter ' + friendName + "'s UPI ID first."); return; }
+  if(!isValidUpiId(upiId)){ showToast('Invalid UPI ID format. Use: name@bank'); return; }
+  if(isNaN(amtRaw)||amtRaw<=0){ showToast('Please enter a valid amount.'); return; }
+  saveFriendUpiCache(fid, upiId);
+
+  const amount = Math.round(amtRaw*100)/100;
+  const u = window.currentUser||currentUser;
+  const note = 'LifeFlow: ' + (u?u.name:'You') + ' paying ' + friendName;
+  const deepLink = buildUpiUrl(upiId, amount, friendName, note, app);
+
+  // Log payment attempt
+  const reqId = String(uid());
+  paymentReqs.push({id:reqId, friendId:String(fid), amount, sentAt:Date.now(), status:'pending', app, type:'payment', upiId});
+  save('lf3_payment_reqs', paymentReqs);
+  syncPaymentReqToFirestore(reqId, fid, amount, 'payment', app);
+
+  // Open UPI deep link
+  const opened = tryOpenUpiDeepLink(deepLink, amount, friendName, app);
+  if(opened){
+    showToast('Opening ' + getAppName(app) + '... After paying, mark as paid here.');
+    renderSettle();
+  }
+}
+
+// ── Send money request (friend owes you) ─────────────────────────────────────
+function sendUpiRequest(fid, friendName, isOwed, app){
+  const friendUpi = (document.getElementById('friend-upi-'+fid)?.value||'').trim();
+  const amtRaw    = parseFloat(document.getElementById('req-amount-'+fid)?.value||0);
+  if(isNaN(amtRaw)||amtRaw<=0){ showToast('Please enter a valid amount.'); return; }
+
+  const amount = Math.round(amtRaw*100)/100;
+  const u = window.currentUser||currentUser;
+  const myUpi = myUpiId;
+
+  if(!myUpi){ showToast('Please save your UPI ID at the top of this page first.'); return; }
+
+  saveFriendUpiCache(fid, friendUpi);
+
+  // Log request
+  const reqId = String(uid());
+  paymentReqs.push({id:reqId, friendId:String(fid), amount, sentAt:Date.now(), status:'pending', app, type:'request', upiId:myUpi});
+  save('lf3_payment_reqs', paymentReqs);
+  syncPaymentReqToFirestore(reqId, fid, amount, 'request', app);
+
+  // Build collect request link (payer opens this to pay you)
+  const note = 'LifeFlow: ' + friendName + ' owes ' + (u?u.name:'You');
+  // UPI collect: pa = YOUR UPI (you receive), amount, note
+  const deepLink = buildUpiUrl(myUpi, amount, u?u.name:'Me', note, app);
+
+  const opened = tryOpenUpiDeepLink(deepLink, amount, friendName, app);
+  renderSettle();
+
+  if(opened){
+    showToast('Payment request sent to ' + friendName + ' via ' + getAppName(app) + '! Mark paid once received.');
+  } else {
+    // Show manual instructions
+    showUpiManualModal(fid, friendName, amount, myUpi, reqId);
+  }
+}
+
+function getAppName(app){
+  return {gpay:'Google Pay', phonepe:'PhonePe', paytm:'Paytm', upi:'UPI'}[app]||'UPI';
+}
+
+function tryOpenUpiDeepLink(url, amount, name, app){
+  try {
+    // Try iframe trigger (works on Android browsers)
+    const iframe = document.createElement('iframe');
+    iframe.style.cssText = 'display:none;width:1px;height:1px;';
+    iframe.src = url;
+    document.body.appendChild(iframe);
+    setTimeout(()=>document.body.removeChild(iframe), 3000);
+    // Also try window.location for direct app launch
+    window.location.href = url;
+    return true;
+  } catch(e){ return false; }
+}
+
+// ── Manual UPI instructions modal ────────────────────────────────────────────
+function showUpiManualModal(fid, friendName, amount, myUpiId, reqId){
+  document.getElementById('upi-manual-modal')?.remove();
+  const modal = document.createElement('div');
+  modal.className = 'modal-overlay'; modal.id = 'upi-manual-modal';
+  modal.innerHTML = `<div class="modal" style="max-width:380px">
+    <button class="modal-close" onclick="document.getElementById('upi-manual-modal').remove()">×</button>
+    <div class="modal-title">Request ₹${fmt(amount)} from ${friendName}</div>
+    <div style="background:var(--sage-light);border-radius:var(--r2);padding:14px;margin:12px 0;text-align:center">
+      <div style="font-size:11px;color:var(--sage);margin-bottom:4px;text-transform:uppercase;letter-spacing:.06em">Your UPI ID</div>
+      <div style="font-size:22px;font-weight:700;color:var(--sage-dark);letter-spacing:1px">${myUpiId}</div>
+      <div style="font-size:11px;color:var(--text3);margin-top:4px">Amount: ₹${fmt(amount)}</div>
+    </div>
+    <div id="upi-qr-container" style="display:flex;justify-content:center;margin:8px 0;min-height:160px;align-items:center">
+      <span style="color:var(--text3);font-size:13px">Generating QR...</span>
+    </div>
+    <div style="font-size:12px;color:var(--text3);line-height:1.5;margin-bottom:14px">
+      Share your UPI ID or show this QR code to ${friendName}. Once they pay, click Mark Paid below.
+    </div>
+    <div style="display:flex;gap:8px">
+      <button class="btn btn-primary" style="flex:1" onclick="markReqPaid('${reqId}','${fid}');document.getElementById('upi-manual-modal')?.remove()">✓ Mark as Paid</button>
+      <button class="btn btn-ghost" onclick="document.getElementById('upi-manual-modal')?.remove()">Close</button>
+    </div>
+  </div>`;
+  document.body.appendChild(modal);
+
+  // Render QR code for the UPI ID
+  setTimeout(()=>{
+    const qrWrap = document.getElementById('upi-qr-container');
+    if(!qrWrap) return;
+    qrWrap.innerHTML = '';
+    const upiUrl = 'upi://pay?pa='+encodeURIComponent(myUpiId)+'&pn=LifeFlow&am='+amount+'&cu=INR&tn='+encodeURIComponent('LifeFlow settle up');
+    if(typeof QRCode !== 'undefined'){
+      new QRCode(qrWrap,{text:upiUrl,width:160,height:160,colorDark:'#3D5C42',colorLight:'#FFFFFF',correctLevel:QRCode.CorrectLevel.M});
+    } else {
+      const img = document.createElement('img');
+      img.src='https://chart.googleapis.com/chart?chs=160x160&cht=qr&chl='+encodeURIComponent(upiUrl)+'&choe=UTF-8';
+      img.style.borderRadius='8px'; qrWrap.appendChild(img);
+    }
+  }, 100);
+}
+
+// ── Mark a payment request as paid ───────────────────────────────────────────
+function markReqPaid(reqId, friendId){
+  const req = paymentReqs.find(r=>r.id===String(reqId));
+  if(req) req.status='paid';
+  save('lf3_payment_reqs', paymentReqs);
+  // Notify Firestore
+  if(window._fb && window.currentUser){
+    const {db,doc,setDoc} = window._fb;
+    setDoc(doc(db,'payment_requests',String(reqId)),{status:'paid',paidAt:Date.now()},{merge:true}).catch(()=>{});
+  }
+  // Auto-settle the balance in splits
+  autoSettleSplits(friendId);
+  renderSettle();
+  showToast('✅ Payment marked as received! Balance settled.');
+}
+
+function cancelReq(reqId){
+  const req = paymentReqs.find(r=>r.id===String(reqId));
+  if(req) req.status='cancelled';
+  save('lf3_payment_reqs', paymentReqs);
+  renderSettle();
+  showToast('Request cancelled.');
+}
+
+// ── Auto-settle splits once payment is confirmed ──────────────────────────────
+function autoSettleSplits(friendId){
   splits.forEach(sp=>{
     sp.members.forEach(m=>{
-      if(String(m.friendId)===String(friendId)&&String(sp.paidBy)==='me')m.paid=true;
-      if(String(m.friendId)==='me'&&String(sp.paidBy)===String(friendId))m.paid=true;
+      if(String(m.friendId)===String(friendId) && String(sp.paidBy)==='me') m.paid=true;
+      if(String(m.friendId)==='me' && String(sp.paidBy)===String(friendId)) m.paid=true;
     });
   });
-  persistSpend();renderSettle();
-  const fname=friends.find(f=>String(f.id)===String(friendId))?.name||'Friend';
-  alert('Settled up with '+fname+'! Balance is now ₹0.');
+  persistSpend();
 }
+
+// ── Mark fully settled (manual) ────────────────────────────────────────────
+function markFullySettled(friendId){
+  autoSettleSplits(friendId);
+  renderSettle();
+  const fname = mName(Number(friendId));
+  showToast('✓ Settled up with ' + fname + '! Balance is now ₹0.');
+}
+
+// ── Sync payment request to Firestore for real-time status ──────────────────
+function syncPaymentReqToFirestore(reqId, fid, amount, type, app){
+  const u = window.currentUser||currentUser;
+  if(!u||!window._fb) return;
+  const {db,doc,setDoc} = window._fb;
+  const f = friends.find(x=>String(x.id)===String(fid));
+  setDoc(doc(db,'payment_requests',String(reqId)),{
+    id:reqId, fromUid:u.uid, fromName:u.name,
+    friendId:fid, friendUid:f?.fromUid||'',
+    amount, type, app,
+    status:'pending', sentAt:Date.now()
+  }).catch(()=>{});
+}
+
+// ── Listen for payment status updates from Firestore ─────────────────────────
+function startPaymentReqListener(){
+  const u = window.currentUser||currentUser;
+  if(!u||!u.uid||!window._fb) return;
+  const {db,collection,query,where,onSnapshot} = window._fb;
+  // Listen for requests where this user is the recipient (friend's payment to us)
+  try {
+    const q = query(collection(db,'payment_requests'),where('friendUid','==',u.uid),where('status','==','pending'));
+    onSnapshot(q, snap=>{
+      snap.docChanges().forEach(change=>{
+        if(change.type==='modified'||change.type==='added'){
+          const data = change.doc.data();
+          if(data.status==='paid'){
+            // Auto-settle
+            const localReq = paymentReqs.find(r=>r.id===data.id);
+            if(localReq && localReq.status!=='paid'){
+              localReq.status='paid';
+              save('lf3_payment_reqs',paymentReqs);
+              autoSettleSplits(data.friendId);
+              showToast('💸 ' + (data.fromName||'Friend') + ' paid you ₹' + fmt(data.amount) + '! Auto-settled.');
+              if(currentPage==='spending' && spendTab==='settle') renderSettle();
+            }
+          }
+        }
+      });
+    });
+  }catch(e){console.warn('startPaymentReqListener:',e);}
+}
+
+// ── Legacy settleUp (kept for compatibility) ──────────────────────────────────
+function settleUp(friendId){ markFullySettled(friendId); }
 
 
 
@@ -3577,6 +4083,9 @@ window._applySync = function(data) {
   if (data.groups     !== undefined) { _groups=data.groups;         groups=_groups;         changed=true; }
   if (data.splits     !== undefined) { _splits=data.splits;         splits=_splits;         changed=true; }
   if (data.journalEntries !== undefined) { journalEntries=data.journalEntries; changed=true; }
+  if (data.paymentReqs   !== undefined) { paymentReqs=data.paymentReqs; save('lf3_payment_reqs',paymentReqs); changed=true; }
+  if (data.myUpiId       !== undefined && data.myUpiId) { myUpiId=data.myUpiId; save('lf3_my_upi',myUpiId); }
+  if (data.friendUpiIds  !== undefined) { friendUpiIds=data.friendUpiIds; save('lf3_friend_upi_ids',friendUpiIds); }
   if (changed) {
     renderHome();
     renderPage(currentPage);
@@ -3589,7 +4098,10 @@ window._getState = function() {
     habits:_habits, goals:_goals, todos:_todos, spends:_spends,
     customCats:_customCats, friends:_friends, friendReqs:_friendReqs,
     groups:_groups, splits:_splits,
-    journalEntries:journalEntries
+    journalEntries:journalEntries,
+    paymentReqs:paymentReqs,
+    myUpiId:myUpiId,
+    friendUpiIds:friendUpiIds
   };
 };
 
