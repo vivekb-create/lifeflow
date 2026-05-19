@@ -250,10 +250,17 @@ window._loadUserData = async function() {
   try {
     const snap = await getDoc(doc(db, 'users', u.uid));
     if (snap.exists()) {
-      // Apply saved data into the app (initial load)
+      // ── Clear stale localStorage before applying Firestore data ──────
+      // This prevents old device-local data from showing until sync arrives
+      const allKeys = ['lf3_habits','lf3_goals','lf3_todos','lf3_spends',
+        'lf3_custom_cats','lf3_friends','lf3_friend_reqs','lf3_groups',
+        'lf3_splits','lf3_journal','lf3_payment_reqs','lf3_todo_cats',
+        'lf3_shared_todo_lists'];
+      allKeys.forEach(k => { try{ localStorage.removeItem(k); }catch{} });
+      // Now apply the authoritative cloud data
       if (window._applySync) window._applySync(snap.data());
     }
-    // Now start live listener for cross-device updates
+    // Start live listener for real-time cross-device updates
     startListener(u.uid);
   } catch(e) {
     console.warn('Firestore load error:', e);
@@ -3144,22 +3151,63 @@ function openMonthlyCatsModal(){
 
 
 function refreshAppData(){
-  const btn=document.getElementById('refresh-btn');
-  if(btn){btn.style.transform='rotate(360deg)';btn.style.transition='transform .5s';}
-  // Re-load from Firestore
-  if(window._loadUserData){
-    window._loadUserData().then(()=>{
-      renderPage(currentPage);
-      renderHome();
-      showToast('✅ Data refreshed!');
-      if(btn)setTimeout(()=>{btn.style.transform='';btn.style.transition='';},600);
-    });
+  const btn = document.getElementById('refresh-btn');
+
+  // Spin the button continuously while loading
+  if(btn){
+    btn.disabled = true;
+    btn.style.display = 'inline-block';
+    btn.style.animation = 'spin .6s linear infinite';
+    // Add spin keyframe if not already present
+    if(!document.getElementById('spin-kf')){
+      const st = document.createElement('style');
+      st.id = 'spin-kf';
+      st.textContent = '@keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}';
+      document.head.appendChild(st);
+    }
+  }
+
+  function stopSpin(msg){
+    if(btn){ btn.disabled=false; btn.style.animation=''; }
+    showToast(msg);
+  }
+
+  // If service worker is active, tell it to fetch fresh app shell
+  // then do a controlled reload so the page HTML/JS updates too
+  if('serviceWorker' in navigator && navigator.serviceWorker.controller){
+    // Clear the cache for the main page so SW fetches fresh HTML
+    caches.open('lifeflow-v1').then(cache=>{
+      cache.delete(location.href).then(()=>{
+        cache.delete('/lifeflow/').then(()=>{
+          cache.delete('/lifeflow/index.html');
+        });
+      });
+    }).catch(()=>{});
+    // Give it 200ms then reload — gets fresh HTML from network
+    setTimeout(()=>{ window.location.reload(true); }, 200);
+    return;
+  }
+
+  // No SW — fetch fresh data from Firestore then re-render
+  const loader = window._loadUserData;
+  if(loader && typeof loader === 'function'){
+    loader()
+      .then(()=>{
+        renderPage(currentPage);
+        renderHome();
+        stopSpin('✅ Data refreshed from cloud!');
+      })
+      .catch(()=>{
+        // Firestore failed — still re-render from memory
+        renderPage(currentPage);
+        renderHome();
+        stopSpin('Refreshed from local data.');
+      });
   } else {
-    // Fallback: re-render from memory
+    // _loadUserData not ready yet — just re-render and do a hard reload
     renderPage(currentPage);
     renderHome();
-    showToast('Refreshed from local data.');
-    if(btn)setTimeout(()=>{btn.style.transform='';},600);
+    setTimeout(()=>{ window.location.reload(true); }, 400);
   }
 }
 
@@ -4525,6 +4573,18 @@ window._applySync = function(data) {
   if(data.myUpiId      !== undefined && data.myUpiId){myUpiId=data.myUpiId; save('lf3_my_upi',myUpiId);}
   if(data.friendUpiIds !== undefined){friendUpiIds=data.friendUpiIds; save('lf3_friend_upi_ids',friendUpiIds);}
   if(changed){
+    // Keep localStorage cache fresh so it matches cloud state
+    try{
+      localStorage.setItem('lf3_habits',  JSON.stringify(habits));
+      localStorage.setItem('lf3_goals',   JSON.stringify(goals));
+      localStorage.setItem('lf3_todos',   JSON.stringify(todos));
+      localStorage.setItem('lf3_spends',  JSON.stringify(spends));
+      localStorage.setItem('lf3_custom_cats',  JSON.stringify(customCats));
+      localStorage.setItem('lf3_friends',      JSON.stringify(friends));
+      localStorage.setItem('lf3_friend_reqs',  JSON.stringify(friendReqs));
+      localStorage.setItem('lf3_groups',       JSON.stringify(groups));
+      localStorage.setItem('lf3_splits',       JSON.stringify(splits));
+    }catch{}
     renderHome();
     renderPage(currentPage);
   }
