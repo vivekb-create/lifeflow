@@ -863,7 +863,7 @@ onAuthStateChanged(auth, async (user) => {
   .nav-sub-item{display:flex;align-items:center;gap:8px;padding:7px 12px 7px 36px;border-radius:var(--r2);cursor:pointer;font-size:13px;color:var(--sidebar-text2);margin-bottom:1px;transition:all .15s;border:none;background:none;width:100%;text-align:left;font-family:'DM Sans',sans-serif;}
   .nav-sub-item:hover{background:var(--sidebar-hover);color:var(--sidebar-text);}
   .nav-sub-item.active{background:var(--sidebar-active);color:var(--sage-dark);font-weight:500;}
-  .nav-sub-dot{width:5px;height:5px;border-radius:50%;background:currentColor;opacity:.5;flex-shrink:0;}
+  .nav-sub-icon{font-size:14px;width:18px;text-align:center;flex-shrink:0;}
 
   /* ── QUICK ADD FAB ── */
   .fab-quick-add{position:fixed;bottom:90px;right:24px;width:52px;height:52px;border-radius:50%;background:var(--sage);color:white;border:none;font-size:26px;cursor:pointer;display:none;align-items:center;justify-content:center;box-shadow:0 4px 20px rgba(61,92,66,.4);z-index:90;transition:all .2s;line-height:1;}
@@ -953,10 +953,10 @@ onAuthStateChanged(auth, async (user) => {
         <span class="nav-tree-chevron" id="spend-tree-chevron">▼</span>
       </button>
       <div class="nav-tree-children" id="spend-tree-children">
-        <button class="nav-sub-item active" id="nav-sub-personal" onclick="navToSpend('personal',this)"><span class="nav-sub-dot"></span> Personal</button>
-        <button class="nav-sub-item" id="nav-sub-friends"  onclick="navToSpend('friends',this)"><span class="nav-sub-dot"></span> Friends</button>
-        <button class="nav-sub-item" id="nav-sub-groups"   onclick="navToSpend('groups',this)"><span class="nav-sub-dot"></span> Groups</button>
-        <button class="nav-sub-item" id="nav-sub-settle"   onclick="navToSpend('settle',this)"><span class="nav-sub-dot"></span> Settle Up</button>
+        <button class="nav-sub-item active" id="nav-sub-personal" onclick="navToSpend('personal',this)"><span class="nav-sub-icon">💳</span> Personal</button>
+        <button class="nav-sub-item" id="nav-sub-friends"  onclick="navToSpend('friends',this)"><span class="nav-sub-icon">👥</span> Friends</button>
+        <button class="nav-sub-item" id="nav-sub-groups"   onclick="navToSpend('groups',this)"><span class="nav-sub-icon">🏕️</span> Groups</button>
+        <button class="nav-sub-item" id="nav-sub-settle"   onclick="navToSpend('settle',this)"><span class="nav-sub-icon">✅</span> Settle Up</button>
       </div>
       <div class="nav-section">Personal</div>
       <button class="nav-item" id="nav-journal" onclick="navigate('journal',this)"><span class="nav-icon">📔</span> Journal</button>
@@ -974,7 +974,13 @@ onAuthStateChanged(auth, async (user) => {
       <button class="hamburger" onclick="openSidebar()">☰</button>
       <div class="topbar-info">
         <div class="greeting" id="greeting">Good morning 🌿</div>
-        <div class="topbar-date" id="topbar-date"></div>
+        <div style="display:flex;align-items:center;gap:8px">
+          <div class="topbar-date" id="topbar-date"></div>
+          <button id="refresh-btn" onclick="refreshAppData()" title="Refresh data"
+            style="background:none;border:1.5px solid var(--warm3);border-radius:8px;padding:4px 9px;font-size:14px;cursor:pointer;color:var(--text3);transition:all .2s;line-height:1"
+            onmouseover="this.style.background='var(--warm2)';this.style.color='var(--sage-dark)'"
+            onmouseout="this.style.background='none';this.style.color='var(--text3)'">↻</button>
+        </div>
       </div>
     </div>
 
@@ -1128,7 +1134,11 @@ onAuthStateChanged(auth, async (user) => {
         <div class="sheet-title">Quick Add Spending</div>
         <input class="amount-big-input" id="qa-amount" type="number" placeholder="₹ 0" min="0">
         <div class="quick-cats" id="qa-cats"></div>
-        <input class="input" id="qa-desc" placeholder="Description (optional)" style="margin-bottom:10px">
+        <input class="input" id="qa-desc" placeholder="Description (optional)" style="margin-bottom:8px">
+        <div style="margin-bottom:12px">
+          <label style="font-size:11px;color:var(--text3);display:block;margin-bottom:4px">Date</label>
+          <input class="input" id="qa-date" type="date" style="margin-bottom:0">
+        </div>
         <div style="display:flex;gap:8px">
           <button class="btn btn-primary" style="flex:1;padding:12px" onclick="submitQuickAdd()">Add Transaction</button>
           <button class="btn btn-ghost" onclick="closeQuickAdd()">Cancel</button>
@@ -1325,31 +1335,13 @@ function todayDatetimeLocal(){
   return d.toISOString().slice(0,16);
 }
 
-// Private backing variables (exposed via window properties in INIT)
-let _habits=load(KEYS.habits,[
-  {id:1,name:'Morning meditation',emoji:'🧘',streak:7,history:[]},
-  {id:2,name:'Drink 8 glasses of water',emoji:'💧',streak:3,history:[]},
-  {id:3,name:'Evening walk',emoji:'🚶',streak:12,history:[]},
-  {id:4,name:'Read for 20 minutes',emoji:'📖',streak:5,history:[]},
-]);
-let _goals=load(KEYS.goals,[
-  {id:1,name:'Read 24 books this year',emoji:'📚',current:7,target:24,unit:'books'},
-  {id:2,name:'Save ₹1,00,000',emoji:'💰',current:42000,target:100000,unit:'₹'},
-  {id:3,name:'Run 500 km',emoji:'🏃',current:87,target:500,unit:'km'},
-]);
-// todos now have: dueDate (ISO string or null), dueTime implicit in dueDate
-let _todos=load(KEYS.todos,[
-  {id:1,text:'Review quarterly report',done:false,priority:'high',dueDate:todayDatetimeLocal(),cat:'General'},
-  {id:2,text:'Call dentist for appointment',done:false,priority:'medium',dueDate:todayDatetimeLocal(),cat:'Personal'},
-  {id:3,text:'Buy groceries',done:true,priority:'low',dueDate:todayDatetimeLocal(),cat:'Shopping'},
-  {id:4,text:'Reply to pending emails',done:false,priority:'high',dueDate:todayDatetimeLocal(),cat:'Work'},
-]);
-let _spends=load(KEYS.spends,[
-  {id:1,cat:'Food',desc:'Lunch at restaurant',amount:350,date:todayKey()},
-  {id:2,cat:'Travel',desc:'Auto rickshaw',amount:80,date:todayKey()},
-  {id:3,cat:'Shopping',desc:'Book purchase',amount:499,date:todayKey()},
-]);
-// Shorthand aliases — these are reassigned by window property setters
+// Private backing variables — EMPTY by default for new users
+// Data is loaded from Firestore on login; localStorage used only as offline cache
+let _habits = load(KEYS.habits, []);
+let _goals  = load(KEYS.goals,  []);
+let _todos  = load(KEYS.todos,  []);
+let _spends = load(KEYS.spends, []);
+// Shorthand aliases
 let habits=_habits, goals=_goals, todos=_todos, spends=_spends;
 function persist(){
   _habits=habits; _goals=goals; _todos=todos; _spends=spends;
@@ -1430,12 +1422,32 @@ function navigate(page,btn){
   // Lock journal whenever leaving it
   if(currentPage==='journal' && page!=='journal') journalUnlocked=false;
   document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
-  document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
+  // Remove active from ALL nav items and tree parents
+  document.querySelectorAll('.nav-item,.nav-tree-parent').forEach(n=>n.classList.remove('active'));
   document.getElementById('page-'+page).classList.add('active');
-  if(btn)btn.classList.add('active');
+  if(btn) btn.classList.add('active');
   currentPage=page;
   renderPage(page);
   closeSidebar();
+  // FAB visibility
+  updateFab();
+  // Spending tree sync
+  if(page==='spending'){
+    spendTreeOpen=true;
+    const ch=document.getElementById('spend-tree-children');
+    const cv=document.getElementById('spend-tree-chevron');
+    if(ch)ch.className='nav-tree-children open';
+    if(cv)cv.className='nav-tree-chevron open';
+    document.getElementById('nav-spending-parent')?.classList.add('active');
+    document.querySelectorAll('.nav-sub-item').forEach(x=>x.classList.remove('active'));
+    document.getElementById('nav-sub-'+spendTab)?.classList.add('active');
+  } else {
+    // Clear spending sub highlights
+    document.querySelectorAll('.nav-sub-item').forEach(x=>x.classList.remove('active'));
+    // Highlight the correct regular nav item when not spending
+    const navId='nav-'+page;
+    document.getElementById(navId)?.classList.add('active');
+  }
 }
 function openSidebar(){document.getElementById('sidebar').classList.add('open');document.getElementById('overlay').classList.add('show');}
 function closeSidebar(){document.getElementById('sidebar').classList.remove('open');document.getElementById('overlay').classList.remove('show');}
@@ -2171,10 +2183,15 @@ function renderPersonal(){
 
   const allCatNames=Object.keys(allCats());
   const sfEl=document.getElementById('spend-form');
+  const todayDateVal=(()=>{const d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');})();
   if(sfEl)sfEl.innerHTML=showSpendForm?`
     <div class="form-box">
       <select class="input" id="spend-cat-in">${allCatNames.map(c=>`<option value="${c}">${catEmoji(c)} ${c}</option>`).join('')}</select>
       <input class="input" id="spend-desc-in" placeholder="Description...">
+      <div style="margin-bottom:8px">
+        <label style="font-size:12px;color:var(--text3);display:block;margin-bottom:4px">Date</label>
+        <input class="input" id="spend-date-in" type="date" value="${todayDateVal}" style="margin-bottom:0">
+      </div>
       <div class="input-row">
         <input class="input" id="spend-amount-in" type="number" placeholder="Amount (₹)" min="0" style="margin-bottom:0">
         <button class="btn btn-primary" onclick="addSpend()">Log</button>
@@ -2196,12 +2213,18 @@ function addCustomCat(){
 }
 function deleteCustomCat(name){customCats=customCats.filter(c=>c.name!==name);persistSpend();renderPersonal();}
 function addSpend(){
-  const cat=document.getElementById('spend-cat-in').value;
-  const desc=document.getElementById('spend-desc-in').value.trim();
-  const amount=parseFloat(document.getElementById('spend-amount-in').value);
-  if(!desc||isNaN(amount)||amount<=0)return;
-  spends.push({id:uid(),cat,desc,amount,date:todayKey()});
-  persistSpend();showSpendForm=false;renderPersonal();
+  const cat    = document.getElementById('spend-cat-in').value;
+  const desc   = document.getElementById('spend-desc-in').value.trim();
+  const amount = parseFloat(document.getElementById('spend-amount-in').value);
+  if(!desc||isNaN(amount)||amount<=0) return;
+  const dateRaw = document.getElementById('spend-date-in')?.value || '';
+  let dateKey = todayKey();
+  if(dateRaw){
+    const parts = dateRaw.split('-');
+    dateKey = parseInt(parts[0])+'-'+parseInt(parts[1])+'-'+parseInt(parts[2]);
+  }
+  spends.push({id:uid(), cat, desc, amount, date:dateKey});
+  persistSpend(); showSpendForm=false; renderPersonal();
 }
 function deleteSpend(id){spends=spends.filter(s=>s.id!==id);persistSpend();renderPersonal();}
 
@@ -2652,8 +2675,8 @@ function parseCsvAndPreview(text, fileName){
   });
 
   // Check required headers
+  // Date is now optional — if missing, all rows default to today
   const missing = [];
-  if(headerMap.date   === undefined) missing.push('Date');
   if(headerMap.desc   === undefined) missing.push('Description');
   if(headerMap.amount === undefined) missing.push('Amount');
 
@@ -2676,11 +2699,17 @@ function parseCsvAndPreview(text, fileName){
     const rowNum = i + 2; // 1-indexed, account for header
     const result = { rowNum, raw: row, errors: [], warnings: [], status: 'ok' };
 
-    // Date
+    // Date — default to today if missing or invalid
     const dateRaw = row[headerMap.date] || '';
     const dateObj = parseCsvDate(dateRaw);
-    if(!dateObj){
-      result.errors.push('Invalid date "' + dateRaw + '". Use DD/MM/YYYY format.');
+    if(!dateObj && dateRaw.trim() !== ''){
+      result.warnings.push('Date "' + dateRaw + '" could not be parsed — defaulting to today.');
+      result.date    = new Date();
+      result.dateKey = todayKey();
+    } else if(!dateObj){
+      result.warnings.push('No date provided — defaulting to today.');
+      result.date    = new Date();
+      result.dateKey = todayKey();
     } else {
       result.date    = dateObj;
       result.dateKey = dateObj.getFullYear()+'-'+(dateObj.getMonth()+1)+'-'+dateObj.getDate();
@@ -2933,30 +2962,7 @@ function updateFab(){
   fab.className = 'fab-quick-add' + (show?' visible':'');
 }
 
-// ── Override navigate to handle spending tree ────────────────────────────────
-const _origNavigateForSpend = navigate;
-// Patch: when leaving spending, hide FAB
-const __origNav = navigate;
-function navigate(page, btn){
-  __origNav(page, btn);
-  updateFab();
-  // Sync sidebar tree state
-  if(page === 'spending'){
-    // Open the tree
-    spendTreeOpen = true;
-    const ch = document.getElementById('spend-tree-children');
-    const cv = document.getElementById('spend-tree-chevron');
-    if(ch) ch.className = 'nav-tree-children open';
-    if(cv) cv.className = 'nav-tree-chevron open';
-    // Activate parent
-    document.querySelectorAll('.nav-item,.nav-tree-parent').forEach(x=>x.classList.remove('active'));
-    document.getElementById('nav-spending-parent')?.classList.add('active');
-    document.querySelectorAll('.nav-sub-item').forEach(x=>x.classList.remove('active'));
-    document.getElementById('nav-sub-'+spendTab)?.classList.add('active');
-  } else {
-    document.querySelectorAll('.nav-sub-item').forEach(x=>x.classList.remove('active'));
-  }
-}
+// navigate tree sync is handled inside the base navigate() function
 
 // ── Quick Add FAB ────────────────────────────────────────────────────────────
 function openQuickAdd(){
@@ -2971,11 +2977,16 @@ function openQuickAdd(){
     `<button class="quick-cat-chip ${cat===quickAddCat?'sel':''}"
       onclick="setQaCat('${cat}',this)">${catEmoji(cat)} ${cat}</button>`
   ).join('');
-  // Reset form
+  // Reset form with today's date
   const amtEl = document.getElementById('qa-amount');
   const descEl = document.getElementById('qa-desc');
-  if(amtEl)  amtEl.value = '';
+  const dateEl = document.getElementById('qa-date');
+  if(amtEl)  amtEl.value  = '';
   if(descEl) descEl.value = '';
+  if(dateEl){
+    const today = new Date();
+    dateEl.value = today.getFullYear()+'-'+String(today.getMonth()+1).padStart(2,'0')+'-'+String(today.getDate()).padStart(2,'0');
+  }
   overlay.className = 'sheet-overlay show';
   sheet.className   = 'quick-add-sheet open';
   setTimeout(()=>amtEl?.focus(), 200);
@@ -2995,8 +3006,15 @@ function setQaCat(cat, btn){
 function submitQuickAdd(){
   const amount = parseFloat(document.getElementById('qa-amount')?.value||0);
   if(isNaN(amount)||amount<=0){ showToast('Please enter a valid amount.'); return; }
-  const desc = (document.getElementById('qa-desc')?.value||'').trim() || quickAddCat;
-  spends.push({id:uid(), cat:quickAddCat, desc, amount, date:todayKey()});
+  const desc    = (document.getElementById('qa-desc')?.value||'').trim() || quickAddCat;
+  const dateRaw = document.getElementById('qa-date')?.value || '';
+  // Convert YYYY-MM-DD to our dateKey format (YYYY-M-D)
+  let dateKey = todayKey();
+  if(dateRaw){
+    const parts = dateRaw.split('-');
+    dateKey = parseInt(parts[0])+'-'+parseInt(parts[1])+'-'+parseInt(parts[2]);
+  }
+  spends.push({id:uid(), cat:quickAddCat, desc, amount, date:dateKey});
   persistSpend();
   closeQuickAdd();
   renderPersonal();
@@ -3122,6 +3140,27 @@ function openMonthlyCatsModal(){
     </div>
   </div>`;
   document.body.appendChild(modal);
+}
+
+
+function refreshAppData(){
+  const btn=document.getElementById('refresh-btn');
+  if(btn){btn.style.transform='rotate(360deg)';btn.style.transition='transform .5s';}
+  // Re-load from Firestore
+  if(window._loadUserData){
+    window._loadUserData().then(()=>{
+      renderPage(currentPage);
+      renderHome();
+      showToast('✅ Data refreshed!');
+      if(btn)setTimeout(()=>{btn.style.transform='';btn.style.transition='';},600);
+    });
+  } else {
+    // Fallback: re-render from memory
+    renderPage(currentPage);
+    renderHome();
+    showToast('Refreshed from local data.');
+    if(btn)setTimeout(()=>{btn.style.transform='';},600);
+  }
 }
 
 function showToast(msg){
@@ -4465,27 +4504,27 @@ function forgotPin(){
 window._applySync = function(data) {
   if (!data) return;
   let changed = false;
-  const keys = [
-    ['_habits',habits,'habits'],['_goals',goals,'goals'],
-    ['_todos',todos,'todos'],['_spends',spends,'spends'],
-    ['_customCats',customCats,'customCats'],['_friends',friends,'friends'],
-    ['_friendReqs',friendReqs,'friendReqs'],['_groups',groups,'groups'],
-    ['_splits',splits,'splits']
-  ];
-  if (data.habits     !== undefined) { _habits=data.habits;         habits=_habits;         changed=true; }
-  if (data.goals      !== undefined) { _goals=data.goals;           goals=_goals;           changed=true; }
-  if (data.todos      !== undefined) { _todos=data.todos;           todos=_todos;           changed=true; }
-  if (data.spends     !== undefined) { _spends=data.spends;         spends=_spends;         changed=true; }
-  if (data.customCats !== undefined) { _customCats=data.customCats; customCats=_customCats; changed=true; }
-  if (data.friends    !== undefined) { _friends=data.friends;       friends=_friends;       changed=true; }
-  if (data.friendReqs !== undefined) { _friendReqs=data.friendReqs; friendReqs=_friendReqs; changed=true; }
-  if (data.groups     !== undefined) { _groups=data.groups;         groups=_groups;         changed=true; }
-  if (data.splits     !== undefined) { _splits=data.splits;         splits=_splits;         changed=true; }
-  if (data.journalEntries !== undefined) { journalEntries=data.journalEntries; changed=true; }
-  if (data.paymentReqs   !== undefined) { paymentReqs=data.paymentReqs; save('lf3_payment_reqs',paymentReqs); changed=true; }
-  if (data.myUpiId       !== undefined && data.myUpiId) { myUpiId=data.myUpiId; save('lf3_my_upi',myUpiId); }
-  if (data.friendUpiIds  !== undefined) { friendUpiIds=data.friendUpiIds; save('lf3_friend_upi_ids',friendUpiIds); }
-  if (changed) {
+  // Update BOTH private vars AND public aliases so renders always see fresh data
+  function syncVar(dataKey, setter){
+    if(data[dataKey] !== undefined){
+      setter(data[dataKey]);
+      changed = true;
+    }
+  }
+  syncVar('habits',      v=>{_habits=v;      habits=v;});
+  syncVar('goals',       v=>{_goals=v;       goals=v;});
+  syncVar('todos',       v=>{_todos=v;       todos=v;});
+  syncVar('spends',      v=>{_spends=v;      spends=v;});
+  syncVar('customCats',  v=>{_customCats=v;  customCats=v;});
+  syncVar('friends',     v=>{_friends=v;     friends=v;});
+  syncVar('friendReqs',  v=>{_friendReqs=v;  friendReqs=v;});
+  syncVar('groups',      v=>{_groups=v;      groups=v;});
+  syncVar('splits',      v=>{_splits=v;      splits=v;});
+  syncVar('journalEntries', v=>{journalEntries=v;});
+  if(data.paymentReqs  !== undefined){paymentReqs=data.paymentReqs;  save('lf3_payment_reqs',paymentReqs);  changed=true;}
+  if(data.myUpiId      !== undefined && data.myUpiId){myUpiId=data.myUpiId; save('lf3_my_upi',myUpiId);}
+  if(data.friendUpiIds !== undefined){friendUpiIds=data.friendUpiIds; save('lf3_friend_upi_ids',friendUpiIds);}
+  if(changed){
     renderHome();
     renderPage(currentPage);
   }
