@@ -213,11 +213,14 @@ window._saveToFirestore = async function() {
     const state = window._getState ? window._getState() : {};
     const ts = Date.now();
     window._lastSaveTime = ts;
+    // NO merge:true — we always write the full document so arrays
+    // are fully replaced, never merged. This is the correct pattern
+    // for user-owned documents where we own the entire state.
     await setDoc(doc(db, 'users', u.uid), {
       ...state,
       updatedAt: ts,
       updatedBy: DEVICE_ID
-    }, { merge: true });
+    });
   } catch(e) {
     console.warn('Firestore save error:', e);
   }
@@ -226,18 +229,32 @@ window._saveToFirestore = async function() {
 // ── Start real-time listener ──
 function startListener(uid) {
   if (unsubscribeSnapshot) unsubscribeSnapshot(); // clear old listener
+  let isFirstSnapshot = true; // First snapshot is always the initial load, skip toast
+
   unsubscribeSnapshot = onSnapshot(
     doc(db, 'users', uid),
     (snap) => {
       if (!snap.exists()) return;
       const d = snap.data();
-      // Skip if this update came from this device (our own save echoing back)
-      if (d.updatedBy === DEVICE_ID) return;
-      // Apply the remote data into the app state and re-render
+
+      // Skip our own echo: updatedBy matches this device AND
+      // the timestamp is very recent (within 3 seconds of our last save)
+      const isOwnEcho = d.updatedBy === DEVICE_ID &&
+                        Math.abs((d.updatedAt || 0) - (window._lastSaveTime || 0)) < 3000;
+      if (isOwnEcho) {
+        isFirstSnapshot = false;
+        return;
+      }
+
+      // Apply the remote data
       if (window._applySync) {
         window._applySync(d);
-        window.showToast && window.showToast('✨ Synced from another device');
+        // Only show toast for live updates, not the initial load
+        if (!isFirstSnapshot) {
+          window.showToast && window.showToast('✨ Synced from another device');
+        }
       }
+      isFirstSnapshot = false;
     },
     (err) => console.warn('Snapshot error:', err)
   );
@@ -1350,14 +1367,20 @@ let _todos  = load(KEYS.todos,  []);
 let _spends = load(KEYS.spends, []);
 // Shorthand aliases
 let habits=_habits, goals=_goals, todos=_todos, spends=_spends;
+let _persistTimer = null;
 function persist(){
+  // Sync private vars with aliases
   _habits=habits; _goals=goals; _todos=todos; _spends=spends;
+  // Write to localStorage immediately (fast, local)
   save(KEYS.habits,habits); save(KEYS.goals,goals);
   save(KEYS.todos,todos);   save(KEYS.spends,spends);
-  // Persist todo categories and shared lists
   save('lf3_todo_cats', todoCategories);
   save('lf3_shared_todo_lists', sharedTodoLists);
-  if (window._saveToFirestore) window._saveToFirestore();
+  // Debounce Firestore writes: batch rapid changes into one write per 800ms
+  clearTimeout(_persistTimer);
+  _persistTimer = setTimeout(()=>{
+    if (window._saveToFirestore) window._saveToFirestore();
+  }, 800);
 }
 
 const CAT_COLORS={Food:'#6B8F71',Travel:'#B8845A',Shopping:'#5A78B8',Health:'#B85A4A',Bills:'#8A6BC4',Entertainment:'#5A9898',Other:'#9C9C98'};
@@ -2065,18 +2088,21 @@ function catEmoji(n){return(allCats()[n]||{emoji:'📦'}).emoji;}
 function catColor(n){return(allCats()[n]||{color:'#9C9C98'}).color;}
 function catBg(n){return(allCats()[n]||{bg:'#F0F0F0'}).bg;}
 
+let _persistSpendTimer = null;
 function persistSpend(){
   // Keep _private vars in sync with aliases
   _spends=spends; _customCats=customCats; _friends=friends;
   _friendReqs=friendReqs; _groups=groups; _splits=splits;
-  // Also sync the core vars
   _habits=habits; _goals=goals; _todos=todos;
-  // Local cache
+  // Write to localStorage immediately
   save(KEYS.spends,spends);       save(XKEYS.customCats,customCats);
   save(XKEYS.friends,friends);    save(XKEYS.friendReqs,friendReqs);
   save(XKEYS.groups,groups);      save(XKEYS.splits,splits);
-  // Cloud sync
-  if (window._saveToFirestore) window._saveToFirestore();
+  // Debounce Firestore writes
+  clearTimeout(_persistSpendTimer);
+  _persistSpendTimer = setTimeout(()=>{
+    if (window._saveToFirestore) window._saveToFirestore();
+  }, 800);
 }
 
 let spendTab='personal',showSpendForm=false,showCatForm=false,showFriendForm=false,showGroupForm=false,openGroupId=null;
@@ -3150,64 +3176,51 @@ function openMonthlyCatsModal(){
 }
 
 
-function refreshAppData(){
+async function refreshAppData(){
   const btn = document.getElementById('refresh-btn');
 
-  // Spin the button continuously while loading
+  // Animate button
   if(btn){
     btn.disabled = true;
-    btn.style.display = 'inline-block';
-    btn.style.animation = 'spin .6s linear infinite';
-    // Add spin keyframe if not already present
-    if(!document.getElementById('spin-kf')){
-      const st = document.createElement('style');
-      st.id = 'spin-kf';
-      st.textContent = '@keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}';
-      document.head.appendChild(st);
-    }
+    btn.textContent = '↻';
+    btn.style.transform = 'rotate(0deg)';
+    btn.style.transition = 'transform 0.6s ease';
+    setTimeout(()=>{ if(btn) btn.style.transform = 'rotate(360deg)'; }, 10);
   }
 
-  function stopSpin(msg){
-    if(btn){ btn.disabled=false; btn.style.animation=''; }
+  function done(msg){
+    if(btn){
+      btn.disabled = false;
+      btn.style.transform = '';
+      btn.style.transition = '';
+    }
     showToast(msg);
   }
 
-  // If service worker is active, tell it to fetch fresh app shell
-  // then do a controlled reload so the page HTML/JS updates too
-  if('serviceWorker' in navigator && navigator.serviceWorker.controller){
-    // Clear the cache for the main page so SW fetches fresh HTML
-    caches.open('lifeflow-v1').then(cache=>{
-      cache.delete(location.href).then(()=>{
-        cache.delete('/lifeflow/').then(()=>{
-          cache.delete('/lifeflow/index.html');
-        });
-      });
-    }).catch(()=>{});
-    // Give it 200ms then reload — gets fresh HTML from network
-    setTimeout(()=>{ window.location.reload(true); }, 200);
-    return;
-  }
+  try {
+    // Step 1: Clear ALL SW caches so fresh HTML/JS is fetched from server
+    if('caches' in window){
+      const cacheNames = await caches.keys();
+      await Promise.all(cacheNames.map(name => caches.delete(name)));
+    }
 
-  // No SW — fetch fresh data from Firestore then re-render
-  const loader = window._loadUserData;
-  if(loader && typeof loader === 'function'){
-    loader()
-      .then(()=>{
-        renderPage(currentPage);
-        renderHome();
-        stopSpin('✅ Data refreshed from cloud!');
-      })
-      .catch(()=>{
-        // Firestore failed — still re-render from memory
-        renderPage(currentPage);
-        renderHome();
-        stopSpin('Refreshed from local data.');
-      });
-  } else {
-    // _loadUserData not ready yet — just re-render and do a hard reload
-    renderPage(currentPage);
-    renderHome();
-    setTimeout(()=>{ window.location.reload(true); }, 400);
+    // Step 2: Pull latest data from Firestore (without reloading page)
+    const loader = window._loadUserData;
+    if(loader && typeof loader === 'function'){
+      await loader();
+      renderPage(currentPage);
+      renderHome();
+      done('✅ Data refreshed!');
+    } else {
+      // Module not ready — do a full page reload to get fresh code + data
+      done('Reloading...');
+      setTimeout(()=> window.location.reload(true), 500);
+    }
+  } catch(e) {
+    console.warn('refresh error:', e);
+    // On any error, hard reload to recover
+    done('Reloading...');
+    setTimeout(()=> window.location.reload(true), 400);
   }
 }
 
