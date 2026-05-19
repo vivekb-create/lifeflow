@@ -267,14 +267,9 @@ window._loadUserData = async function() {
   try {
     const snap = await getDoc(doc(db, 'users', u.uid));
     if (snap.exists()) {
-      // ── Clear stale localStorage before applying Firestore data ──────
-      // This prevents old device-local data from showing until sync arrives
-      const allKeys = ['lf3_habits','lf3_goals','lf3_todos','lf3_spends',
-        'lf3_custom_cats','lf3_friends','lf3_friend_reqs','lf3_groups',
-        'lf3_splits','lf3_journal','lf3_payment_reqs','lf3_todo_cats',
-        'lf3_shared_todo_lists'];
-      allKeys.forEach(k => { try{ localStorage.removeItem(k); }catch{} });
-      // Now apply the authoritative cloud data
+      // Firestore is source of truth — apply it directly.
+      // Do NOT clear localStorage first; if Firestore write is in-flight
+      // and user refreshes, localStorage is the safety net.
       if (window._applySync) window._applySync(snap.data());
     }
     // Start live listener for real-time cross-device updates
@@ -927,6 +922,19 @@ onAuthStateChanged(auth, async (user) => {
   .month-cat-card-amt{font-size:18px;font-weight:700;color:var(--sage-dark);font-family:'Cormorant Garamond',serif;}
   .month-cat-card-pct{font-size:10px;color:var(--text3);}
   .month-cat-bar-fill{height:3px;border-radius:2px;background:var(--sage);margin-top:6px;}
+
+  /* ── PULL TO REFRESH ── */
+  .ptr-indicator{position:fixed;top:0;left:50%;transform:translateX(-50%) translateY(-60px);
+    background:var(--sage-dark);color:white;border-radius:0 0 20px 20px;
+    padding:8px 20px 10px;font-size:13px;font-weight:500;z-index:300;
+    transition:transform .25s cubic-bezier(.4,0,.2,1);
+    display:flex;align-items:center;gap:8px;white-space:nowrap;
+    box-shadow:0 4px 16px rgba(0,0,0,.2);}
+  .ptr-indicator.ptr-visible{transform:translateX(-50%) translateY(0);}
+  .ptr-indicator.ptr-loading{transform:translateX(-50%) translateY(0);}
+  .ptr-spinner{width:16px;height:16px;border:2px solid rgba(255,255,255,.4);
+    border-top-color:white;border-radius:50%;}
+  .ptr-spinner.spinning{animation:spin .6s linear infinite;}
 </style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 </head>
@@ -1367,20 +1375,24 @@ let _todos  = load(KEYS.todos,  []);
 let _spends = load(KEYS.spends, []);
 // Shorthand aliases
 let habits=_habits, goals=_goals, todos=_todos, spends=_spends;
-let _persistTimer = null;
+// ── Single unified save function ──────────────────────────────────────────
+// Always writes localStorage immediately AND fires Firestore save.
+// No debounce — debounce was causing data loss on refresh.
 function persist(){
-  // Sync private vars with aliases
+  // Sync ALL private vars from their aliases
   _habits=habits; _goals=goals; _todos=todos; _spends=spends;
-  // Write to localStorage immediately (fast, local)
-  save(KEYS.habits,habits); save(KEYS.goals,goals);
-  save(KEYS.todos,todos);   save(KEYS.spends,spends);
+  _customCats=customCats; _friends=friends; _friendReqs=friendReqs;
+  _groups=groups; _splits=splits;
+  // Write to localStorage (instant, survives refresh)
+  save(KEYS.habits,habits);      save(KEYS.goals,goals);
+  save(KEYS.todos,todos);        save(KEYS.spends,spends);
+  save(XKEYS.customCats,customCats); save(XKEYS.friends,friends);
+  save(XKEYS.friendReqs,friendReqs); save(XKEYS.groups,groups);
+  save(XKEYS.splits,splits);
   save('lf3_todo_cats', todoCategories);
   save('lf3_shared_todo_lists', sharedTodoLists);
-  // Debounce Firestore writes: batch rapid changes into one write per 800ms
-  clearTimeout(_persistTimer);
-  _persistTimer = setTimeout(()=>{
-    if (window._saveToFirestore) window._saveToFirestore();
-  }, 800);
+  // Write to Firestore immediately — no debounce
+  if (window._saveToFirestore) window._saveToFirestore();
 }
 
 const CAT_COLORS={Food:'#6B8F71',Travel:'#B8845A',Shopping:'#5A78B8',Health:'#B85A4A',Bills:'#8A6BC4',Entertainment:'#5A9898',Other:'#9C9C98'};
@@ -2088,22 +2100,8 @@ function catEmoji(n){return(allCats()[n]||{emoji:'📦'}).emoji;}
 function catColor(n){return(allCats()[n]||{color:'#9C9C98'}).color;}
 function catBg(n){return(allCats()[n]||{bg:'#F0F0F0'}).bg;}
 
-let _persistSpendTimer = null;
-function persistSpend(){
-  // Keep _private vars in sync with aliases
-  _spends=spends; _customCats=customCats; _friends=friends;
-  _friendReqs=friendReqs; _groups=groups; _splits=splits;
-  _habits=habits; _goals=goals; _todos=todos;
-  // Write to localStorage immediately
-  save(KEYS.spends,spends);       save(XKEYS.customCats,customCats);
-  save(XKEYS.friends,friends);    save(XKEYS.friendReqs,friendReqs);
-  save(XKEYS.groups,groups);      save(XKEYS.splits,splits);
-  // Debounce Firestore writes
-  clearTimeout(_persistSpendTimer);
-  _persistSpendTimer = setTimeout(()=>{
-    if (window._saveToFirestore) window._saveToFirestore();
-  }, 800);
-}
+// persistSpend delegates to persist() — one unified save path
+function persistSpend(){ persist(); }
 
 let spendTab='personal',showSpendForm=false,showCatForm=false,showFriendForm=false,showGroupForm=false,openGroupId=null;
 
@@ -4582,9 +4580,11 @@ window._applySync = function(data) {
   syncVar('groups',      v=>{_groups=v;      groups=v;});
   syncVar('splits',      v=>{_splits=v;      splits=v;});
   syncVar('journalEntries', v=>{journalEntries=v;});
-  if(data.paymentReqs  !== undefined){paymentReqs=data.paymentReqs;  save('lf3_payment_reqs',paymentReqs);  changed=true;}
-  if(data.myUpiId      !== undefined && data.myUpiId){myUpiId=data.myUpiId; save('lf3_my_upi',myUpiId);}
-  if(data.friendUpiIds !== undefined){friendUpiIds=data.friendUpiIds; save('lf3_friend_upi_ids',friendUpiIds);}
+  if(data.paymentReqs     !== undefined){paymentReqs=data.paymentReqs; save('lf3_payment_reqs',paymentReqs); changed=true;}
+  if(data.myUpiId         !== undefined && data.myUpiId){myUpiId=data.myUpiId; save('lf3_my_upi',myUpiId);}
+  if(data.friendUpiIds    !== undefined){friendUpiIds=data.friendUpiIds; save('lf3_friend_upi_ids',friendUpiIds);}
+  if(data.todoCategories  !== undefined){todoCategories=data.todoCategories; save('lf3_todo_cats',todoCategories);}
+  if(data.sharedTodoLists !== undefined){sharedTodoLists=data.sharedTodoLists; save('lf3_shared_todo_lists',sharedTodoLists);}
   if(changed){
     // Keep localStorage cache fresh so it matches cloud state
     try{
@@ -4605,14 +4605,23 @@ window._applySync = function(data) {
 
 // Expose read helpers so Firebase module can snapshot current state for saving
 window._getState = function() {
+  // Read from aliases (they are always up-to-date after persist() is called)
   return {
-    habits:_habits, goals:_goals, todos:_todos, spends:_spends,
-    customCats:_customCats, friends:_friends, friendReqs:_friendReqs,
-    groups:_groups, splits:_splits,
-    journalEntries:journalEntries,
-    paymentReqs:paymentReqs,
-    myUpiId:myUpiId,
-    friendUpiIds:friendUpiIds
+    habits:      habits,
+    goals:       goals,
+    todos:       todos,
+    spends:      spends,
+    customCats:  customCats,
+    friends:     friends,
+    friendReqs:  friendReqs,
+    groups:      groups,
+    splits:      splits,
+    journalEntries: journalEntries,
+    paymentReqs:    paymentReqs,
+    myUpiId:        myUpiId,
+    friendUpiIds:   friendUpiIds,
+    todoCategories: todoCategories,
+    sharedTodoLists: sharedTodoLists
   };
 };
 
@@ -4817,6 +4826,109 @@ if (window.matchMedia('(display-mode: standalone)').matches ||
     window.navigator.standalone === true) {
   document.documentElement.classList.add('pwa-standalone');
 }
+</script>
+
+<div class="ptr-indicator" id="ptr-indicator">
+  <div class="ptr-spinner" id="ptr-spinner"></div>
+  <span id="ptr-text">Pull down to refresh</span>
+</div>
+
+<script>
+// ═══════════════════════════════════════════════════════════════════
+// PULL-TO-REFRESH — data only, no page reload
+// ═══════════════════════════════════════════════════════════════════
+(function(){
+  const THRESHOLD   = 80;   // px to pull before triggering
+  const MAX_PULL    = 120;  // max px to track
+  let startY        = 0;
+  let pulling       = false;
+  let triggered     = false;
+  let isRefreshing  = false;
+
+  const indicator   = document.getElementById('ptr-indicator');
+  const spinner     = document.getElementById('ptr-spinner');
+  const ptrText     = document.getElementById('ptr-text');
+
+  function canPull(){
+    // Only pull when at the very top of the main content
+    const main = document.querySelector('.main');
+    if(!main) return false;
+    return main.scrollTop <= 0 || window.scrollY <= 0;
+  }
+
+  document.addEventListener('touchstart', e=>{
+    if(isRefreshing) return;
+    if(e.touches.length !== 1) return;
+    if(canPull()){
+      startY  = e.touches[0].clientY;
+      pulling = true;
+      triggered = false;
+    }
+  }, {passive:true});
+
+  document.addEventListener('touchmove', e=>{
+    if(!pulling || isRefreshing) return;
+    const dy = Math.min(e.touches[0].clientY - startY, MAX_PULL);
+    if(dy <= 0){ pulling=false; hideIndicator(); return; }
+    // Show indicator
+    if(!indicator.classList.contains('ptr-visible'))
+      indicator.classList.add('ptr-visible');
+    const progress = Math.min(dy / THRESHOLD, 1);
+    indicator.style.opacity = progress.toString();
+    if(dy >= THRESHOLD && !triggered){
+      triggered = true;
+      ptrText.textContent = 'Release to refresh';
+      spinner.classList.add('spinning');
+    } else if(dy < THRESHOLD) {
+      ptrText.textContent = 'Pull down to refresh';
+      spinner.classList.remove('spinning');
+    }
+  }, {passive:true});
+
+  document.addEventListener('touchend', ()=>{
+    if(!pulling) return;
+    pulling = false;
+    if(triggered){
+      doRefresh();
+    } else {
+      hideIndicator();
+    }
+  });
+
+  function hideIndicator(){
+    indicator.classList.remove('ptr-visible','ptr-loading');
+    indicator.style.opacity = '';
+    spinner.classList.remove('spinning');
+    ptrText.textContent = 'Pull down to refresh';
+    triggered = false;
+  }
+
+  async function doRefresh(){
+    isRefreshing = true;
+    indicator.classList.add('ptr-loading');
+    indicator.style.opacity = '1';
+    spinner.classList.add('spinning');
+    ptrText.textContent = 'Refreshing...';
+
+    try {
+      const loader = window._loadUserData;
+      if(loader && typeof loader === 'function'){
+        await loader();
+        if(window.renderPage && window.currentPage) window.renderPage(window.currentPage);
+        if(window.renderHome) window.renderHome();
+        ptrText.textContent = '✓ Up to date';
+        spinner.classList.remove('spinning');
+        setTimeout(hideIndicator, 1000);
+      } else {
+        hideIndicator();
+      }
+    } catch(e){
+      ptrText.textContent = 'Refresh failed';
+      setTimeout(hideIndicator, 1500);
+    }
+    isRefreshing = false;
+  }
+})();
 </script>
 </body>
 </html>
