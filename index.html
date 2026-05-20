@@ -325,38 +325,35 @@ window._loadUserData = async function() {
   }
 };
 
-// ── Handle redirect result (mobile sign-in returns here) ──
-// Show spinner immediately on page load if we're returning from a redirect
-const isReturningFromRedirect = document.referrer.includes('accounts.google.com') ||
-  sessionStorage.getItem('googleRedirectPending') === '1';
-if (isReturningFromRedirect) {
+// ── Handle redirect result (fallback for popup-blocked desktop browsers) ──
+const isPendingRedirect = sessionStorage.getItem('googleRedirectPending') === '1';
+sessionStorage.removeItem('googleRedirectPending');
+
+if (isPendingRedirect) {
+  // Show spinner while redirect result processes
   const loadingEl = document.getElementById('auth-redirect-loading');
   const btnEl     = document.getElementById('google-signin-btn');
   if (loadingEl) loadingEl.style.display = 'flex';
   if (btnEl)     btnEl.style.display     = 'none';
 }
-sessionStorage.removeItem('googleRedirectPending');
 
-try {
-  const result = await getRedirectResult(auth);
-  // If result is null, no redirect happened — normal page load
+// Always call getRedirectResult to handle any pending redirect
+getRedirectResult(auth).then(result => {
   if (!result) {
+    // No redirect in progress — show the sign-in button normally
     const loadingEl = document.getElementById('auth-redirect-loading');
     const btnEl     = document.getElementById('google-signin-btn');
     if (loadingEl) loadingEl.style.display = 'none';
     if (btnEl)     btnEl.style.display     = 'flex';
   }
-  // onAuthStateChanged handles the user session either way
-} catch(e) {
-  // Redirect failed — show button again
+  // onAuthStateChanged handles the rest
+}).catch(e => {
   const loadingEl = document.getElementById('auth-redirect-loading');
   const btnEl     = document.getElementById('google-signin-btn');
   if (loadingEl) loadingEl.style.display = 'none';
   if (btnEl)     btnEl.style.display     = 'flex';
-  if (e.code && e.code !== 'auth/popup-closed-by-user') {
-    console.warn('Redirect result error:', e.code, e.message);
-  }
-}
+  if (e.code) console.warn('Redirect result error:', e.code);
+});
 
 // ── Auth state observer ──
 onAuthStateChanged(auth, async (user) => {
@@ -1381,43 +1378,44 @@ onAuthStateChanged(auth, async (user) => {
 // ─────────────────────────────────────────────
 let currentUser = null;
 
-async function signInWithGoogle() {
+function signInWithGoogle() {
+  // signInWithGoogle MUST be synchronous at call site so the browser
+  // treats the popup as a direct response to a user gesture.
+  // Any async wrapping breaks popup on mobile browsers and iOS PWA.
   if (!window._fb) {
-    alert('App is still loading. Please wait a moment and try again.');
+    alert('App is still loading. Please wait a few seconds and try again.');
     return;
   }
-  const { auth, GoogleAuthProvider, signInWithPopup, signInWithRedirect } = window._fb;
+  const { auth, GoogleAuthProvider, signInWithPopup } = window._fb;
   const provider = new GoogleAuthProvider();
   provider.addScope('email');
   provider.addScope('profile');
 
-  // Detect mobile browsers — use redirect on mobile (popups are blocked)
-  const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent) ||
-                   window.navigator.standalone === true ||
-                   window.matchMedia('(display-mode: standalone)').matches;
-
-  // Show loading state on the button
-  const btn = document.querySelector('#auth-screen button');
+  // Set loading state
+  const btn = document.getElementById('google-signin-btn');
   if (btn) { btn.textContent = 'Signing in...'; btn.disabled = true; }
 
-  try {
-    if (isMobile) {
-      // Redirect flow: page navigates to Google then comes back
-      if (btn) btn.textContent = 'Redirecting to Google...';
-      sessionStorage.setItem('googleRedirectPending', '1');
-      await signInWithRedirect(auth, provider);
-      // Execution continues after redirect returns (in next page load)
-    } else {
-      // Desktop: popup flow
-      await signInWithPopup(auth, provider);
-    }
-  } catch(e) {
-    if (btn) { btn.textContent = 'Sign in with Google'; btn.disabled = false; }
-    if (e.code !== 'auth/popup-closed-by-user' && e.code !== 'auth/cancelled-popup-request') {
-      console.error('Sign-in error:', e.code, e.message);
-      alert('Sign-in failed: ' + (e.message || e.code));
-    }
-  }
+  // signInWithPopup returns a Promise — we handle it async AFTER the sync call
+  signInWithPopup(auth, provider)
+    .then(() => {
+      // onAuthStateChanged handles everything — nothing to do here
+    })
+    .catch(e => {
+      if (btn) { btn.textContent = 'Sign in with Google'; btn.disabled = false; }
+      if (e.code === 'auth/popup-blocked') {
+        // Popup was blocked — fall back to redirect (works on desktop browsers with strict settings)
+        if (window._fb.signInWithRedirect) {
+          btn.textContent = 'Redirecting...';
+          sessionStorage.setItem('googleRedirectPending', '1');
+          window._fb.signInWithRedirect(auth, provider);
+        } else {
+          alert('Popup was blocked. Please allow popups for this site and try again.');
+        }
+      } else if (e.code !== 'auth/popup-closed-by-user' && e.code !== 'auth/cancelled-popup-request') {
+        console.error('Sign-in error:', e.code, e.message);
+        alert('Sign-in failed. Please try again.\n\nError: ' + (e.code || e.message));
+      }
+    });
 }
 
 async function signInAsGuest() {
