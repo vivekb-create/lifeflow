@@ -3676,7 +3676,7 @@ function renderSplitRows(gid){
     </div>`).join('');
 }
 
-function addSplit(gid){
+async function addSplit(gid){
   const g=groups.find(x=>x.id===gid);if(!g)return;
   const desc=(document.getElementById('sp-desc').value||'').trim();
   const total=parseFloat(document.getElementById('sp-amount').value);
