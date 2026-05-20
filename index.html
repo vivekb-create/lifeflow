@@ -154,22 +154,49 @@ window._registerUserEmail = async function(user) {
 
 // ── Listen for incoming friend requests ──
 window._listenFriendRequests = function(uid) {
+  // Listen for new friend REQUESTS (pending)
   onSnapshot(collection(db,'users',uid,'friendRequests'), (snap) => {
     snap.docChanges().forEach(change => {
       if (change.type === 'added') {
         const r = change.doc.data();
         if (r.status === 'pending') {
-          // Add to local friendReqs if not already there
-          const existing = (_friendReqs||[]).find(x => x.fromEmail === r.fromEmail);
+          const existing = (_friendReqs||[]).find(x => x.fromEmail === r.fromEmail || x.fromUid === r.fromUid);
           if (!existing) {
             _friendReqs = [...(_friendReqs||[]), {
-              id: change.doc.id, from: r.fromName, contact: r.fromEmail,
-              fromUid: r.fromUid, fromPicture: r.fromPicture, date: new Date(r.sentAt).toISOString(),
+              id: change.doc.id, from: r.fromName, contact: r.fromEmail||'',
+              fromUid: r.fromUid, fromPicture: r.fromPicture||'',
+              date: new Date(r.sentAt||Date.now()).toISOString(),
               firestoreDocId: change.doc.id
             }];
             friendReqs = _friendReqs;
             if (window.renderPage && window.currentPage === 'spending') window.renderPage('spending');
             window.showToast && window.showToast('📬 New friend request from ' + r.fromName + '!');
+          }
+        }
+      }
+    });
+  });
+
+  // Listen for notifications (friend accepted, etc.)
+  onSnapshot(collection(db,'users',uid,'notifications'), (snap) => {
+    snap.docChanges().forEach(change => {
+      if (change.type === 'added') {
+        const n = change.doc.data();
+        if (n.type === 'friend_accepted') {
+          // They accepted our request — add them to our local friends as active
+          const existing = (_friends||[]).find(f =>
+            String(f.fromUid) === String(n.fromUid) || f.contact === n.fromEmail
+          );
+          if (!existing) {
+            _friends = [...(_friends||[]), {
+              id: String(Date.now()), name: n.fromName,
+              contact: n.fromEmail||'', status: 'active',
+              fromUid: n.fromUid, picture: n.fromPicture||''
+            }];
+            friends = _friends;
+            persist();
+            if (window.renderPage && window.currentPage === 'spending') window.renderPage('spending');
+            window.showToast && window.showToast('🎉 ' + n.fromName + ' accepted your friend request!');
           }
         }
       }
@@ -2496,11 +2523,31 @@ async function handleInviteToken(){
     if(data.fromUid===u.uid){history.replaceState({},'',window.location.pathname);return;}
     const already=friends.some(f=>f.fromUid===data.fromUid||f.contact===data.fromEmail);
     if(already){showToast('Already connected with '+data.fromName+'!');history.replaceState({},'',window.location.pathname);return;}
-    friends.push({id:uid(),name:data.fromName,contact:data.fromEmail,status:'active',fromUid:data.fromUid});
-    persistSpend();renderFriends();
-    await addDoc(collection(db,'users',data.fromUid,'friendRequests'),{
-      fromUid:u.uid,fromName:u.name,fromEmail:u.email,fromPicture:u.picture||'',sentAt:Date.now(),status:'accepted'
-    });
+    // Add sender to my friends
+    friends.push({id:uid(),name:data.fromName,contact:data.fromEmail||'',
+                  status:'active',fromUid:data.fromUid});
+    persist(); renderFriends();
+
+    // Write me into the sender's friends list in Firestore (mutual)
+    try{
+      const senderSnap = await getDoc(doc(db,'users',data.fromUid));
+      const senderData = senderSnap.exists() ? senderSnap.data() : {};
+      const senderFriends = senderData.friends || [];
+      const alreadyThere = senderFriends.some(f =>
+        String(f.fromUid)===String(u.uid) || f.contact===u.email
+      );
+      if(!alreadyThere){
+        senderFriends.push({id:uid(),name:u.name,contact:u.email||'',
+                            status:'active',fromUid:u.uid,picture:u.picture||''});
+        await setDoc(doc(db,'users',data.fromUid),{friends:senderFriends},{merge:true});
+      }
+      // Notify sender via sub-collection so their listener fires
+      await addDoc(collection(db,'users',data.fromUid,'notifications'),{
+        type:'friend_accepted',fromUid:u.uid,fromName:u.name,
+        fromEmail:u.email,fromPicture:u.picture||'',at:Date.now()
+      });
+    }catch(e){console.warn('invite token mutual write:',e);}
+
     await deleteDoc(doc(db,'invite_tokens',token));
     showToast('Connected with '+data.fromName+' via invite link!');
     history.replaceState({},'',window.location.pathname);
@@ -3203,16 +3250,26 @@ async function refreshAppData(){
     }
 
     // Step 2: Pull latest data from Firestore (without reloading page)
-    const loader = window._loadUserData;
-    if(loader && typeof loader === 'function'){
-      await loader();
+    // Wait for Firebase to be ready (up to 3s)
+    let waited = 0;
+    while((!window._fb || !window.currentUser) && waited < 3000){
+      await new Promise(r=>setTimeout(r,100));
+      waited += 100;
+    }
+
+    if(window._fb && window.currentUser && window.currentUser.uid){
+      // Direct Firestore fetch — doesn't restart listener
+      const {db, doc, getDoc} = window._fb;
+      const snap = await getDoc(doc(db, 'users', window.currentUser.uid));
+      if(snap.exists() && window._applySync) window._applySync(snap.data());
       renderPage(currentPage);
       renderHome();
       done('✅ Data refreshed!');
     } else {
-      // Module not ready — do a full page reload to get fresh code + data
-      done('Reloading...');
-      setTimeout(()=> window.location.reload(true), 500);
+      // Not logged in — just re-render from local state
+      renderPage(currentPage);
+      renderHome();
+      done('✅ Done');
     }
   } catch(e) {
     console.warn('refresh error:', e);
@@ -3230,27 +3287,56 @@ function showToast(msg){
   setTimeout(()=>{t.style.opacity='0';setTimeout(()=>t.remove(),400);},3000);
 }
 async function acceptFriendReq(id){
-  const r=friendReqs.find(x=>x.id===id);
-  if(!r)return;
-  friends.push({id:uid(),name:r.from,contact:r.contact,status:'active',fromUid:r.fromUid||null});
-  friendReqs=friendReqs.filter(x=>x.id!==id);
-  persistSpend();renderFriends();
-  showToast('✅ '+r.from+' added as a friend!');
-  // Mark the Firestore friend request as accepted
-  const u=window.currentUser||currentUser;
-  if(u?.uid && r.firestoreDocId && window._fb?.deleteDoc){
-    try {
-      const {deleteDoc,doc,db,collection,addDoc} = window._fb;
+  const r = friendReqs.find(x => x.id === id);
+  if(!r) return;
+  const u = window.currentUser || currentUser;
+
+  // 1. Add friend to MY local list as active
+  const myNewFriend = {id:uid(), name:r.from, contact:r.contact||r.fromEmail||'',
+                       status:'active', fromUid:r.fromUid||null};
+  friends.push(myNewFriend);
+  friendReqs = friendReqs.filter(x => x.id !== id);
+  persist();        // saves my updated friends list to Firestore immediately
+  renderFriends();
+  showToast('✅ ' + r.from + ' added as a friend!');
+
+  if(!u?.uid || !window._fb) return;
+  try {
+    const {db, doc, setDoc, getDoc, collection, addDoc, deleteDoc} = window._fb;
+
+    // 2. Delete the processed request from my sub-collection
+    if(r.firestoreDocId){
       await deleteDoc(doc(db,'users',u.uid,'friendRequests',r.firestoreDocId));
-      // Also notify sender that we accepted (write to their notifications)
-      if(r.fromUid){
-        await addDoc(collection(db,'users',r.fromUid,'notifications'),{
-          type:'friend_accepted', fromName:u.name, fromEmail:u.email,
-          fromPicture:u.picture||'', at:Date.now()
+    }
+
+    // 3. Write ME as an active friend into the SENDER's Firestore document
+    //    so they see me as active without needing to accept anything
+    if(r.fromUid){
+      const senderSnap = await getDoc(doc(db,'users',r.fromUid));
+      const senderData = senderSnap.exists() ? senderSnap.data() : {};
+      const senderFriends = senderData.friends || [];
+
+      // Check if they already have me
+      const alreadyThere = senderFriends.some(f =>
+        String(f.fromUid) === String(u.uid) || f.contact === u.email
+      );
+      if(!alreadyThere){
+        senderFriends.push({
+          id: uid(), name: u.name, contact: u.email||'',
+          status: 'active', fromUid: u.uid,
+          picture: u.picture||''
         });
+        await setDoc(doc(db,'users',r.fromUid), { friends: senderFriends }, {merge:true});
       }
-    } catch(e){ console.warn('acceptFriendReq Firestore:', e); }
-  }
+
+      // 4. Write a notification so sender's real-time listener fires and they see us
+      await addDoc(collection(db,'users',r.fromUid,'notifications'),{
+        type:'friend_accepted', fromUid:u.uid,
+        fromName:u.name, fromEmail:u.email,
+        fromPicture:u.picture||'', at:Date.now()
+      });
+    }
+  } catch(e){ console.warn('acceptFriendReq Firestore:', e); }
 }
 function declineFriendReq(id){friendReqs=friendReqs.filter(x=>x.id!==id);persistSpend();renderFriends();}
 function computeNet(){
@@ -3283,8 +3369,7 @@ function deleteFriend(id){
   persistSpend();renderFriends();
 }
 
-// Seed one demo request on first load
-if(friendReqs.length===0&&friends.length===0){friendReqs.push({id:uid(),from:'Rahul Sharma',contact:'rahul@example.com',date:todayKey()});save(XKEYS.friendReqs,friendReqs);}
+// (demo seed removed)
 
 // ── GROUPS ──────────────────────────────────
 function renderGroups(){
@@ -3325,25 +3410,55 @@ function renderGroups(){
 }
 
 function setGroupForm(v){showGroupForm=v;renderGroups();if(v)setTimeout(()=>document.getElementById('grp-name')?.focus(),50);}
-function createGroup(){
-  const name=(document.getElementById('grp-name').value||'').trim();
-  const emoji=(document.getElementById('grp-emoji').value||'').trim()||'🏕️';
-  if(!name)return;
-  const cbs=document.querySelectorAll('.grp-member-cb:checked');
-  const memberIds=['me',...Array.from(cbs).map(cb=>Number(cb.value))];
-  // Collect emails of all members for Firestore visibility
-  const u=window.currentUser||currentUser;
-  const memberEmails=[u?.email||''];
-  Array.from(cbs).forEach(cb=>{
-    const f=friends.find(x=>x.id===Number(cb.value));
-    if(f?.contact && /^[^@]+@[^@]+\.[^@]+$/.test(f.contact)) memberEmails.push(f.contact);
+async function createGroup(){
+  const name  = (document.getElementById('grp-name').value||'').trim();
+  const emoji = (document.getElementById('grp-emoji').value||'').trim() || '🏕️';
+  if(!name) return;
+
+  const cbs = document.querySelectorAll('.grp-member-cb:checked');
+  const selectedIds = Array.from(cbs).map(cb=>Number(cb.value));
+  const memberIds   = ['me', ...selectedIds];
+  const u = window.currentUser || currentUser;
+
+  // Build memberUids: map local friend IDs to their real Firebase UIDs
+  const memberUids  = [u?.uid||''];
+  const memberEmails= [u?.email||''];
+  selectedIds.forEach(fid=>{
+    const f = friends.find(x=>x.id===fid);
+    if(f){
+      if(f.fromUid)  memberUids.push(f.fromUid);
+      if(f.contact && /^[^@]+@[^@]+/.test(f.contact)) memberEmails.push(f.contact);
+    }
   });
-  const newGroup={id:uid(),name,emoji,members:memberIds,memberEmails,createdBy:u?.uid||'',createdAt:Date.now()};
+
+  const newGroup = {
+    id: uid(), name, emoji,
+    members: memberIds,
+    memberUids, memberEmails,
+    createdBy: u?.uid||'', createdAt: Date.now()
+  };
+
   groups.push(newGroup);
-  persistSpend();showGroupForm=false;renderGroups();
-  // Write to shared Firestore collection so members can see it
-  if(window._saveSharedGroup) window._saveSharedGroup(newGroup,[]);
-  showToast('Group created! Members will see shared expenses when they log in.');
+  persist(); showGroupForm=false; renderGroups();
+
+  // Push group into each member's Firestore document directly
+  if(window._fb){
+    const {db, doc, getDoc, setDoc} = window._fb;
+    for(const memberUid of memberUids){
+      if(memberUid === u?.uid) continue; // skip self
+      try{
+        const snap = await getDoc(doc(db,'users',memberUid));
+        const data = snap.exists() ? snap.data() : {};
+        const theirGroups = data.groups || [];
+        // Add group if not already there
+        if(!theirGroups.some(g=>String(g.id)===String(newGroup.id))){
+          theirGroups.push(newGroup);
+          await setDoc(doc(db,'users',memberUid), {groups:theirGroups}, {merge:true});
+        }
+      }catch(e){console.warn('createGroup push to member',memberUid,e);}
+    }
+  }
+  showToast('Group created! All members can now see it.');
 }
 function isGroupSettled(gid){
   return splits.filter(s=>s.groupId===gid).every(sp=>sp.members.every(m=>m.paid));
@@ -3402,9 +3517,104 @@ function renderGroupDetail(gid){
       </div>
       ${visibleBadge}
       <div class="card-title">Expenses</div>
+      <div class="card-title">Expenses</div>
       ${splitsHtml}
-      <button class="add-btn" onclick="openSplitModal(${gid})">+ Add expense &amp; split</button>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:4px">
+        <button class="add-btn" style="flex:1" onclick="openSplitModal(${gid})">+ Add expense &amp; split</button>
+        <button class="btn btn-ghost btn-sm" onclick="openEditGroupModal(${gid})" style="flex-shrink:0;white-space:nowrap">✏️ Edit Group</button>
+      </div>
     </div>`;
+}
+
+async function openEditGroupModal(gid){
+  const g = groups.find(x=>x.id===gid); if(!g)return;
+  document.getElementById('edit-group-modal')?.remove();
+  const activeFriends = friends.filter(f=>f.status==='active');
+  const currentMemberIds = g.members.filter(m=>m!=='me').map(m=>String(m));
+
+  const modal = document.createElement('div');
+  modal.className='modal-overlay'; modal.id='edit-group-modal';
+  modal.innerHTML=`<div class="modal" style="max-width:400px">
+    <button class="modal-close" onclick="document.getElementById('edit-group-modal').remove()">x</button>
+    <div class="modal-title">Edit Group</div>
+    <div class="input-row" style="margin-bottom:12px">
+      <input class="input" id="eg-emoji" value="${g.emoji}" style="width:56px;text-align:center;flex-shrink:0;margin-bottom:0">
+      <input class="input" id="eg-name" value="${g.name}" style="margin-bottom:0">
+    </div>
+    <div style="font-size:12px;color:var(--text3);margin-bottom:8px;font-weight:500">Members</div>
+    <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:16px">
+      <div style="display:flex;align-items:center;gap:8px;padding:8px;background:var(--warm);border-radius:var(--r2)">
+        <div class="friend-avatar" style="width:28px;height:28px;font-size:11px">
+          ${(window.currentUser?.name||'Me')[0].toUpperCase()}
+        </div>
+        <span style="font-size:13px;flex:1">${window.currentUser?.name||'Me'} (you)</span>
+        <span style="font-size:11px;color:var(--sage-dark);background:var(--sage-light);padding:2px 8px;border-radius:6px">Owner</span>
+      </div>
+      ${activeFriends.length===0
+        ?'<div style="font-size:12px;color:var(--text3)">Add friends first to include them in groups.</div>'
+        :activeFriends.map(f=>{
+          const checked = currentMemberIds.includes(String(f.id));
+          return `<label style="display:flex;align-items:center;gap:8px;padding:8px;border-radius:var(--r2);cursor:pointer;border:1.5px solid var(--warm2)">
+            <input type="checkbox" class="eg-member-cb" value="${f.id}" ${checked?'checked':''}>
+            <div class="friend-avatar" style="width:28px;height:28px;font-size:11px">${f.name[0].toUpperCase()}</div>
+            <span style="font-size:13px;flex:1">${f.name}</span>
+            ${checked?'<span style="font-size:10px;color:var(--sage-dark);background:var(--sage-light);padding:2px 6px;border-radius:5px">In group</span>':''}
+          </label>`;
+        }).join('')}
+    </div>
+    <div style="display:flex;gap:8px">
+      <button class="btn btn-primary" style="flex:1" onclick="saveGroupEdit(${gid})">Save Changes</button>
+      <button class="btn btn-ghost" onclick="document.getElementById('edit-group-modal').remove()">Cancel</button>
+    </div>
+  </div>`;
+  document.body.appendChild(modal);
+}
+
+async function saveGroupEdit(gid){
+  const g = groups.find(x=>x.id===gid); if(!g)return;
+  const name  = (document.getElementById('eg-name')?.value||'').trim() || g.name;
+  const emoji = (document.getElementById('eg-emoji')?.value||'').trim() || g.emoji;
+  const cbs   = document.querySelectorAll('.eg-member-cb:checked');
+  const selectedIds = Array.from(cbs).map(cb=>Number(cb.value));
+  const u = window.currentUser||currentUser;
+
+  // Build new member lists
+  const newMemberIds  = ['me', ...selectedIds];
+  const newMemberUids = [u?.uid||''];
+  const newMemberEmails=[u?.email||''];
+  selectedIds.forEach(fid=>{
+    const f=friends.find(x=>x.id===fid);
+    if(f){
+      if(f.fromUid) newMemberUids.push(f.fromUid);
+      if(f.contact) newMemberEmails.push(f.contact);
+    }
+  });
+
+  // Update the group
+  const idx = groups.findIndex(x=>x.id===gid);
+  if(idx>=0){
+    groups[idx] = {...groups[idx], name, emoji,
+      members:newMemberIds, memberUids:newMemberUids, memberEmails:newMemberEmails};
+  }
+  persist(); renderGroupDetail(gid);
+  document.getElementById('edit-group-modal')?.remove();
+
+  // Push updated group to all (new) member docs
+  if(window._fb){
+    const {db, doc, getDoc, setDoc} = window._fb;
+    const updatedGroup = groups[groups.findIndex(x=>x.id===gid)];
+    for(const memberUid of newMemberUids){
+      if(memberUid===u?.uid) continue;
+      try{
+        const snap = await getDoc(doc(db,'users',memberUid));
+        const data = snap.exists() ? snap.data() : {};
+        const theirGroups = (data.groups||[]).filter(g=>String(g.id)!==String(gid));
+        theirGroups.push(updatedGroup);
+        await setDoc(doc(db,'users',memberUid),{groups:theirGroups},{merge:true});
+      }catch(e){console.warn('saveGroupEdit push',memberUid,e);}
+    }
+  }
+  showToast('Group updated! All members will see the changes.');
 }
 
 function toggleExpense(key,bodyId){
@@ -3492,11 +3702,25 @@ function addSplit(gid){
   }
   const newSplit={id:uid(),groupId:gid,desc,totalAmount:total,paidBy,date:todayKey(),members,splitType:type};
   splits.push(newSplit);
-  persistSpend();closeSplitModal();renderGroupDetail(gid);
-  // Sync updated group splits to shared Firestore so all members see it
-  const grp=groups.find(x=>x.id===gid);
-  if(grp && window._saveSharedGroup){
-    window._saveSharedGroup(grp, splits.filter(s=>s.groupId===gid));
+  persist(); closeSplitModal(); renderGroupDetail(gid);
+
+  // Push updated splits to every group member's Firestore document
+  const grp = groups.find(x=>x.id===gid);
+  if(grp && window._fb){
+    const {db, doc, getDoc, setDoc} = window._fb;
+    const u = window.currentUser||currentUser;
+    const groupSplits = splits.filter(s=>s.groupId===gid);
+    const memberUids  = grp.memberUids || [];
+    for(const memberUid of memberUids){
+      if(memberUid===u?.uid) continue;
+      try{
+        const snap = await getDoc(doc(db,'users',memberUid));
+        const data = snap.exists() ? snap.data() : {};
+        // Replace or add splits for this group
+        const otherSplits = (data.splits||[]).filter(s=>String(s.groupId)!==String(gid));
+        await setDoc(doc(db,'users',memberUid),{splits:[...otherSplits,...groupSplits]},{merge:true});
+      }catch(e){console.warn('addSplit push to member',memberUid,e);}
+    }
   }
 }
 
@@ -4911,20 +5135,43 @@ if (window.matchMedia('(display-mode: standalone)').matches ||
     ptrText.textContent = 'Refreshing...';
 
     try {
-      const loader = window._loadUserData;
-      if(loader && typeof loader === 'function'){
-        await loader();
+      // Wait up to 5s for Firebase module to be ready
+      let waited = 0;
+      while((!window._fb || !window.currentUser) && waited < 5000){
+        await new Promise(r=>setTimeout(r,100));
+        waited += 100;
+      }
+
+      if(!window._fb || !window.currentUser || !window.currentUser.uid){
+        // Not logged in — just re-render from memory
         if(window.renderPage && window.currentPage) window.renderPage(window.currentPage);
         if(window.renderHome) window.renderHome();
-        ptrText.textContent = '✓ Up to date';
+        ptrText.textContent = '✓ Done';
         spinner.classList.remove('spinning');
-        setTimeout(hideIndicator, 1000);
-      } else {
-        hideIndicator();
+        setTimeout(hideIndicator, 800);
+        isRefreshing = false;
+        return;
       }
+
+      // Directly fetch from Firestore without restarting the listener
+      const {db, doc, getDoc} = window._fb;
+      const snap = await getDoc(doc(db, 'users', window.currentUser.uid));
+      if(snap.exists() && window._applySync){
+        window._applySync(snap.data());
+      }
+      if(window.renderPage && window.currentPage) window.renderPage(window.currentPage);
+      if(window.renderHome) window.renderHome();
+      ptrText.textContent = '✓ Up to date';
+      spinner.classList.remove('spinning');
+      setTimeout(hideIndicator, 1000);
     } catch(e){
-      ptrText.textContent = 'Refresh failed';
-      setTimeout(hideIndicator, 1500);
+      console.warn('PTR error:', e.message);
+      // On error just re-render from memory — don't show "failed"
+      if(window.renderPage && window.currentPage) window.renderPage(window.currentPage);
+      if(window.renderHome) window.renderHome();
+      ptrText.textContent = '✓ Done';
+      spinner.classList.remove('spinning');
+      setTimeout(hideIndicator, 800);
     }
     isRefreshing = false;
   }
