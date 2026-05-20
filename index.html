@@ -169,8 +169,23 @@ window._listenFriendRequests = function(uid) {
               firestoreDocId: change.doc.id
             }];
             friendReqs = _friendReqs;
-            if (window.renderPage && window.currentPage === 'spending') window.renderPage('spending');
-            window.showToast && window.showToast('📬 New friend request from ' + r.fromName + '!');
+            // Save to localStorage so it survives page refresh
+            try{ localStorage.setItem('lf3_friend_reqs', JSON.stringify(friendReqs)); }catch{}
+            // Re-render regardless of which page is open
+            if (window.renderPage) window.renderPage(window.currentPage || 'home');
+            if (window.renderHome) window.renderHome();
+            // Show a tappable toast that navigates to Friends tab
+            if(window.showToast) window.showToast('📬 ' + r.fromName + ' sent you a friend request! Tap to view.');
+            // Create a clickable banner if not already there
+            const existingBanner = document.getElementById('friend-req-banner');
+            if(!existingBanner){
+              const banner = document.createElement('div');
+              banner.id = 'friend-req-banner';
+              banner.style.cssText = 'position:fixed;top:0;left:50%;transform:translateX(-50%);background:#3D5C42;color:white;border-radius:0 0 14px 14px;padding:10px 20px;font-size:13px;font-weight:500;z-index:400;cursor:pointer;box-shadow:0 4px 16px rgba(0,0,0,.2);display:flex;align-items:center;gap:10px;max-width:380px;width:90%';
+              banner.innerHTML = '<span>📬 Friend request from <strong>' + r.fromName + '</strong></span><button style="background:white;color:#3D5C42;border:none;border-radius:6px;padding:4px 12px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit" onclick="navToSpend('friends',document.getElementById('nav-sub-friends'));document.getElementById('friend-req-banner')?.remove()">View</button><button style="background:none;border:none;color:rgba(255,255,255,.7);font-size:18px;cursor:pointer;padding:0" onclick="document.getElementById('friend-req-banner')?.remove()">×</button>';
+              document.body.appendChild(banner);
+              setTimeout(()=>document.getElementById('friend-req-banner')?.remove(), 8000);
+            }
           }
         }
       }
@@ -2324,14 +2339,49 @@ function renderFriends(){
   if(ffEl)ffEl.innerHTML=`<button class="add-btn" onclick="openInviteModal()">+ Add friend via Link or QR</button>`;
 
   const frEl=document.getElementById('friend-requests-list');
-  if(frEl)frEl.innerHTML=friendReqs.length===0
-    ?'<div class="empty"><div class="empty-icon">📬</div>No pending requests</div>'
-    :friendReqs.map(r=>{
-      const avatar=r.fromPicture
-        ?`<img src="${r.fromPicture}" class="user-avatar" style="width:36px;height:36px">`
-        :`<div class="friend-avatar">${(r.from||'?')[0].toUpperCase()}</div>`;
-      return `<div class="req-card">${avatar}<div class="friend-info"><div class="friend-name">${r.from}</div><div class="friend-contact">${r.contact||''}</div></div><button class="btn btn-primary btn-sm" onclick="acceptFriendReq(${r.id})">Accept</button><button class="btn btn-ghost btn-sm" onclick="declineFriendReq(${r.id})">Decline</button></div>`;
-    }).join('');
+  if(frEl){
+    // Show badge count on Friends nav sub-item
+    const navFriends=document.getElementById('nav-sub-friends');
+    if(navFriends){
+      const badge=navFriends.querySelector('.req-badge');
+      if(friendReqs.length>0){
+        if(!badge){
+          const b=document.createElement('span');
+          b.className='req-badge';
+          b.style.cssText='background:var(--red);color:white;border-radius:10px;padding:1px 6px;font-size:10px;font-weight:700;margin-left:auto';
+          b.textContent=friendReqs.length;
+          navFriends.appendChild(b);
+        } else {
+          badge.textContent=friendReqs.length;
+        }
+      } else if(badge){
+        badge.remove();
+      }
+    }
+
+    frEl.innerHTML=friendReqs.length===0
+      ?`<div class="empty" style="padding:16px 0">
+          <div style="font-size:28px;margin-bottom:6px">📬</div>
+          <div style="font-size:13px;color:var(--text3)">No pending friend requests</div>
+        </div>`
+      :friendReqs.map(r=>{
+          const avatar=r.fromPicture
+            ?`<img src="${r.fromPicture}" class="user-avatar" style="width:38px;height:38px;border-radius:50%;flex-shrink:0">`
+            :`<div class="friend-avatar" style="width:38px;height:38px;font-size:15px;flex-shrink:0">${(r.from||'?')[0].toUpperCase()}</div>`;
+          const when=r.date?new Date(r.date).toLocaleDateString('en-IN',{day:'numeric',month:'short'}):'';
+          return `<div class="req-card" style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--warm2)">
+            ${avatar}
+            <div style="flex:1;min-width:0">
+              <div style="font-size:14px;font-weight:500;color:var(--text)">${r.from||'Unknown'}</div>
+              <div style="font-size:11px;color:var(--text3)">${r.contact||''}${when?' · '+when:''}</div>
+            </div>
+            <div style="display:flex;gap:6px;flex-shrink:0">
+              <button class="btn btn-primary btn-sm" onclick="acceptFriendReq('${r.id}')">✓ Accept</button>
+              <button class="btn btn-ghost btn-sm" onclick="declineFriendReq('${r.id}')">✕</button>
+            </div>
+          </div>`;
+        }).join('');
+  }
 }
 
 function setFriendForm(v){showFriendForm=v;renderFriends();}
@@ -3287,7 +3337,7 @@ function showToast(msg){
   setTimeout(()=>{t.style.opacity='0';setTimeout(()=>t.remove(),400);},3000);
 }
 async function acceptFriendReq(id){
-  const r = friendReqs.find(x => x.id === id);
+  const r = friendReqs.find(x => String(x.id) === String(id));
   if(!r) return;
   const u = window.currentUser || currentUser;
 
@@ -3338,7 +3388,11 @@ async function acceptFriendReq(id){
     }
   } catch(e){ console.warn('acceptFriendReq Firestore:', e); }
 }
-function declineFriendReq(id){friendReqs=friendReqs.filter(x=>x.id!==id);persistSpend();renderFriends();}
+function declineFriendReq(id){
+  friendReqs=friendReqs.filter(x=>String(x.id)!==String(id));
+  _friendReqs=friendReqs;
+  persist(); renderFriends();
+}
 function computeNet(){
   const net={};
   splits.forEach(sp=>{
