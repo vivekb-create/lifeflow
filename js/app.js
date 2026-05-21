@@ -313,8 +313,6 @@ let todoCat       = 'General';
 let editingTodoId = null;
 let selectedPriority = 'low';
 let dragSrcId     = null;
-let sharedTodoLists = [];
-let todoCategories = ['General','Home','Work','Shopping','Personal'];
 
 function renderTodoCatBar(){
   const catBar=document.getElementById('todo-cat-bar');
@@ -633,7 +631,6 @@ function unshareList(shareId){
 const XKEYS={customCats:'lf3_custom_cats',friends:'lf3_friends',friendReqs:'lf3_friend_reqs',groups:'lf3_groups',splits:'lf3_splits'};
 const BUILTIN_CATS={Food:{emoji:'🍽️',color:'#6B8F71',bg:'#EAF0EB'},Travel:{emoji:'🚗',color:'#B8845A',bg:'#F5EAE0'},Shopping:{emoji:'🛍️',color:'#5A78B8',bg:'#E5EAF5'},Health:{emoji:'💊',color:'#B85A4A',bg:'#F5E8E5'},Bills:{emoji:'📄',color:'#8A6BC4',bg:'#EDE5F5'},Entertainment:{emoji:'🎬',color:'#5A9898',bg:'#E5F0F0'},Other:{emoji:'📦',color:'#9C9C98',bg:'#F0F0F0'}};
 let _customCats=load(XKEYS.customCats,[]);
-let sharedExpenseLists = load('lf3_shared_expense_lists', []); // [{id,name,emoji,memberIds,memberUids,expenses:[]}]
 let _friends=load(XKEYS.friends,[]);
 let _friendReqs=load(XKEYS.friendReqs,[]);
 let _groups=load(XKEYS.groups,[]);
@@ -2546,9 +2543,6 @@ async function addSplit(gid){
 // ════════════════════════════════════════════════════════════════════════════
 
 // ── State ──────────────────────────────────────────────────────────────────
-let myUpiId       = load('lf3_my_upi', '');
-let friendUpiIds  = load('lf3_friend_upi_ids', {});  // { friendId: upiId }
-let paymentReqs   = load('lf3_payment_reqs', []);    // [{id,friendId,amount,sentAt,status,upiRef}]
 let openSettleId  = null;  // which friend card is expanded
 
 const UPI_COLORS = ['#4285F4','#5f259f','#002970','#3D5C42','#B8845A','#B85A4A'];
@@ -3020,8 +3014,6 @@ function settleUp(friendId){ markFullySettled(friendId); }
 // ═══════════════════════════════════════════════════════════════════════════
 
 // ── State ──────────────────────────────────────────────────────────────────
-let journalEntries    = load('lf3_journal', []);
-let journalPin        = load('lf3_jpin', null);       // hashed PIN or null
 let journalUnlocked   = false;
 let journalBiometric  = false;
 let currentEntryId    = null;
