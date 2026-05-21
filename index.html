@@ -178,6 +178,7 @@ window._processPendingFriendReqs = function(pendingReqs) {
       newFound = true;
       try{ localStorage.setItem('lf3_friend_reqs', JSON.stringify(friendReqs)); }catch{}
       if (window.showToast) window.showToast('📬 ' + (r.fromName||'Someone') + ' sent you a friend request!');
+      if (window.notifyFriendRequest) window.notifyFriendRequest(r.fromName||'Someone');
       if (!document.getElementById('friend-req-banner')) {
         const b = document.createElement('div');
         b.id = 'friend-req-banner';
@@ -1057,6 +1058,71 @@ onAuthStateChanged(auth, async (user) => {
   .shared-expense-row:last-child{border-bottom:none;}
   .shared-expense-who{font-size:10px;color:white;background:var(--sage);
     border-radius:8px;padding:1px 7px;white-space:nowrap;}
+
+  /* ══ NOTIFICATIONS + REMINDERS ══════════════════════════════════════════ */
+  /* Bell button */
+  .notif-btn{position:relative;background:none;border:1.5px solid var(--warm3);
+    border-radius:8px;padding:4px 9px;font-size:16px;cursor:pointer;color:var(--text3);
+    transition:all .2s;line-height:1;}
+  .notif-btn:hover{background:var(--warm2);color:var(--sage-dark);}
+  .notif-badge{position:absolute;top:-5px;right:-5px;background:var(--red);color:white;
+    border-radius:50%;width:16px;height:16px;font-size:9px;font-weight:700;
+    display:flex;align-items:center;justify-content:center;border:2px solid var(--card);}
+
+  /* Notification drawer */
+  .notif-drawer{position:fixed;top:0;right:0;width:360px;max-width:100vw;height:100vh;
+    background:var(--card);box-shadow:-4px 0 24px rgba(0,0,0,.12);z-index:300;
+    transform:translateX(100%);transition:transform .3s cubic-bezier(.4,0,.2,1);
+    display:flex;flex-direction:column;}
+  .notif-drawer.open{transform:translateX(0);}
+  .notif-drawer-overlay{position:fixed;inset:0;background:rgba(0,0,0,.3);z-index:299;
+    display:none;}
+  .notif-drawer-overlay.show{display:block;}
+  .notif-drawer-head{display:flex;align-items:center;padding:18px 20px;
+    border-bottom:1px solid var(--warm2);gap:12px;}
+  .notif-drawer-title{font-family:'Cormorant Garamond',serif;font-size:20px;
+    color:var(--sage-dark);flex:1;}
+  .notif-mark-all{font-size:11px;color:var(--sage);cursor:pointer;text-decoration:underline;
+    background:none;border:none;font-family:'DM Sans',sans-serif;}
+  .notif-tabs{display:flex;border-bottom:1px solid var(--warm2);}
+  .notif-tab{flex:1;padding:10px;font-size:12px;font-weight:500;cursor:pointer;
+    border:none;background:none;font-family:'DM Sans',sans-serif;color:var(--text3);
+    border-bottom:2px solid transparent;transition:all .15s;}
+  .notif-tab.active{color:var(--sage-dark);border-bottom-color:var(--sage);}
+  .notif-body{flex:1;overflow-y:auto;padding:0;}
+  .notif-item{display:flex;align-items:flex-start;gap:10px;padding:14px 20px;
+    border-bottom:1px solid var(--warm2);cursor:pointer;transition:background .15s;}
+  .notif-item:hover{background:var(--warm);}
+  .notif-item.unread{background:var(--sage-light);}
+  .notif-item.unread:hover{background:var(--sage-light);}
+  .notif-icon{width:36px;height:36px;border-radius:50%;display:flex;align-items:center;
+    justify-content:center;font-size:16px;flex-shrink:0;}
+  .notif-content{flex:1;min-width:0;}
+  .notif-title{font-size:13px;font-weight:500;color:var(--text);margin-bottom:2px;}
+  .notif-body-text{font-size:11px;color:var(--text3);line-height:1.4;}
+  .notif-time{font-size:10px;color:var(--text3);white-space:nowrap;margin-top:2px;}
+  .notif-unread-dot{width:8px;height:8px;border-radius:50%;background:var(--sage);
+    flex-shrink:0;margin-top:4px;}
+  .notif-empty{text-align:center;padding:48px 20px;color:var(--text3);}
+  .notif-empty-icon{font-size:40px;margin-bottom:10px;}
+
+  /* Reminder & Schedule cards */
+  .reminder-card{background:var(--warm);border:1px solid var(--warm2);border-radius:var(--r2);
+    padding:14px;margin-bottom:10px;display:flex;align-items:center;gap:10px;}
+  .reminder-card-info{flex:1;min-width:0;}
+  .reminder-card-title{font-size:13px;font-weight:500;color:var(--text);}
+  .reminder-card-time{font-size:11px;color:var(--text3);margin-top:2px;}
+  .reminder-card-next{font-size:10px;background:var(--sage-light);color:var(--sage-dark);
+    padding:2px 7px;border-radius:6px;display:inline-block;margin-top:3px;}
+  .quick-time-chips{display:flex;gap:6px;flex-wrap:wrap;margin:8px 0;}
+  .quick-chip{padding:5px 12px;border-radius:14px;font-size:12px;font-weight:500;
+    border:1.5px solid var(--warm3);background:var(--warm2);color:var(--text2);
+    cursor:pointer;transition:all .15s;}
+  .quick-chip:hover,.quick-chip.sel{background:var(--sage);color:white;border-color:var(--sage);}
+  .sched-row{display:flex;align-items:center;gap:8px;margin-bottom:6px;}
+  .day-checkbox{display:flex;align-items:center;gap:4px;font-size:12px;cursor:pointer;
+    padding:4px 8px;border:1.5px solid var(--warm3);border-radius:8px;user-select:none;}
+  .day-checkbox.sel{background:var(--sage);color:white;border-color:var(--sage);}
 </style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 </head>
@@ -1130,6 +1196,9 @@ onAuthStateChanged(auth, async (user) => {
       </div>
       <div class="nav-section">Personal</div>
       <button class="nav-item" id="nav-journal" onclick="navigate('journal',this)"><span class="nav-icon">📔</span> Journal</button>
+      <div class="nav-section">Manage</div>
+      <button class="nav-item" id="nav-reminders" onclick="navigate('reminders',this)"><span class="nav-icon">⏰</span> Reminders</button>
+      <button class="nav-item" id="nav-schedules" onclick="navigate('schedules',this)"><span class="nav-icon">📅</span> Schedules</button>
     </nav>
 
     <div class="sidebar-footer">
@@ -1150,6 +1219,9 @@ onAuthStateChanged(auth, async (user) => {
             style="background:none;border:1.5px solid var(--warm3);border-radius:8px;padding:4px 9px;font-size:14px;cursor:pointer;color:var(--text3);transition:all .2s;line-height:1"
             onmouseover="this.style.background='var(--warm2)';this.style.color='var(--sage-dark)'"
             onmouseout="this.style.background='none';this.style.color='var(--text3)'">↻</button>
+          <button class="notif-btn" id="notif-btn" onclick="openNotifDrawer()" title="Notifications">
+            🔔<span class="notif-badge" id="notif-badge" style="display:none">0</span>
+          </button>
         </div>
       </div>
     </div>
@@ -1410,9 +1482,57 @@ onAuthStateChanged(auth, async (user) => {
         </div>
       </div>
 
+      <!-- REMINDERS PAGE -->
+      <div class="page" id="page-reminders">
+        <div class="section-head">
+          <div class="section-title">Reminders</div>
+          <button class="btn btn-primary btn-sm" onclick="openReminderForm()">+ Add Reminder</button>
+        </div>
+        <div class="card" id="reminders-list-card">
+          <div id="reminders-list"></div>
+        </div>
+        <div id="reminder-form-area"></div>
+      </div>
+
+      <!-- SCHEDULES PAGE -->
+      <div class="page" id="page-schedules">
+        <div class="section-head">
+          <div class="section-title">Notification Schedules</div>
+          <button class="btn btn-primary btn-sm" onclick="openScheduleForm()">+ Add Schedule</button>
+        </div>
+        <div style="font-size:13px;color:var(--text3);margin-bottom:16px;background:var(--sage-light);border-radius:var(--r2);padding:10px 14px;">
+          📅 Schedules send you a notification at a regular time — e.g. every morning at 8 AM to review your day.
+        </div>
+        <div class="card" id="schedules-list-card">
+          <div id="schedules-list"></div>
+        </div>
+        <div id="schedule-form-area"></div>
+      </div>
+
     </div>
   </main>
 </div>
+  <!-- NOTIFICATION DRAWER OVERLAY -->
+  <div class="notif-drawer-overlay" id="notif-overlay" onclick="closeNotifDrawer()"></div>
+
+  <!-- NOTIFICATION DRAWER -->
+  <div class="notif-drawer" id="notif-drawer">
+    <div class="notif-drawer-head">
+      <span style="font-size:20px">🔔</span>
+      <div class="notif-drawer-title">Notifications</div>
+      <button class="notif-mark-all" onclick="markAllNotifsRead()">Mark all read</button>
+      <button class="btn btn-ghost btn-sm" onclick="closeNotifDrawer()">✕</button>
+    </div>
+    <div class="notif-tabs">
+      <button class="notif-tab active" id="ntab-all" onclick="switchNotifTab('all')">All</button>
+      <button class="notif-tab" id="ntab-unread" onclick="switchNotifTab('unread')">Unread</button>
+      <button class="notif-tab" id="ntab-social" onclick="switchNotifTab('social')">Social</button>
+      <button class="notif-tab" id="ntab-reminders" onclick="switchNotifTab('reminders')">Reminders</button>
+    </div>
+    <div class="notif-body" id="notif-list"></div>
+  </div>
+
+
 
 <script>
 // ─────────────────────────────────────────────
@@ -1507,6 +1627,7 @@ function launchApp() {
 
   setTimeout(handleInviteToken, 800);
   setTimeout(startPaymentReqListener, 1200);
+  setTimeout(initNotifications, 1500);   // start reminders + request permission
 }
 
 function renderSidebarUser() {
@@ -1724,6 +1845,8 @@ function renderPage(p){
   if(p==='todos')renderTodos();
   if(p==='spending')renderSpending();
   if(p==='journal')renderJournalPage();
+  if(p==='reminders')renderRemindersPage();
+  if(p==='schedules')renderSchedulesPage();
 }
 function renderAll(){renderPage(currentPage);}
 
@@ -3745,6 +3868,8 @@ async function addSharedExpense(listId){
   persist();
   openSharedListDetail(listId);
   showToast('Expense added!');
+  // Notify locally (the member who added it; others get it via _applySync)
+  if(typeof notifySharedListExpense === 'function') notifySharedListExpense(lst.name, amt, 'You');
 
   // Push updated list to all member docs
   if(window._fb){
@@ -3773,6 +3898,518 @@ async function deleteSharedExpense(listId, expId){
   openSharedListDetail(listId);
 }
 
+
+// ══════════════════════════════════════════════════════════════════════════════
+// NOTIFICATIONS, REMINDERS & SCHEDULES
+// ══════════════════════════════════════════════════════════════════════════════
+
+// ── State ──────────────────────────────────────────────────────────────────
+let notifications  = JSON.parse(localStorage.getItem('lf3_notifs')||'[]');
+let reminders      = JSON.parse(localStorage.getItem('lf3_reminders')||'[]');
+let schedules      = JSON.parse(localStorage.getItem('lf3_schedules')||'[]');
+let notifTab       = 'all';
+let activeRemTimers= {};  // timerId by reminder id
+
+function saveNotifs(){  localStorage.setItem('lf3_notifs',    JSON.stringify(notifications)); }
+function saveReminders(){ localStorage.setItem('lf3_reminders', JSON.stringify(reminders)); }
+function saveSchedules(){ localStorage.setItem('lf3_schedules', JSON.stringify(schedules)); }
+
+// ── Push a notification into the in-app list ────────────────────────────────
+function pushNotif(title, body, type, icon){
+  const n = { id:uid(), title, body, type:type||'system', icon:icon||'🔔',
+               at:Date.now(), read:false };
+  notifications.unshift(n);
+  if(notifications.length > 100) notifications = notifications.slice(0,100);
+  saveNotifs();
+  updateNotifBadge();
+  // Fire browser notification if permission granted
+  fireBrowserNotif(title, body, icon||'🔔');
+}
+
+// ── Badge count ─────────────────────────────────────────────────────────────
+function updateNotifBadge(){
+  const unread = notifications.filter(n=>!n.read).length;
+  const badge  = document.getElementById('notif-badge');
+  const btn    = document.getElementById('notif-btn');
+  if(!badge) return;
+  if(unread > 0){
+    badge.style.display = 'flex';
+    badge.textContent   = unread > 9 ? '9+' : String(unread);
+    if(btn) btn.style.color = 'var(--sage-dark)';
+  } else {
+    badge.style.display = 'none';
+    if(btn) btn.style.color = '';
+  }
+}
+
+// ── Drawer open/close ───────────────────────────────────────────────────────
+function openNotifDrawer(){
+  document.getElementById('notif-drawer')?.classList.add('open');
+  document.getElementById('notif-overlay')?.classList.add('show');
+  renderNotifList();
+}
+function closeNotifDrawer(){
+  document.getElementById('notif-drawer')?.classList.remove('open');
+  document.getElementById('notif-overlay')?.classList.remove('show');
+}
+
+function switchNotifTab(tab){
+  notifTab = tab;
+  ['all','unread','social','reminders'].forEach(t=>{
+    document.getElementById('ntab-'+t)?.classList.toggle('active', t===tab);
+  });
+  renderNotifList();
+}
+
+function markAllNotifsRead(){
+  notifications.forEach(n=>n.read=true);
+  saveNotifs(); updateNotifBadge(); renderNotifList();
+}
+
+// ── Render notification list ─────────────────────────────────────────────────
+function renderNotifList(){
+  const el = document.getElementById('notif-list');
+  if(!el) return;
+
+  let list = [...notifications];
+  if(notifTab==='unread')   list = list.filter(n=>!n.read);
+  if(notifTab==='social')   list = list.filter(n=>['friend','group','payment'].includes(n.type));
+  if(notifTab==='reminders')list = list.filter(n=>['reminder','schedule'].includes(n.type));
+
+  if(list.length===0){
+    el.innerHTML=`<div class="notif-empty">
+      <div class="notif-empty-icon">🔔</div>
+      <div style="font-size:14px;font-weight:500;color:var(--text2);margin-bottom:4px">All clear!</div>
+      <div style="font-size:12px">No notifications here.</div>
+    </div>`;
+    return;
+  }
+
+  const bgColors={friend:'#EAF0EB',group:'#EAF0EB',payment:'#E5EAF5',
+                  reminder:'#FFF8E5',schedule:'#FFF8E5',system:'#F0F0F0'};
+  el.innerHTML = list.map(n=>{
+    const bg   = bgColors[n.type]||'#F5F5F5';
+    const time = formatNotifTime(n.at);
+    return `<div class="notif-item ${n.read?'':'unread'}" onclick="readNotif('${n.id}')">
+      <div class="notif-icon" style="background:${bg}">${n.icon}</div>
+      <div class="notif-content">
+        <div class="notif-title">${n.title}</div>
+        <div class="notif-body-text">${n.body}</div>
+        <div class="notif-time">${time}</div>
+      </div>
+      ${!n.read?'<div class="notif-unread-dot"></div>':''}
+    </div>`;
+  }).join('');
+}
+
+function readNotif(id){
+  const n = notifications.find(x=>x.id===id);
+  if(n){ n.read=true; saveNotifs(); updateNotifBadge(); renderNotifList(); }
+}
+
+function formatNotifTime(ts){
+  const diff = Date.now()-ts;
+  if(diff<60000) return 'Just now';
+  if(diff<3600000) return Math.floor(diff/60000)+'m ago';
+  if(diff<86400000) return Math.floor(diff/3600000)+'h ago';
+  return new Date(ts).toLocaleDateString('en-IN',{day:'numeric',month:'short'});
+}
+
+// ── Browser Notification permission ─────────────────────────────────────────
+function requestNotifPermission(){
+  if(!('Notification' in window)) return;
+  if(Notification.permission==='default'){
+    Notification.requestPermission().then(p=>{
+      if(p==='granted') pushNotif('Notifications enabled','You will now receive LifeFlow alerts.','system','✅');
+    });
+  }
+}
+
+function fireBrowserNotif(title, body, icon){
+  if(!('Notification' in window)) return;
+  if(Notification.permission!=='granted') return;
+  try{
+    // Use Service Worker showNotification when available
+    // This is required for background notifications on mobile PWA
+    if('serviceWorker' in navigator && navigator.serviceWorker.controller){
+      navigator.serviceWorker.ready.then(reg => {
+        reg.showNotification('LifeFlow — ' + title, {
+          body,
+          icon:  '/lifeflow/icons/icon-192.png',
+          badge: '/lifeflow/icons/icon-96.png',
+          tag:   'lifeflow-notif',
+          data:  { url: window.location.href },
+          vibrate: [200, 100, 200],
+          requireInteraction: false
+        });
+      }).catch(()=>{
+        // SW not ready — fall back to direct Notification
+        new Notification('LifeFlow — '+title, { body, icon:'/lifeflow/icons/icon-192.png' });
+      });
+    } else {
+      // No SW — direct notification (works on desktop, foreground mobile)
+      const n = new Notification('LifeFlow — '+title,{
+        body, icon:'/lifeflow/icons/icon-192.png',
+        tag:'lifeflow-'+Date.now()
+      });
+      n.onclick = ()=>{ window.focus(); openNotifDrawer(); };
+      setTimeout(()=>n.close(), 8000);
+    }
+  }catch(e){ console.warn('Browser notif error:',e); }
+}
+
+// ── Hook into existing actions to push notifications ─────────────────────────
+function notifyFriendAccepted(name){
+  pushNotif(name+' accepted your request','You are now connected!','friend','👥');
+}
+function notifyFriendRequest(name){
+  pushNotif('Friend request from '+name,'Tap to view and accept','friend','📬');
+}
+function notifyGroupExpense(groupName, amount, addedBy){
+  pushNotif('New expense in '+groupName,addedBy+' added ₹'+fmt(amount),'group','🏕️');
+}
+function notifyPaymentReceived(name, amount){
+  pushNotif('Payment from '+name,'₹'+fmt(amount)+' marked as paid','payment','💸');
+}
+function notifySharedListExpense(listName, amount, addedBy){
+  pushNotif('New expense in '+listName,addedBy+' added ₹'+fmt(amount),'group','📋');
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// REMINDERS
+// ══════════════════════════════════════════════════════════════════════════════
+
+function renderRemindersPage(){
+  const el = document.getElementById('reminders-list');
+  if(!el) return;
+  if(reminders.length===0){
+    el.innerHTML=`<div class="empty"><div class="empty-icon">⏰</div>
+      <div>No reminders yet.</div><div style="font-size:12px;color:var(--text3);margin-top:4px">Add one to get notified at the right time.</div></div>`;
+    return;
+  }
+  el.innerHTML = reminders.map(r=>{
+    const nextStr = r.repeat==='once' ? formatNotifTime(r.nextAt||r.at)
+                  : 'Next: '+new Date(r.nextAt||r.at).toLocaleString('en-IN',{weekday:'short',hour:'2-digit',minute:'2-digit'});
+    return `<div class="reminder-card">
+      <span style="font-size:24px">${r.icon||'⏰'}</span>
+      <div class="reminder-card-info">
+        <div class="reminder-card-title">${r.title}</div>
+        <div class="reminder-card-time">${r.repeat==='once'?'One-time':'Repeating · '+r.repeatLabel}</div>
+        <div class="reminder-card-next">${nextStr}</div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:4px">
+        <button class="btn btn-ghost btn-sm" onclick="editReminder('${r.id}')">✏️</button>
+        <button class="btn btn-ghost btn-sm" onclick="deleteReminder('${r.id}')" style="color:var(--red)">✕</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function openReminderForm(existingId){
+  const existing = existingId ? reminders.find(r=>r.id===existingId) : null;
+  const now = new Date();
+  const defaultDate = now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0')+'-'+String(now.getDate()).padStart(2,'0');
+  const defaultTime = String(now.getHours()).padStart(2,'0')+':'+String(now.getMinutes()).padStart(2,'0');
+
+  const el = document.getElementById('reminder-form-area');
+  if(!el) return;
+  el.innerHTML = `<div class="card" style="margin-top:12px">
+    <div class="card-title">${existing?'Edit':'New'} Reminder</div>
+    <input class="input" id="rem-title" placeholder="Reminder title..." value="${existing?existing.title:''}">
+    <div style="margin-bottom:10px">
+      <div style="font-size:12px;color:var(--text3);margin-bottom:6px">Quick time</div>
+      <div class="quick-time-chips" id="rem-quick-chips">
+        ${[['in1m','In 1 minute'],['in1h','In 1 hour'],['in3h','In 3 hours'],
+           ['tonight','Tonight 8 PM'],['tomorrow','Tomorrow 8 AM'],['custom','Custom']
+          ].map(([v,l])=>`<button class="quick-chip" data-val="${v}" onclick="selectQuickTime(this,'${v}')">${l}</button>`).join('')}
+      </div>
+    </div>
+    <div id="rem-custom-time" style="display:none;margin-bottom:10px">
+      <div style="display:flex;gap:8px">
+        <div style="flex:1"><label style="font-size:12px;color:var(--text3)">Date</label>
+          <input class="input" id="rem-date" type="date" value="${existing?existing.dateStr||defaultDate:defaultDate}" style="margin-bottom:0"></div>
+        <div style="flex:1"><label style="font-size:12px;color:var(--text3)">Time</label>
+          <input class="input" id="rem-time" type="time" value="${existing?existing.timeStr||defaultTime:defaultTime}" style="margin-bottom:0"></div>
+      </div>
+    </div>
+    <div style="margin-bottom:10px">
+      <div style="font-size:12px;color:var(--text3);margin-bottom:6px">Repeat</div>
+      <select class="input" id="rem-repeat" style="margin-bottom:0">
+        <option value="once" ${!existing||existing.repeat==='once'?'selected':''}>One-time (no repeat)</option>
+        <option value="daily" ${existing?.repeat==='daily'?'selected':''}>Every day</option>
+        <option value="weekdays" ${existing?.repeat==='weekdays'?'selected':''}>Weekdays only</option>
+        <option value="weekly" ${existing?.repeat==='weekly'?'selected':''}>Every week</option>
+        <option value="hourly" ${existing?.repeat==='hourly'?'selected':''}>Every hour</option>
+      </select>
+    </div>
+    <div style="display:flex;gap:8px;margin-top:4px">
+      <button class="btn btn-primary" style="flex:1" onclick="saveReminder('${existingId||''}')">
+        ${existing?'Update':'Add'} Reminder</button>
+      <button class="btn btn-ghost" onclick="document.getElementById('reminder-form-area').innerHTML=''">Cancel</button>
+    </div>
+  </div>`;
+  // If editing with custom time, show the date/time picker
+  if(existing && existing.quickTime==='custom'){
+    selectQuickTime(null,'custom');
+  }
+}
+
+function selectQuickTime(btn, val){
+  document.querySelectorAll('.quick-chip').forEach(c=>c.classList.remove('sel'));
+  if(btn) btn.classList.add('sel');
+  else document.querySelector(`.quick-chip[data-val="${val}"]`)?.classList.add('sel');
+  const customDiv = document.getElementById('rem-custom-time');
+  if(customDiv) customDiv.style.display = val==='custom'?'block':'none';
+}
+
+function calcNextAt(quickTime, dateStr, timeStr, repeat){
+  const now = Date.now();
+  let target;
+  switch(quickTime){
+    case 'in1m':    target = now + 60*1000; break;
+    case 'in1h':    target = now + 3600*1000; break;
+    case 'in3h':    target = now + 3*3600*1000; break;
+    case 'tonight': { const d=new Date(); d.setHours(20,0,0,0); target=d.getTime()>now?d.getTime():d.getTime()+86400000; break; }
+    case 'tomorrow':{ const d=new Date(); d.setDate(d.getDate()+1); d.setHours(8,0,0,0); target=d.getTime(); break; }
+    default: {
+      const [y,m,day] = (dateStr||'').split('-').map(Number);
+      const [h,min]   = (timeStr||'00:00').split(':').map(Number);
+      const d = new Date(y,m-1,day,h,min,0,0);
+      target = d.getTime();
+    }
+  }
+  return target;
+}
+
+function saveReminder(existingId){
+  const title = (document.getElementById('rem-title')?.value||'').trim();
+  if(!title){ showToast('Please enter a reminder title.'); return; }
+  const selChip  = document.querySelector('.quick-chip.sel');
+  const quickTime= selChip ? selChip.dataset.val : 'custom';
+  const dateStr  = document.getElementById('rem-date')?.value || '';
+  const timeStr  = document.getElementById('rem-time')?.value || '08:00';
+  const repeat   = document.getElementById('rem-repeat')?.value || 'once';
+  const repeatLabels = {once:'',daily:'Daily',weekdays:'Weekdays',weekly:'Weekly',hourly:'Hourly'};
+  const nextAt   = calcNextAt(quickTime, dateStr, timeStr, repeat);
+
+  if(existingId){
+    const idx = reminders.findIndex(r=>r.id===existingId);
+    if(idx>=0) reminders[idx]={...reminders[idx],title,quickTime,dateStr,timeStr,repeat,
+      repeatLabel:repeatLabels[repeat], nextAt, icon:'⏰'};
+  } else {
+    reminders.push({id:String(uid()),title,quickTime,dateStr,timeStr,repeat,
+      repeatLabel:repeatLabels[repeat], nextAt, icon:'⏰', at:Date.now()});
+  }
+  saveReminders();
+  document.getElementById('reminder-form-area').innerHTML='';
+  renderRemindersPage();
+  scheduleReminderTimers();
+  showToast('⏰ Reminder saved!');
+}
+
+function editReminder(id){ openReminderForm(id); }
+
+function deleteReminder(id){
+  reminders = reminders.filter(r=>r.id!==id);
+  clearTimeout(activeRemTimers[id]);
+  delete activeRemTimers[id];
+  saveReminders(); renderRemindersPage();
+  showToast('Reminder deleted.');
+}
+
+// ── Schedule reminder timers ─────────────────────────────────────────────────
+function scheduleReminderTimers(){
+  reminders.forEach(r=>{
+    clearTimeout(activeRemTimers[r.id]);
+    const delay = (r.nextAt||0) - Date.now();
+    if(delay > 0 && delay < 24*3600*1000){ // only schedule within 24h
+      activeRemTimers[r.id] = setTimeout(()=>fireReminder(r), delay);
+    }
+  });
+}
+
+function fireReminder(r){
+  pushNotif('⏰ '+r.title, r.repeat==='once'?'Your reminder is due!'
+    :'Repeating reminder', 'reminder', '⏰');
+  // Reschedule if repeating
+  const intervals = {hourly:3600000, daily:86400000, weekly:7*86400000};
+  if(r.repeat!=='once' && intervals[r.repeat]){
+    r.nextAt = Date.now() + intervals[r.repeat];
+    saveReminders();
+    scheduleReminderTimers();
+  } else if(r.repeat==='weekdays'){
+    // Skip to next weekday
+    const d = new Date(); d.setDate(d.getDate()+1);
+    while(d.getDay()===0||d.getDay()===6) d.setDate(d.getDate()+1);
+    const [h,m] = (r.timeStr||'08:00').split(':').map(Number);
+    d.setHours(h,m,0,0); r.nextAt=d.getTime();
+    saveReminders(); scheduleReminderTimers();
+  } else {
+    // One-time — remove after firing
+    reminders = reminders.filter(x=>x.id!==r.id);
+    saveReminders();
+  }
+  renderRemindersPage();
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// SCHEDULES (regular daily/weekly notification times)
+// ══════════════════════════════════════════════════════════════════════════════
+
+const DAYS = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+
+function renderSchedulesPage(){
+  const el = document.getElementById('schedules-list');
+  if(!el) return;
+  if(schedules.length===0){
+    el.innerHTML=`<div class="empty"><div class="empty-icon">📅</div>
+      <div>No schedules yet.</div><div style="font-size:12px;color:var(--text3);margin-top:4px">Set up a daily check-in or weekly review notification.</div></div>`;
+    return;
+  }
+  el.innerHTML = schedules.map(s=>{
+    const dayNames = s.days.map(d=>DAYS[d]).join(', ');
+    return `<div class="reminder-card">
+      <span style="font-size:24px">${s.icon||'📅'}</span>
+      <div class="reminder-card-info">
+        <div class="reminder-card-title">${s.title}</div>
+        <div class="reminder-card-time">${s.time} · ${dayNames||'Every day'}</div>
+        <div class="reminder-card-next">Next: ${nextScheduleStr(s)}</div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:4px">
+        <button class="btn btn-ghost btn-sm" onclick="editSchedule('${s.id}')">✏️</button>
+        <button class="btn btn-ghost btn-sm" onclick="deleteSchedule('${s.id}')" style="color:var(--red)">✕</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function nextScheduleStr(s){
+  const now = new Date();
+  const [h,m] = s.time.split(':').map(Number);
+  for(let i=0;i<8;i++){
+    const d = new Date(now); d.setDate(d.getDate()+i); d.setHours(h,m,0,0);
+    if(d>now && s.days.includes(d.getDay())){
+      return d.toLocaleDateString('en-IN',{weekday:'short',day:'numeric',month:'short'})+' '+s.time;
+    }
+  }
+  return 'Scheduled';
+}
+
+function openScheduleForm(existingId){
+  const existing = existingId ? schedules.find(s=>s.id===existingId) : null;
+  const selDays  = existing ? existing.days : [1,2,3,4,5]; // Mon-Fri default
+
+  const el = document.getElementById('schedule-form-area');
+  if(!el) return;
+  el.innerHTML=`<div class="card" style="margin-top:12px">
+    <div class="card-title">${existing?'Edit':'New'} Schedule</div>
+    <input class="input" id="sch-title" placeholder="e.g. Morning check-in, Weekly review" value="${existing?existing.title:''}">
+    <div style="margin-bottom:10px">
+      <label style="font-size:12px;color:var(--text3);display:block;margin-bottom:4px">Time</label>
+      <input class="input" id="sch-time" type="time" value="${existing?existing.time:'08:00'}" style="margin-bottom:0">
+    </div>
+    <div style="margin-bottom:12px">
+      <div style="font-size:12px;color:var(--text3);margin-bottom:6px">Days</div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap">
+        ${DAYS.map((d,i)=>`<button class="day-checkbox ${selDays.includes(i)?'sel':''}" 
+          data-day="${i}" onclick="toggleDayChip(this)">${d}</button>`).join('')}
+      </div>
+    </div>
+    <div style="margin-bottom:10px">
+      <label style="font-size:12px;color:var(--text3);display:block;margin-bottom:4px">Quick presets</label>
+      <div class="quick-time-chips">
+        <button class="quick-chip" onclick="applySchedPreset('everyday','08:00')">Every day 8 AM</button>
+        <button class="quick-chip" onclick="applySchedPreset('weekdays','08:00')">Weekdays 8 AM</button>
+        <button class="quick-chip" onclick="applySchedPreset('weekdays','18:00')">Weekdays 6 PM</button>
+        <button class="quick-chip" onclick="applySchedPreset('weekend','09:00')">Weekends 9 AM</button>
+      </div>
+    </div>
+    <div style="display:flex;gap:8px;margin-top:4px">
+      <button class="btn btn-primary" style="flex:1" onclick="saveSchedule('${existingId||''}')">
+        ${existing?'Update':'Add'} Schedule</button>
+      <button class="btn btn-ghost" onclick="document.getElementById('schedule-form-area').innerHTML=''">Cancel</button>
+    </div>
+  </div>`;
+}
+
+function toggleDayChip(btn){
+  btn.classList.toggle('sel');
+}
+
+function applySchedPreset(type, time){
+  document.getElementById('sch-time').value = time;
+  const days = type==='everyday'?[0,1,2,3,4,5,6]:type==='weekdays'?[1,2,3,4,5]:[0,6];
+  document.querySelectorAll('.day-checkbox').forEach(b=>{
+    const d=parseInt(b.dataset.day);
+    b.classList.toggle('sel', days.includes(d));
+  });
+}
+
+function saveSchedule(existingId){
+  const title = (document.getElementById('sch-title')?.value||'').trim();
+  const time  = document.getElementById('sch-time')?.value||'08:00';
+  if(!title){ showToast('Please enter a title.'); return; }
+  const days  = [...document.querySelectorAll('.day-checkbox.sel')]
+                  .map(b=>parseInt(b.dataset.day));
+  if(!days.length){ showToast('Please select at least one day.'); return; }
+
+  if(existingId){
+    const idx=schedules.findIndex(s=>s.id===existingId);
+    if(idx>=0) schedules[idx]={...schedules[idx],title,time,days,icon:'📅'};
+  } else {
+    schedules.push({id:String(uid()),title,time,days,icon:'📅',at:Date.now()});
+  }
+  saveSchedules();
+  document.getElementById('schedule-form-area').innerHTML='';
+  renderSchedulesPage();
+  scheduleAllScheduleTimers();
+  showToast('📅 Schedule saved!');
+}
+
+function editSchedule(id){ openScheduleForm(id); }
+function deleteSchedule(id){
+  schedules=schedules.filter(s=>s.id!==id);
+  clearTimeout(activeRemTimers['sch_'+id]);
+  saveSchedules(); renderSchedulesPage();
+  showToast('Schedule deleted.');
+}
+
+// ── Schedule timers ──────────────────────────────────────────────────────────
+function scheduleAllScheduleTimers(){
+  schedules.forEach(s=>{
+    clearTimeout(activeRemTimers['sch_'+s.id]);
+    const delay = msUntilNext(s.time, s.days);
+    if(delay>0 && delay<24*3600000){
+      activeRemTimers['sch_'+s.id] = setTimeout(()=>fireSchedule(s), delay);
+    }
+  });
+}
+
+function msUntilNext(time, days){
+  const now = new Date();
+  const [h,m] = time.split(':').map(Number);
+  for(let i=0;i<8;i++){
+    const d=new Date(now); d.setDate(d.getDate()+i); d.setHours(h,m,0,0);
+    if(d>now && days.includes(d.getDay())) return d.getTime()-now.getTime();
+  }
+  return -1;
+}
+
+function fireSchedule(s){
+  pushNotif('📅 '+s.title,'Scheduled notification','schedule','📅');
+  // Re-schedule for next occurrence
+  scheduleAllScheduleTimers();
+}
+
+// ── Init: start timers + request permission on launch ──────────────────────
+function initNotifications(){
+  updateNotifBadge();
+  scheduleReminderTimers();
+  scheduleAllScheduleTimers();
+  // Ask for permission after a short delay (not immediately on load)
+  setTimeout(requestNotifPermission, 3000);
+}
+
 function showToast(msg){
   const t=document.createElement('div');
   t.style.cssText='position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#3D5C42;color:white;padding:10px 20px;border-radius:10px;font-size:13px;z-index:9999;box-shadow:0 4px 16px rgba(0,0,0,.2);transition:opacity .4s';
@@ -3790,9 +4427,10 @@ async function acceptFriendReq(id){
                        status:'active', fromUid:r.fromUid||null};
   friends.push(myNewFriend);
   friendReqs = friendReqs.filter(x => x.id !== id);
-  persist();        // saves my updated friends list to Firestore immediately
+  persist();
   renderFriends();
   showToast('✅ ' + r.from + ' added as a friend!');
+  pushNotif(r.from + ' is now your friend', 'Friend request accepted!', 'friend', '👥');
 
   if(!u?.uid || !window._fb) return;
   try {
@@ -4225,6 +4863,8 @@ async function addSplit(gid){
   const newSplit={id:uid(),groupId:gid,desc,totalAmount:total,paidBy,date:todayKey(),members,splitType:type};
   splits.push(newSplit);
   persist(); closeSplitModal(); renderGroupDetail(gid);
+  const grpName = groups.find(x=>x.id===gid)?.name || 'Group';
+  if(typeof notifyGroupExpense === 'function') notifyGroupExpense(grpName, total, 'You');
 
   // Push updated splits to every group member's Firestore document
   const grp = groups.find(x=>x.id===gid);
@@ -4644,6 +5284,10 @@ function markReqPaid(reqId, friendId){
   autoSettleSplits(friendId);
   renderSettle();
   showToast('✅ Payment marked as received! Balance settled.');
+  if(typeof notifyPaymentReceived === 'function'){
+    const payer = friends.find(f=>String(f.id)===String(friendId));
+    if(payer) notifyPaymentReceived(payer.name, req?.amount||0);
+  }
 }
 
 function cancelReq(reqId){
@@ -5321,20 +5965,56 @@ window._applySync = function(data) {
   syncVar('todos',       v=>{_todos=v;       todos=v;});
   syncVar('spends',      v=>{_spends=v;      spends=v;});
   syncVar('customCats',  v=>{_customCats=v;  customCats=v;});
-  syncVar('friends',     v=>{
-    // When friends list arrives from cloud, upgrade any pending_sent that are now active
+  syncVar('friends', v=>{
+    // Detect newly-active friends (was pending_sent, now active) → notify sender
+    const prevFriends = friends || [];
     _friends=v; friends=v;
+    if(typeof pushNotif === 'function') {
+      v.forEach(f => {
+        if(f.status === 'active') {
+          const prev = prevFriends.find(p => (p.fromUid && p.fromUid===f.fromUid) || p.contact===f.contact);
+          if(prev && prev.status === 'pending_sent') {
+            pushNotif(f.name + ' accepted your friend request', 'You are now connected!', 'friend', '🎉');
+          }
+        }
+      });
+    }
   });
   syncVar('friendReqs',  v=>{_friendReqs=v;  friendReqs=v;});
   syncVar('groups',      v=>{_groups=v;      groups=v;});
-  syncVar('splits',      v=>{_splits=v;      splits=v;});
+  syncVar('splits', v=>{
+    // Detect newly added group expenses for cross-device notification
+    const prevSplits = splits || [];
+    _splits=v; splits=v;
+    if(typeof pushNotif === 'function' && v.length > prevSplits.length) {
+      const newSplits = v.filter(ns => !prevSplits.some(ps => ps.id === ns.id));
+      newSplits.forEach(ns => {
+        const grp = (typeof groups !== 'undefined' ? groups : []).find(g => g.id === ns.groupId);
+        if(grp) pushNotif('New expense in ' + grp.name, (ns.addedBy||'Someone') + ' added ₹' + fmt(ns.totalAmount||0), 'group', '🏕️');
+      });
+    }
+  });
   syncVar('journalEntries', v=>{journalEntries=v;});
   if(data.paymentReqs     !== undefined){paymentReqs=data.paymentReqs; save('lf3_payment_reqs',paymentReqs); changed=true;}
   if(data.myUpiId         !== undefined && data.myUpiId){myUpiId=data.myUpiId; save('lf3_my_upi',myUpiId);}
   if(data.friendUpiIds    !== undefined){friendUpiIds=data.friendUpiIds; save('lf3_friend_upi_ids',friendUpiIds);}
   if(data.todoCategories  !== undefined){todoCategories=data.todoCategories; save('lf3_todo_cats',todoCategories);}
   if(data.sharedTodoLists    !== undefined){sharedTodoLists=data.sharedTodoLists; save('lf3_shared_todo_lists',sharedTodoLists);}
-  if(data.sharedExpenseLists !== undefined){sharedExpenseLists=data.sharedExpenseLists; save('lf3_shared_expense_lists',sharedExpenseLists);}
+  if(data.sharedExpenseLists !== undefined){
+    const prevLists = sharedExpenseLists || [];
+    sharedExpenseLists=data.sharedExpenseLists; save('lf3_shared_expense_lists',sharedExpenseLists);
+    // Notify if a new expense appeared in any shared list
+    if(typeof pushNotif === 'function') {
+      data.sharedExpenseLists.forEach(lst => {
+        const prev = prevLists.find(p => p.id === lst.id);
+        const prevCount = (prev?.expenses||[]).length;
+        const newExps = (lst.expenses||[]).slice(prevCount);
+        newExps.forEach(exp => {
+          pushNotif('New expense in ' + lst.name, (exp.addedBy||'Someone') + ' added ₹' + fmt(exp.amount||0), 'group', '📋');
+        });
+      });
+    }
+  }
   // Process incoming friend requests from main doc
   if(data.pendingFriendReqs !== undefined && data.pendingFriendReqs.length > 0){
     if(window._processPendingFriendReqs) window._processPendingFriendReqs(data.pendingFriendReqs);
@@ -5384,6 +6064,13 @@ window._getState = function() {
 window.renderPage  = renderPage;
 window.renderHome  = renderHome;
 window.launchApp   = launchApp;
+// Expose notification helpers for use from Firebase module
+window.pushNotif              = pushNotif;
+window.notifyFriendRequest    = notifyFriendRequest;
+window.notifyFriendAccepted   = notifyFriendAccepted;
+window.notifyGroupExpense     = notifyGroupExpense;
+window.notifyPaymentReceived  = notifyPaymentReceived;
+window.notifySharedListExpense= notifySharedListExpense;
 window._lastSaveTime = 0;
 
 // Show a loading spinner while Firebase initialises
