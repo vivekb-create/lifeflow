@@ -257,12 +257,28 @@ window._saveToFirestore = async function() {
   const u = window.currentUser;
   if (!u || !u.uid) return;
   try {
-    const state = window._getState ? window._getState() : {};
+    // Build state directly — never rely on window._getState timing
+    // Access globals that are always defined by state.js (loads before module)
+    const state = {
+      habits:      (typeof habits      !== 'undefined') ? habits      : [],
+      goals:       (typeof goals       !== 'undefined') ? goals       : [],
+      todos:       (typeof todos       !== 'undefined') ? todos       : [],
+      spends:      (typeof spends      !== 'undefined') ? spends      : [],
+      customCats:  (typeof customCats  !== 'undefined') ? customCats  : [],
+      friends:     (typeof friends     !== 'undefined') ? friends     : [],
+      friendReqs:  (typeof friendReqs  !== 'undefined') ? friendReqs  : [],
+      groups:      (typeof groups      !== 'undefined') ? groups      : [],
+      splits:      (typeof splits      !== 'undefined') ? splits      : [],
+      journalEntries:  (typeof journalEntries  !== 'undefined') ? journalEntries  : [],
+      paymentReqs:     (typeof paymentReqs     !== 'undefined') ? paymentReqs     : [],
+      myUpiId:         (typeof myUpiId         !== 'undefined') ? myUpiId         : '',
+      friendUpiIds:    (typeof friendUpiIds    !== 'undefined') ? friendUpiIds    : {},
+      todoCategories:  (typeof todoCategories  !== 'undefined') ? todoCategories  : [],
+      sharedTodoLists: (typeof sharedTodoLists !== 'undefined') ? sharedTodoLists : [],
+      sharedExpenseLists: (typeof sharedExpenseLists !== 'undefined') ? sharedExpenseLists : [],
+    };
     const ts = Date.now();
     window._lastSaveTime = ts;
-    // NO merge:true — we always write the full document so arrays
-    // are fully replaced, never merged. This is the correct pattern
-    // for user-owned documents where we own the entire state.
     await setDoc(doc(db, 'users', u.uid), {
       ...state,
       updatedAt: ts,
@@ -273,10 +289,10 @@ window._saveToFirestore = async function() {
   }
 };
 
-// Flush any save that was queued before this module was ready
-if (typeof _waitAndFlushSave === 'function' && typeof _saveQueue !== 'undefined' && _saveQueue) {
-  _waitAndFlushSave();
-}
+// Flush any save queued before this module was ready
+try {
+  if (typeof _waitAndFlushSave === 'function' && _saveQueue) _waitAndFlushSave();
+} catch(e) {}
 
 // ── Start real-time listener ──
 function startListener(uid) {
@@ -2736,13 +2752,17 @@ async function connectByCode(){
     if(!found){showToast('Code not found. Ask your friend to share their code from the app.');return;}
     const already=friends.some(f=>f.contact===found.email||f.fromUid===found.uid);
     if(already){showToast('Already connected with this person!');return;}
-    friends.push({id:uid(),name:found.name||'Friend',contact:found.email||'',status:'active',fromUid:found.uid});
-    persistSpend();renderFriends();
+    // Add as pending_sent — stays pending until friend accepts
+    friends.push({id:uid(),name:found.name||'Friend',contact:found.email||'',
+                  status:'pending_sent',fromUid:found.uid,sentAt:Date.now()});
+    persist(); renderFriends();
+    // Write request to friend's Firestore sub-collection so they see it
     await addDoc(collection(db,'users',found.uid,'friendRequests'),{
-      fromUid:u.uid,fromName:u.name,fromEmail:u.email,fromPicture:u.picture||'',sentAt:Date.now(),status:'pending'
+      fromUid:u.uid, fromName:u.name||'', fromEmail:u.email||'',
+      fromPicture:u.picture||'', sentAt:Date.now(), status:'pending'
     });
     document.getElementById('invite-modal')?.remove();
-    showToast('Connected with '+(found.name||'your friend')+'!');
+    showToast('Friend request sent to '+(found.name||'your friend')+'! Waiting for them to accept.');
   }catch(e){console.warn('connectByCode error:',e);showToast('Error looking up code. Please try again.');}
 }
 
