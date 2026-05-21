@@ -3806,31 +3806,42 @@ async function acceptFriendReq(id){
       await setDoc(doc(db,'users',u.uid), {pendingFriendReqs: cleaned}, {merge:true});
     }
 
-    // 3. Write ME as an active friend into the SENDER's Firestore document
+    // 3. Update SENDER's Firestore document:
+    //    a) flip their pending_sent entry to active
+    //    b) add me as a new active friend if not already there
     if(r.fromUid){
       const senderSnap = await getDoc(doc(db,'users',r.fromUid));
       const senderData = senderSnap.exists() ? senderSnap.data() : {};
-      const senderFriends = senderData.friends || [];
+      let senderFriends = senderData.friends || [];
 
-      // Check if they already have me
-      const alreadyThere = senderFriends.some(f =>
-        String(f.fromUid) === String(u.uid) || f.contact === u.email
-      );
-      if(!alreadyThere){
+      // Flip any pending_sent entry for me → active
+      let flipped = false;
+      senderFriends = senderFriends.map(f => {
+        if((String(f.fromUid) === String(u.uid) || f.contact === u.email)
+           && f.status === 'pending_sent'){
+          flipped = true;
+          return {...f, status: 'active', name: u.name, picture: u.picture||''};
+        }
+        return f;
+      });
+
+      // If no pending_sent entry existed, add me fresh
+      if(!flipped && !senderFriends.some(f =>
+          String(f.fromUid) === String(u.uid) || f.contact === u.email)){
         senderFriends.push({
           id: uid(), name: u.name, contact: u.email||'',
-          status: 'active', fromUid: u.uid,
-          picture: u.picture||''
+          status: 'active', fromUid: u.uid, picture: u.picture||''
         });
-        await setDoc(doc(db,'users',r.fromUid), { friends: senderFriends }, {merge:true});
       }
 
-      // 4. Write a notification so sender's real-time listener fires and they see us
-      await addDoc(collection(db,'users',r.fromUid,'notifications'),{
-        type:'friend_accepted', fromUid:u.uid,
-        fromName:u.name, fromEmail:u.email,
-        fromPicture:u.picture||'', at:Date.now()
-      });
+      // Write updated friends list (also clear pendingFriendReqs for this user)
+      const cleanedReqs = (senderData.pendingFriendReqs||[]).filter(
+        req => req.fromUid !== u.uid
+      );
+      await setDoc(doc(db,'users',r.fromUid), {
+        friends: senderFriends,
+        pendingFriendReqs: cleanedReqs
+      }, {merge:true});
     }
   } catch(e){ console.warn('acceptFriendReq Firestore:', e); }
 }
@@ -5655,50 +5666,33 @@ if (window.matchMedia('(display-mode: standalone)').matches ||
     ptrText.textContent = 'Refreshing...';
 
     try {
-      // Wait up to 5s for Firebase module to be ready
-      let waited = 0;
-      while((!window._fb || !window.currentUser) && waited < 5000){
-        await new Promise(r=>setTimeout(r,100));
-        waited += 100;
+      if(window._fb && window.currentUser && window.currentUser.uid){
+        // Fetch latest data directly from Firestore
+        const {db, doc, getDoc} = window._fb;
+        const snap = await getDoc(doc(db, 'users', window.currentUser.uid));
+        if(snap.exists() && window._applySync) window._applySync(snap.data());
       }
-
-      if(!window._fb || !window.currentUser || !window.currentUser.uid){
-        // Not logged in — just re-render from memory
-        if(window.renderPage && window.currentPage) window.renderPage(window.currentPage);
-        if(window.renderHome) window.renderHome();
-        ptrText.textContent = '✓ Done';
-        spinner.classList.remove('spinning');
-        setTimeout(hideIndicator, 800);
-        isRefreshing = false;
-        return;
-      }
-
-      // Directly fetch from Firestore without restarting the listener
-      const {db, doc, getDoc} = window._fb;
-      const snap = await getDoc(doc(db, 'users', window.currentUser.uid));
-      if(snap.exists() && window._applySync){
-        window._applySync(snap.data());
-      }
+      // Always re-render whatever is in memory
       if(window.renderPage && window.currentPage) window.renderPage(window.currentPage);
       if(window.renderHome) window.renderHome();
       ptrText.textContent = '✓ Up to date';
       spinner.classList.remove('spinning');
-      setTimeout(hideIndicator, 1000);
+      setTimeout(hideIndicator, 800);
     } catch(e){
       console.warn('PTR error:', e.message);
-      // On error just re-render from memory — don't show "failed"
       if(window.renderPage && window.currentPage) window.renderPage(window.currentPage);
       if(window.renderHome) window.renderHome();
       ptrText.textContent = '✓ Done';
       spinner.classList.remove('spinning');
-      setTimeout(hideIndicator, 800);
+      setTimeout(hideIndicator, 600);
+    } finally {
+      isRefreshing = false;
     }
-    isRefreshing = false;
   }
 })();
 </script>
-</body>
-</html>
+
+<script>
 async function sendFriendRequest(){
   const name    = (document.getElementById('friend-name-in').value||'').trim();
   const contact = (document.getElementById('friend-contact-in').value||'').trim();
@@ -5722,3 +5716,7 @@ async function sendFriendRequest(){
   }
   showToast('Friend request sent to ' + name + '. Waiting for them to accept.');
 }
+</script>
+
+</body>
+</html>
