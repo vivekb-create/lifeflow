@@ -246,6 +246,11 @@ window._saveToFirestore = async function() {
   }
 };
 
+// Flush any save that was queued before this module was ready
+if (typeof _waitAndFlushSave === 'function' && typeof _saveQueue !== 'undefined' && _saveQueue) {
+  _waitAndFlushSave();
+}
+
 // ── Start real-time listener ──
 function startListener(uid) {
   if (unsubscribeSnapshot) unsubscribeSnapshot();
