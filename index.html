@@ -124,21 +124,22 @@ window._writeFriendRequestToRecipient = async function(toEmail, fromUser) {
     const q = query(collection(db,'users_by_email'), where('email','==',toEmail));
     const snap = await getDocs(q);
     if (snap.empty) {
-      // Recipient not on platform yet — store a pending invite
       await setDoc(doc(db,'pending_invites',toEmail.split('.').join('_')), {
-        toEmail, fromUid: fromUser.uid, fromName: fromUser.name,
-        fromEmail: fromUser.email, sentAt: Date.now()
+        toEmail, fromUid: fromUser.uid,
+        fromName:    fromUser.name    || '',
+        fromEmail:   fromUser.email   || '',
+        fromPicture: fromUser.picture || '',
+        sentAt: Date.now()
       });
     } else {
       const recipientUid = snap.docs[0].data().uid;
-      // Write into recipient's friendRequests sub-collection
       await addDoc(collection(db,'users',recipientUid,'friendRequests'), {
-        fromUid:   fromUser.uid,
-        fromName:  fromUser.name,
-        fromEmail: fromUser.email,
+        fromUid:     fromUser.uid,
+        fromName:    fromUser.name    || '',   // Full name from Google account
+        fromEmail:   fromUser.email   || '',
         fromPicture: fromUser.picture || '',
-        sentAt:    Date.now(),
-        status:    'pending'
+        sentAt:      Date.now(),
+        status:      'pending'
       });
     }
   } catch(e) { console.warn('writeFriendRequest error:', e); }
@@ -274,35 +275,39 @@ window._saveToFirestore = async function() {
 
 // ── Start real-time listener ──
 function startListener(uid) {
-  if (unsubscribeSnapshot) unsubscribeSnapshot(); // clear old listener
-  let isFirstSnapshot = true; // First snapshot is always the initial load, skip toast
+  if (unsubscribeSnapshot) unsubscribeSnapshot();
+  let snapshotCount = 0;
 
   unsubscribeSnapshot = onSnapshot(
     doc(db, 'users', uid),
     (snap) => {
-      if (!snap.exists()) return;
+      if (!snap.exists()) { snapshotCount++; return; }
       const d = snap.data();
+      snapshotCount++;
 
-      // Skip our own echo: updatedBy matches this device AND
-      // the timestamp is very recent (within 3 seconds of our last save)
+      // Skip only if this is OUR OWN recent save echoing back
       const isOwnEcho = d.updatedBy === DEVICE_ID &&
-                        Math.abs((d.updatedAt || 0) - (window._lastSaveTime || 0)) < 3000;
-      if (isOwnEcho) {
-        isFirstSnapshot = false;
-        return;
-      }
+                        (window._lastSaveTime) &&
+                        Math.abs((d.updatedAt || 0) - window._lastSaveTime) < 2000;
 
-      // Apply the remote data
+      if (isOwnEcho) return;
+
+      // Always apply data — this is the source of truth
       if (window._applySync) {
         window._applySync(d);
-        // Only show toast for live updates, not the initial load
-        if (!isFirstSnapshot) {
-          window.showToast && window.showToast('✨ Synced from another device');
+        // Show toast only after first snapshot (live cross-device update)
+        if (snapshotCount > 1) {
+          window.showToast && window.showToast('✨ Synced');
         }
       }
-      isFirstSnapshot = false;
     },
-    (err) => console.warn('Snapshot error:', err)
+    (err) => {
+      console.warn('Snapshot error:', err.code);
+      // Retry listener after 3s on permission errors (auth may not be ready)
+      if (err.code === 'permission-denied') {
+        setTimeout(() => startListener(uid), 3000);
+      }
+    }
   );
 }
 
@@ -1029,6 +1034,27 @@ onAuthStateChanged(auth, async (user) => {
   .ptr-spinner{width:16px;height:16px;border:2px solid rgba(255,255,255,.4);
     border-top-color:white;border-radius:50%;}
   .ptr-spinner.spinning{animation:spin .6s linear infinite;}
+
+  /* ── SHARED EXPENSE LISTS ── */
+  .shared-list-card{background:var(--card);border:1px solid var(--warm2);border-radius:var(--r);
+    padding:16px;margin-bottom:12px;transition:all .2s;}
+  .shared-list-card:hover{border-color:var(--sage-mid);box-shadow:var(--shadow);}
+  .shared-list-header{display:flex;align-items:center;gap:10px;margin-bottom:10px;}
+  .shared-list-emoji{font-size:26px;line-height:1;}
+  .shared-list-info{flex:1;}
+  .shared-list-name{font-size:15px;font-weight:500;color:var(--text);font-family:'Cormorant Garamond',serif;}
+  .shared-list-meta{font-size:11px;color:var(--text3);margin-top:2px;}
+  .shared-list-total{font-size:18px;font-weight:700;color:var(--sage-dark);
+    font-family:'Cormorant Garamond',serif;text-align:right;}
+  .shared-list-members{display:flex;gap:4px;flex-wrap:wrap;margin-bottom:10px;}
+  .shared-list-member-avatar{width:24px;height:24px;border-radius:50%;background:var(--sage);
+    color:white;font-size:10px;font-weight:600;display:flex;align-items:center;
+    justify-content:center;border:2px solid var(--card);}
+  .shared-expense-row{display:flex;align-items:center;gap:8px;padding:7px 0;
+    border-bottom:1px solid var(--warm2);}
+  .shared-expense-row:last-child{border-bottom:none;}
+  .shared-expense-who{font-size:10px;color:white;background:var(--sage);
+    border-radius:8px;padding:1px 7px;white-space:nowrap;}
 </style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 </head>
@@ -1241,16 +1267,30 @@ onAuthStateChanged(auth, async (user) => {
             </div>
           </div>
         </div>
-        <!-- GROUPS (renamed) -->
+        <!-- GROUPS -->
         <div class="spend-panel" id="spend-panel-groups">
           <div id="group-detail-view" style="display:none"></div>
           <div id="groups-list-view">
+            <!-- Shared Expense Lists (no splitting) -->
+            <div class="card" style="margin-bottom:14px">
+              <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+                <div>
+                  <div class="card-title" style="margin-bottom:2px">Shared Expense Lists</div>
+                  <div style="font-size:11px;color:var(--text3)">Track expenses together — no splitting needed</div>
+                </div>
+                <button class="btn btn-primary btn-sm" onclick="openNewSharedListModal()">+ New List</button>
+              </div>
+              <div id="shared-expense-lists"></div>
+            </div>
+            <!-- Split Groups -->
             <div class="card">
-              <div class="card-title">Groups</div>
+              <div class="card-title">Split Expense Groups</div>
               <div id="groups-list"></div>
               <div id="groups-form"></div>
             </div>
           </div>
+          <!-- Shared List Detail -->
+          <div id="shared-list-detail" style="display:none"></div>
         </div>
         <!-- SETTLE UP -->
         <div class="spend-panel" id="spend-panel-settle">
@@ -2239,6 +2279,7 @@ function unshareList(shareId){
 const XKEYS={customCats:'lf3_custom_cats',friends:'lf3_friends',friendReqs:'lf3_friend_reqs',groups:'lf3_groups',splits:'lf3_splits'};
 const BUILTIN_CATS={Food:{emoji:'🍽️',color:'#6B8F71',bg:'#EAF0EB'},Travel:{emoji:'🚗',color:'#B8845A',bg:'#F5EAE0'},Shopping:{emoji:'🛍️',color:'#5A78B8',bg:'#E5EAF5'},Health:{emoji:'💊',color:'#B85A4A',bg:'#F5E8E5'},Bills:{emoji:'📄',color:'#8A6BC4',bg:'#EDE5F5'},Entertainment:{emoji:'🎬',color:'#5A9898',bg:'#E5F0F0'},Other:{emoji:'📦',color:'#9C9C98',bg:'#F0F0F0'}};
 let _customCats=load(XKEYS.customCats,[]);
+let sharedExpenseLists = load('lf3_shared_expense_lists', []); // [{id,name,emoji,memberIds,memberUids,expenses:[]}]
 let _friends=load(XKEYS.friends,[]);
 let _friendReqs=load(XKEYS.friendReqs,[]);
 let _groups=load(XKEYS.groups,[]);
@@ -3439,6 +3480,252 @@ async function refreshAppData(){
   }
 }
 
+
+// ══════════════════════════════════════════════════════════════════════════
+// SHARED EXPENSE LISTS — track together, no splitting
+// ══════════════════════════════════════════════════════════════════════════
+
+function renderSharedExpenseLists(){
+  const el = document.getElementById('shared-expense-lists');
+  if(!el) return;
+  if(sharedExpenseLists.length === 0){
+    el.innerHTML = `<div style="text-align:center;padding:20px;color:var(--text3);font-size:13px">
+      No shared lists yet. Create one to track expenses with family or friends together.
+    </div>`;
+    return;
+  }
+  el.innerHTML = sharedExpenseLists.map(lst => {
+    const total = (lst.expenses||[]).reduce((a,e) => a+e.amount, 0);
+    const memberNames = (lst.memberIds||[]).map(mid => {
+      if(mid === 'me') return (window.currentUser||currentUser)?.name||'Me';
+      const f = friends.find(x => x.id === mid);
+      return f ? f.name : 'Member';
+    });
+    return `<div class="shared-list-card" onclick="openSharedListDetail(${lst.id})">
+      <div class="shared-list-header">
+        <span class="shared-list-emoji">${lst.emoji||'📋'}</span>
+        <div class="shared-list-info">
+          <div class="shared-list-name">${lst.name}</div>
+          <div class="shared-list-meta">${(lst.expenses||[]).length} expenses · ${memberNames.join(', ')}</div>
+        </div>
+        <div class="shared-list-total">₹${fmt(Math.round(total))}</div>
+      </div>
+      <div class="shared-list-members">
+        ${memberNames.map(n => `<div class="shared-list-member-avatar" title="${n}">${n[0].toUpperCase()}</div>`).join('')}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function openNewSharedListModal(){
+  const activeFriends = friends.filter(f => f.status === 'active');
+  document.getElementById('new-shared-list-modal')?.remove();
+  const modal = document.createElement('div');
+  modal.className = 'modal-overlay'; modal.id = 'new-shared-list-modal';
+  modal.innerHTML = `<div class="modal" style="max-width:400px">
+    <button class="modal-close" onclick="document.getElementById('new-shared-list-modal').remove()">x</button>
+    <div class="modal-title">New Shared Expense List</div>
+    <div class="input-row" style="margin-bottom:12px">
+      <input class="input" id="sl-emoji" value="🏠" style="width:56px;text-align:center;flex-shrink:0;margin-bottom:0;font-size:22px">
+      <input class="input" id="sl-name" placeholder="e.g. Home, Family Trip, Vacation" style="margin-bottom:0">
+    </div>
+    <div style="font-size:12px;color:var(--text3);margin-bottom:8px;font-weight:500">Add members</div>
+    <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:16px">
+      <div style="padding:8px;background:var(--warm);border-radius:var(--r2);font-size:13px;color:var(--text2)">
+        ✓ ${(window.currentUser||currentUser)?.name||'You'} (you)
+      </div>
+      ${activeFriends.length === 0
+        ? `<div style="font-size:12px;color:var(--text3);padding:8px">No accepted friends yet.</div>`
+        : activeFriends.map(f => `<label style="display:flex;align-items:center;gap:8px;padding:8px;border:1.5px solid var(--warm2);border-radius:var(--r2);cursor:pointer">
+            <input type="checkbox" class="sl-member-cb" value="${f.id}">
+            <div class="friend-avatar" style="width:26px;height:26px;font-size:11px">${f.name[0].toUpperCase()}</div>
+            <span style="font-size:13px">${f.name}</span>
+          </label>`).join('')}
+    </div>
+    <div style="display:flex;gap:8px">
+      <button class="btn btn-primary" style="flex:1" onclick="createSharedExpenseList()">Create List</button>
+      <button class="btn btn-ghost" onclick="document.getElementById('new-shared-list-modal').remove()">Cancel</button>
+    </div>
+  </div>`;
+  document.body.appendChild(modal);
+  setTimeout(() => document.getElementById('sl-name')?.focus(), 100);
+}
+
+async function createSharedExpenseList(){
+  const name  = (document.getElementById('sl-name')?.value||'').trim();
+  const emoji = (document.getElementById('sl-emoji')?.value||'').trim() || '📋';
+  if(!name){ showToast('Please enter a list name.'); return; }
+  const cbs = document.querySelectorAll('.sl-member-cb:checked');
+  const selectedIds = Array.from(cbs).map(cb => Number(cb.value));
+  const memberIds   = ['me', ...selectedIds];
+  const u = window.currentUser || currentUser;
+  const memberUids  = [u?.uid||''];
+  selectedIds.forEach(fid => {
+    const f = friends.find(x => x.id === fid);
+    if(f?.fromUid) memberUids.push(f.fromUid);
+  });
+
+  const newList = {
+    id: uid(), name, emoji, memberIds, memberUids,
+    createdBy: u?.uid||'', createdAt: Date.now(), expenses: []
+  };
+  sharedExpenseLists.push(newList);
+  persist();
+  document.getElementById('new-shared-list-modal')?.remove();
+  renderSharedExpenseLists();
+  showToast('List "' + name + '" created!');
+
+  // Push to all member Firestore docs
+  if(window._fb){
+    const {db, doc, getDoc, setDoc} = window._fb;
+    for(const memberUid of memberUids){
+      if(memberUid === u?.uid) continue;
+      try{
+        const snap = await getDoc(doc(db,'users',memberUid));
+        const data = snap.exists() ? snap.data() : {};
+        const theirLists = (data.sharedExpenseLists||[]).filter(l => String(l.id) !== String(newList.id));
+        theirLists.push(newList);
+        await setDoc(doc(db,'users',memberUid), {sharedExpenseLists: theirLists}, {merge:true});
+      }catch(e){ console.warn('createSharedList push:', e); }
+    }
+  }
+}
+
+function openSharedListDetail(listId){
+  const lst = sharedExpenseLists.find(l => l.id === listId);
+  if(!lst) return;
+  document.getElementById('groups-list-view').style.display = 'none';
+  const detail = document.getElementById('shared-list-detail');
+  if(!detail) return;
+  detail.style.display = 'block';
+
+  const byCat = {};
+  (lst.expenses||[]).forEach(e => { byCat[e.cat] = (byCat[e.cat]||0) + e.amount; });
+  const catSorted = Object.entries(byCat).sort((a,b) => b[1]-a[1]);
+  const total = (lst.expenses||[]).reduce((a,e) => a+e.amount, 0);
+  const memberNames = (lst.memberIds||[]).map(mid => {
+    if(mid === 'me') return (window.currentUser||currentUser)?.name||'Me';
+    const f = friends.find(x => x.id === mid);
+    return f ? f.name : '?';
+  });
+
+  detail.innerHTML = `
+    <div class="card" style="margin-bottom:12px">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
+        <button class="btn btn-ghost btn-sm" onclick="closeSharedListDetail()">← Back</button>
+        <span style="font-size:22px">${lst.emoji}</span>
+        <div style="flex:1">
+          <div style="font-size:17px;font-weight:500;color:var(--sage-dark)">${lst.name}</div>
+          <div style="font-size:11px;color:var(--text3)">${memberNames.join(', ')}</div>
+        </div>
+        <div style="font-size:22px;font-weight:700;color:var(--sage-dark);font-family:'Cormorant Garamond',serif">₹${fmt(Math.round(total))}</div>
+      </div>
+      ${catSorted.length > 0 ? `
+        <div style="margin-bottom:14px">
+          <div class="card-title" style="margin-bottom:8px">By Category</div>
+          ${catSorted.map(([cat,amt]) => `
+            <div class="cat-bar">
+              <div style="width:32px;height:32px;border-radius:8px;background:${catBg(cat)};display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0">${catEmoji(cat)}</div>
+              <span style="flex:1;font-size:13px">${cat}</span>
+              <span style="font-size:13px;font-weight:600">₹${fmt(amt)}</span>
+            </div>`).join('')}
+        </div>` : ''}
+      <div>
+        <div class="card-title" style="margin-bottom:8px">Expenses</div>
+        ${(lst.expenses||[]).length === 0
+          ? '<div class="empty"><div style="font-size:24px">📋</div><div>No expenses yet</div></div>'
+          : [...(lst.expenses||[])].reverse().map(e => `
+            <div class="shared-expense-row">
+              <div style="width:30px;height:30px;border-radius:8px;background:${catBg(e.cat)};display:flex;align-items:center;justify-content:center;font-size:13px;flex-shrink:0">${catEmoji(e.cat)}</div>
+              <div style="flex:1;min-width:0">
+                <div style="font-size:13px;color:var(--text)">${e.desc}</div>
+                <div style="font-size:10px;color:var(--text3)">${e.date} · ${e.cat}</div>
+              </div>
+              <span class="shared-expense-who">${e.addedBy||'Me'}</span>
+              <span style="font-size:14px;font-weight:600;color:var(--text)">₹${fmt(e.amount)}</span>
+              <button class="del" onclick="deleteSharedExpense(${lst.id},${e.id})">x</button>
+            </div>`).join('')}
+      </div>
+      <button class="add-btn" style="margin-top:12px" onclick="openAddSharedExpenseForm(${lst.id})">+ Add Expense</button>
+      <div id="shared-expense-form-${lst.id}" style="margin-top:8px"></div>
+    </div>`;
+}
+
+function closeSharedListDetail(){
+  document.getElementById('shared-list-detail').style.display = 'none';
+  document.getElementById('groups-list-view').style.display = 'block';
+  renderSharedExpenseLists();
+}
+
+function openAddSharedExpenseForm(listId){
+  const el = document.getElementById('shared-expense-form-'+listId);
+  if(!el) return;
+  const catNames = Object.keys(allCats()).slice(0,8);
+  const todayVal = (()=>{const d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');})();
+  el.innerHTML = `<div class="form-box">
+    <select class="input" id="sl-cat-${listId}">
+      ${catNames.map(cat => `<option value="${cat}">${catEmoji(cat)} ${cat}</option>`).join('')}
+    </select>
+    <input class="input" id="sl-desc-${listId}" placeholder="Description">
+    <div style="margin-bottom:8px">
+      <label style="font-size:12px;color:var(--text3);display:block;margin-bottom:4px">Date</label>
+      <input class="input" id="sl-date-${listId}" type="date" value="${todayVal}" style="margin-bottom:0">
+    </div>
+    <div class="input-row">
+      <input class="input" id="sl-amount-${listId}" type="number" placeholder="₹ Amount" min="0" style="margin-bottom:0">
+      <button class="btn btn-primary" onclick="addSharedExpense(${listId})">Add</button>
+      <button class="btn btn-ghost" onclick="document.getElementById('shared-expense-form-${listId}').innerHTML=''">✕</button>
+    </div>
+  </div>`;
+}
+
+async function addSharedExpense(listId){
+  const lst = sharedExpenseLists.find(l => l.id === listId);
+  if(!lst) return;
+  const cat    = document.getElementById('sl-cat-'+listId)?.value || 'Other';
+  const desc   = (document.getElementById('sl-desc-'+listId)?.value||'').trim();
+  const amt    = parseFloat(document.getElementById('sl-amount-'+listId)?.value||0);
+  const dateRaw= document.getElementById('sl-date-'+listId)?.value || '';
+  if(!desc || isNaN(amt) || amt <= 0){ showToast('Please enter a description and amount.'); return; }
+
+  let dateKey = todayKey();
+  if(dateRaw){ const p=dateRaw.split('-'); dateKey=parseInt(p[0])+'-'+parseInt(p[1])+'-'+parseInt(p[2]); }
+
+  const u = window.currentUser || currentUser;
+  const newExp = {id:uid(), cat, desc, amount:amt, date:dateKey, addedBy: u?.name||'Me', addedByUid: u?.uid||''};
+  if(!lst.expenses) lst.expenses = [];
+  lst.expenses.push(newExp);
+  persist();
+  openSharedListDetail(listId);
+  showToast('Expense added!');
+
+  // Push updated list to all member docs
+  if(window._fb){
+    const {db, doc, getDoc, setDoc} = window._fb;
+    const memberUids = lst.memberUids || [];
+    for(const memberUid of memberUids){
+      if(memberUid === u?.uid) continue;
+      try{
+        const snap = await getDoc(doc(db,'users',memberUid));
+        const data = snap.exists() ? snap.data() : {};
+        const theirLists = (data.sharedExpenseLists||[]).map(l =>
+          String(l.id) === String(listId) ? lst : l
+        );
+        if(!theirLists.some(l => String(l.id) === String(listId))) theirLists.push(lst);
+        await setDoc(doc(db,'users',memberUid), {sharedExpenseLists: theirLists}, {merge:true});
+      }catch(e){ console.warn('addSharedExpense push:', e); }
+    }
+  }
+}
+
+async function deleteSharedExpense(listId, expId){
+  const lst = sharedExpenseLists.find(l => l.id === listId);
+  if(!lst) return;
+  lst.expenses = (lst.expenses||[]).filter(e => e.id !== expId);
+  persist();
+  openSharedListDetail(listId);
+}
+
 function showToast(msg){
   const t=document.createElement('div');
   t.style.cssText='position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#3D5C42;color:white;padding:10px 20px;border-radius:10px;font-size:13px;z-index:9999;box-shadow:0 4px 16px rgba(0,0,0,.2);transition:opacity .4s';
@@ -3537,6 +3824,7 @@ function deleteFriend(id){
 
 // ── GROUPS ──────────────────────────────────
 function renderGroups(){
+  renderSharedExpenseLists();
   if(openGroupId){renderGroupDetail(openGroupId);return;}
   document.getElementById('group-detail-view').style.display='none';
   document.getElementById('groups-list-view').style.display='block';
@@ -3564,7 +3852,17 @@ function renderGroups(){
       </div>
       <div style="margin-bottom:8px">
         <label style="font-size:12px;color:var(--text3);display:block;margin-bottom:6px">Select members</label>
-        <div style="display:flex;flex-wrap:wrap;gap:8px">${activeFriends.length===0?'<div style="font-size:12px;color:var(--text3)">Add friends first.</div>':activeFriends.map(f=>`<label style="display:flex;align-items:center;gap:5px;font-size:13px;cursor:pointer"><input type="checkbox" class="grp-member-cb" value="${f.id}"> ${f.name}</label>`).join('')}</div>
+        <div style="display:flex;flex-wrap:wrap;gap:8px">
+          ${activeFriends.length===0
+            ?`<div style="font-size:12px;color:var(--text3);padding:8px;background:var(--warm2);border-radius:8px;width:100%">
+                No accepted friends yet. Friends appear here once they accept your request.
+              </div>`
+            :activeFriends.map(f=>`<label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;padding:6px 10px;background:var(--warm);border:1.5px solid var(--warm3);border-radius:8px">
+              <input type="checkbox" class="grp-member-cb" value="${f.id}">
+              <div class="friend-avatar" style="width:22px;height:22px;font-size:10px;flex-shrink:0">${f.name[0].toUpperCase()}</div>
+              ${f.name}
+            </label>`).join('')}
+        </div>
       </div>
       <div style="display:flex;gap:8px">
         <button class="btn btn-primary" onclick="createGroup()">Create Group</button>
@@ -4972,7 +5270,8 @@ window._applySync = function(data) {
   if(data.myUpiId         !== undefined && data.myUpiId){myUpiId=data.myUpiId; save('lf3_my_upi',myUpiId);}
   if(data.friendUpiIds    !== undefined){friendUpiIds=data.friendUpiIds; save('lf3_friend_upi_ids',friendUpiIds);}
   if(data.todoCategories  !== undefined){todoCategories=data.todoCategories; save('lf3_todo_cats',todoCategories);}
-  if(data.sharedTodoLists !== undefined){sharedTodoLists=data.sharedTodoLists; save('lf3_shared_todo_lists',sharedTodoLists);}
+  if(data.sharedTodoLists    !== undefined){sharedTodoLists=data.sharedTodoLists; save('lf3_shared_todo_lists',sharedTodoLists);}
+  if(data.sharedExpenseLists !== undefined){sharedExpenseLists=data.sharedExpenseLists; save('lf3_shared_expense_lists',sharedExpenseLists);}
   if(changed){
     // Keep localStorage cache fresh so it matches cloud state
     try{
@@ -5009,7 +5308,8 @@ window._getState = function() {
     myUpiId:        myUpiId,
     friendUpiIds:   friendUpiIds,
     todoCategories: todoCategories,
-    sharedTodoLists: sharedTodoLists
+    sharedTodoLists: sharedTodoLists,
+    sharedExpenseLists: sharedExpenseLists
   };
 };
 
@@ -5343,3 +5643,26 @@ if (window.matchMedia('(display-mode: standalone)').matches ||
 </script>
 </body>
 </html>
+async function sendFriendRequest(){
+  const name    = (document.getElementById('friend-name-in').value||'').trim();
+  const contact = (document.getElementById('friend-contact-in').value||'').trim();
+  if(!name || !contact){ showToast('Please enter both a name and email address.'); return; }
+  if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(contact)){
+    showToast('Please enter a valid email address.'); return;
+  }
+  // Check if already added
+  if(friends.some(f=>f.contact===contact)){
+    showToast('You already have a friend with this email.'); return;
+  }
+  const u = window.currentUser || currentUser;
+  // Add as pending_sent locally — stays pending until friend accepts
+  friends.push({id:uid(), name, contact, status:'pending_sent', sentAt:Date.now()});
+  persist();
+  showFriendForm = false;
+  renderFriends();
+  // Write request to recipient Firestore
+  if(window._writeFriendRequestToRecipient){
+    window._writeFriendRequestToRecipient(contact, u).catch(()=>{});
+  }
+  showToast('Friend request sent to ' + name + '. Waiting for them to accept.');
+}
