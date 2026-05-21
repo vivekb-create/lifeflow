@@ -3,8 +3,6 @@
 // ═══════════════════════════════════════════════════════════════════════════
 
 // ── State ──────────────────────────────────────────────────────────────────
-let journalEntries    = load('lf3_journal', []);
-let journalPin        = load('lf3_jpin', null);       // hashed PIN or null
 let journalUnlocked   = false;
 let journalBiometric  = false;
 let currentEntryId    = null;
