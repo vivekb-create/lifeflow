@@ -7,8 +7,6 @@ let todoCat       = 'General';
 let editingTodoId = null;
 let selectedPriority = 'low';
 let dragSrcId     = null;
-let sharedTodoLists = [];
-let todoCategories = ['General','Home','Work','Shopping','Personal'];
 
 function renderTodoCatBar(){
   const catBar=document.getElementById('todo-cat-bar');
