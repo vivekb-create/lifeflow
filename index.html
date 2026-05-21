@@ -120,27 +120,28 @@ window._sendInviteEmail = async function(toEmail, toName) {
 window._writeFriendRequestToRecipient = async function(toEmail, fromUser) {
   if (!toEmail || !fromUser?.uid) return;
   try {
-    // Look up recipient by email in the users_by_email collection
     const q = query(collection(db,'users_by_email'), where('email','==',toEmail));
     const snap = await getDocs(q);
+    const newReq = {
+      id: fromUser.uid + '_req',
+      fromUid: fromUser.uid, fromName: fromUser.name||'',
+      fromEmail: fromUser.email||'', fromPicture: fromUser.picture||'',
+      sentAt: Date.now(), status: 'pending'
+    };
     if (snap.empty) {
-      await setDoc(doc(db,'pending_invites',toEmail.split('.').join('_')), {
-        toEmail, fromUid: fromUser.uid,
-        fromName:    fromUser.name    || '',
-        fromEmail:   fromUser.email   || '',
-        fromPicture: fromUser.picture || '',
-        sentAt: Date.now()
-      });
+      // Not on LifeFlow yet — store pending invite
+      await setDoc(doc(db,'pending_invites', toEmail.split('.').join('_')), {toEmail,...newReq});
     } else {
       const recipientUid = snap.docs[0].data().uid;
-      await addDoc(collection(db,'users',recipientUid,'friendRequests'), {
-        fromUid:     fromUser.uid,
-        fromName:    fromUser.name    || '',   // Full name from Google account
-        fromEmail:   fromUser.email   || '',
-        fromPicture: fromUser.picture || '',
-        sentAt:      Date.now(),
-        status:      'pending'
-      });
+      // Write into recipient's MAIN document pendingFriendReqs[] array
+      // This fires their existing onSnapshot immediately — no extra Firestore rules needed
+      const rSnap = await getDoc(doc(db,'users',recipientUid));
+      const rData = rSnap.exists() ? rSnap.data() : {};
+      const reqs = rData.pendingFriendReqs || [];
+      if (!reqs.some(r => r.fromUid === fromUser.uid)) {
+        reqs.push(newReq);
+        await setDoc(doc(db,'users',recipientUid), {pendingFriendReqs: reqs}, {merge:true});
+      }
     }
   } catch(e) { console.warn('writeFriendRequest error:', e); }
 };
@@ -155,74 +156,54 @@ window._registerUserEmail = async function(user) {
   } catch(e) { console.warn('registerEmail error:', e); }
 };
 
-// ── Listen for incoming friend requests ──
-window._listenFriendRequests = function(uid) {
-  // Listen for new friend REQUESTS (pending)
-  onSnapshot(collection(db,'users',uid,'friendRequests'), (snap) => {
-    snap.docChanges().forEach(change => {
-      if (change.type === 'added') {
-        const r = change.doc.data();
-        if (r.status === 'pending') {
-          const existing = (_friendReqs||[]).find(x => x.fromEmail === r.fromEmail || x.fromUid === r.fromUid);
-          if (!existing) {
-            _friendReqs = [...(_friendReqs||[]), {
-              id: change.doc.id, from: r.fromName, contact: r.fromEmail||'',
-              fromUid: r.fromUid, fromPicture: r.fromPicture||'',
-              date: new Date(r.sentAt||Date.now()).toISOString(),
-              firestoreDocId: change.doc.id
-            }];
-            friendReqs = _friendReqs;
-            // Save to localStorage so it survives page refresh
-            try{ localStorage.setItem('lf3_friend_reqs', JSON.stringify(friendReqs)); }catch{}
-            // Re-render regardless of which page is open
-            if (window.renderPage) window.renderPage(window.currentPage || 'home');
-            if (window.renderHome) window.renderHome();
-            // Show a tappable toast that navigates to Friends tab
-            if(window.showToast) window.showToast('📬 ' + r.fromName + ' sent you a friend request! Tap to view.');
-            // Create a clickable banner if not already there
-            const existingBanner = document.getElementById('friend-req-banner');
-            if(!existingBanner){
-              const banner = document.createElement('div');
-              banner.id = 'friend-req-banner';
-              banner.style.cssText = 'position:fixed;top:0;left:50%;transform:translateX(-50%);background:#3D5C42;color:white;border-radius:0 0 14px 14px;padding:10px 20px;font-size:13px;font-weight:500;z-index:400;cursor:pointer;box-shadow:0 4px 16px rgba(0,0,0,.2);display:flex;align-items:center;gap:10px;max-width:380px;width:90%';
-              banner.innerHTML = '<span style="font-size:13px">📬 Friend request from <strong>' + r.fromName + '</strong></span>'
-              + '<button onclick="navToSpend(\"friends\",document.getElementById(\"nav-sub-friends\'));document.getElementById(\"friend-req-banner\")?.remove()" style="background:white;color:#3D5C42;border:none;border-radius:6px;padding:4px 12px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;margin-left:8px">View</button>'
-              + '<button onclick="document.getElementById(\"friend-req-banner\")?.remove()" style="background:none;border:none;color:rgba(255,255,255,.7);font-size:20px;cursor:pointer;padding:0;margin-left:6px">×</button>';
-              document.body.appendChild(banner);
-              setTimeout(()=>document.getElementById('friend-req-banner')?.remove(), 8000);
-            }
-          }
-        }
-      }
-    });
-  });
+// ── Friend request listener — no-op, handled by main doc onSnapshot + _applySync ──
+window._listenFriendRequests = function(uid) { /* handled via main doc listener */ };
 
-  // Listen for notifications (friend accepted, etc.)
-  onSnapshot(collection(db,'users',uid,'notifications'), (snap) => {
-    snap.docChanges().forEach(change => {
-      if (change.type === 'added') {
-        const n = change.doc.data();
-        if (n.type === 'friend_accepted') {
-          // They accepted our request — add them to our local friends as active
-          const existing = (_friends||[]).find(f =>
-            String(f.fromUid) === String(n.fromUid) || f.contact === n.fromEmail
-          );
-          if (!existing) {
-            _friends = [...(_friends||[]), {
-              id: String(Date.now()), name: n.fromName,
-              contact: n.fromEmail||'', status: 'active',
-              fromUid: n.fromUid, picture: n.fromPicture||''
-            }];
-            friends = _friends;
-            persist();
-            if (window.renderPage && window.currentPage === 'spending') window.renderPage('spending');
-            window.showToast && window.showToast('🎉 ' + n.fromName + ' accepted your friend request!');
-          }
-        }
+// Called by _applySync when pendingFriendReqs field arrives from Firestore
+window._processPendingFriendReqs = function(pendingReqs) {
+  if (!pendingReqs || !pendingReqs.length) return;
+  let newFound = false;
+  pendingReqs.forEach(r => {
+    if (r.status !== 'pending') return;
+    const already = (friendReqs||[]).some(x => x.fromUid === r.fromUid);
+    if (!already) {
+      friendReqs = [...(friendReqs||[]), {
+        id: r.id||r.fromUid, from: r.fromName||'Someone',
+        contact: r.fromEmail||'', fromUid: r.fromUid,
+        fromPicture: r.fromPicture||'',
+        date: new Date(r.sentAt||Date.now()).toISOString(),
+        firestoreDocId: r.id||r.fromUid
+      }];
+      _friendReqs = friendReqs;
+      newFound = true;
+      try{ localStorage.setItem('lf3_friend_reqs', JSON.stringify(friendReqs)); }catch{}
+      if (window.showToast) window.showToast('📬 ' + (r.fromName||'Someone') + ' sent you a friend request!');
+      if (!document.getElementById('friend-req-banner')) {
+        const b = document.createElement('div');
+        b.id = 'friend-req-banner';
+        b.style.cssText = 'position:fixed;top:0;left:50%;transform:translateX(-50%);background:#3D5C42;color:white;border-radius:0 0 14px 14px;padding:10px 20px;font-size:13px;font-weight:500;z-index:400;box-shadow:0 4px 16px rgba(0,0,0,.2);display:flex;align-items:center;gap:10px;max-width:380px;width:90%';
+        const vBtn = document.createElement('button');
+        vBtn.textContent = 'View';
+        vBtn.style.cssText = 'background:white;color:#3D5C42;border:none;border-radius:6px;padding:4px 12px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;margin-left:8px';
+        vBtn.onclick = function(){ navToSpend('friends', document.getElementById('nav-sub-friends')); document.getElementById('friend-req-banner')?.remove(); };
+        const xBtn = document.createElement('button');
+        xBtn.textContent = '×';
+        xBtn.style.cssText = 'background:none;border:none;color:rgba(255,255,255,.7);font-size:20px;cursor:pointer;padding:0;margin-left:6px';
+        xBtn.onclick = function(){ document.getElementById('friend-req-banner')?.remove(); };
+        b.innerHTML = '<span>📬 Friend request from <strong>' + (r.fromName||'Someone') + '</strong></span>';
+        b.appendChild(vBtn);
+        b.appendChild(xBtn);
+        document.body.appendChild(b);
+        setTimeout(()=>document.getElementById('friend-req-banner')?.remove(), 10000);
       }
-    });
+    }
   });
+  if (newFound) {
+    if (window.renderPage) window.renderPage(window.currentPage||'home');
+    if (window.renderHome) window.renderHome();
+  }
 };
+
 
 // ── Shared group spending: write group expenses to shared collection ──
 window._saveSharedGroup = async function(group, groupSplits) {
@@ -2757,10 +2738,19 @@ async function connectByCode(){
                   status:'pending_sent',fromUid:found.uid,sentAt:Date.now()});
     persist(); renderFriends();
     // Write request to friend's Firestore sub-collection so they see it
-    await addDoc(collection(db,'users',found.uid,'friendRequests'),{
-      fromUid:u.uid, fromName:u.name||'', fromEmail:u.email||'',
-      fromPicture:u.picture||'', sentAt:Date.now(), status:'pending'
-    });
+    // Write request directly into friend's main Firestore doc (triggers their listener)
+    const {doc:fbDoc, getDoc:fbGetDoc, setDoc:fbSetDoc} = window._fb;
+    const recipientSnap = await fbGetDoc(fbDoc(db,'users',found.uid));
+    const recipientData = recipientSnap.exists() ? recipientSnap.data() : {};
+    const currentReqs   = recipientData.pendingFriendReqs || [];
+    if (!currentReqs.some(r => r.fromUid === u.uid)) {
+      currentReqs.push({
+        id: u.uid+'_req', fromUid:u.uid, fromName:u.name||'',
+        fromEmail:u.email||'', fromPicture:u.picture||'',
+        sentAt:Date.now(), status:'pending'
+      });
+      await fbSetDoc(fbDoc(db,'users',found.uid), {pendingFriendReqs: currentReqs}, {merge:true});
+    }
     document.getElementById('invite-modal')?.remove();
     showToast('Friend request sent to '+(found.name||'your friend')+'! Waiting for them to accept.');
   }catch(e){console.warn('connectByCode error:',e);showToast('Error looking up code. Please try again.');}
@@ -3806,15 +3796,17 @@ async function acceptFriendReq(id){
 
   if(!u?.uid || !window._fb) return;
   try {
-    const {db, doc, setDoc, getDoc, collection, addDoc, deleteDoc} = window._fb;
+    const {db, doc, setDoc, getDoc, collection, addDoc} = window._fb;
 
-    // 2. Delete the processed request from my sub-collection
-    if(r.firestoreDocId){
-      await deleteDoc(doc(db,'users',u.uid,'friendRequests',r.firestoreDocId));
+    // 2. Remove this request from MY pendingFriendReqs in Firestore
+    const mySnap = await getDoc(doc(db,'users',u.uid));
+    if(mySnap.exists()){
+      const myData = mySnap.data();
+      const cleaned = (myData.pendingFriendReqs||[]).filter(req => req.fromUid !== r.fromUid);
+      await setDoc(doc(db,'users',u.uid), {pendingFriendReqs: cleaned}, {merge:true});
     }
 
     // 3. Write ME as an active friend into the SENDER's Firestore document
-    //    so they see me as active without needing to accept anything
     if(r.fromUid){
       const senderSnap = await getDoc(doc(db,'users',r.fromUid));
       const senderData = senderSnap.exists() ? senderSnap.data() : {};
@@ -5318,7 +5310,10 @@ window._applySync = function(data) {
   syncVar('todos',       v=>{_todos=v;       todos=v;});
   syncVar('spends',      v=>{_spends=v;      spends=v;});
   syncVar('customCats',  v=>{_customCats=v;  customCats=v;});
-  syncVar('friends',     v=>{_friends=v;     friends=v;});
+  syncVar('friends',     v=>{
+    // When friends list arrives from cloud, upgrade any pending_sent that are now active
+    _friends=v; friends=v;
+  });
   syncVar('friendReqs',  v=>{_friendReqs=v;  friendReqs=v;});
   syncVar('groups',      v=>{_groups=v;      groups=v;});
   syncVar('splits',      v=>{_splits=v;      splits=v;});
@@ -5329,6 +5324,10 @@ window._applySync = function(data) {
   if(data.todoCategories  !== undefined){todoCategories=data.todoCategories; save('lf3_todo_cats',todoCategories);}
   if(data.sharedTodoLists    !== undefined){sharedTodoLists=data.sharedTodoLists; save('lf3_shared_todo_lists',sharedTodoLists);}
   if(data.sharedExpenseLists !== undefined){sharedExpenseLists=data.sharedExpenseLists; save('lf3_shared_expense_lists',sharedExpenseLists);}
+  // Process incoming friend requests from main doc
+  if(data.pendingFriendReqs !== undefined && data.pendingFriendReqs.length > 0){
+    if(window._processPendingFriendReqs) window._processPendingFriendReqs(data.pendingFriendReqs);
+  }
   if(changed){
     // Keep localStorage cache fresh so it matches cloud state
     try{
