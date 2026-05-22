@@ -683,6 +683,13 @@ onAuthStateChanged(auth, async (user) => {
   .priority-radio-label.selected-medium{background:var(--accent-l);border-color:var(--accent);color:var(--accent);}
   .priority-radio-label.selected-low{background:var(--sage-light);border-color:var(--sage);color:var(--sage-dark);}
 
+  /* Todo category chip count badge */
+  .cat-chip-badge{display:inline-flex;align-items:center;justify-content:center;
+    background:rgba(255,255,255,.35);color:inherit;border-radius:8px;
+    font-size:10px;font-weight:700;padding:0 5px;min-width:16px;height:16px;
+    margin-left:3px;line-height:1;}
+  .todo-cat-chip.active .cat-chip-badge{background:rgba(255,255,255,.3);}
+
   /* Todo category chips */
   .todo-cat-bar{display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap;align-items:center;}
   .todo-cat-chip{padding:5px 13px;border-radius:16px;font-size:12px;font-weight:500;cursor:pointer;border:1.5px solid var(--warm3);background:var(--warm2);color:var(--text2);transition:all .15s;white-space:nowrap;}
@@ -2295,7 +2302,7 @@ function saveGoalEdit(id){
 // ─────────────────────────────────────────────
 let showTodoForm  = false;
 let todoTab       = 'all';
-let todoCat       = 'General';
+let todoCat       = 'all';
 let editingTodoId = null;
 let selectedPriority = 'low';
 let dragSrcId     = null;
@@ -2305,10 +2312,19 @@ let todoCategories = ['General','Home','Work','Shopping','Personal'];
 function renderTodoCatBar(){
   const catBar=document.getElementById('todo-cat-bar');
   if(!catBar)return;
-  catBar.innerHTML=todoCategories.map(cat=>
-    `<button class="todo-cat-chip ${todoCat===cat?'active':''}" onclick="setTodoCat('${cat}')">${cat}</button>`
-  ).join('')+
-  `<button class="todo-cat-chip add-cat" onclick="promptAddTodoCat()">+ Category</button>`;
+  // Count pending todos per category
+  const pendingAll = todos.filter(t=>!t.done).length;
+  const allChip = `<button class="todo-cat-chip ${todoCat==='all'?'active':''}" onclick="setTodoCat('all')">
+    All${pendingAll>0?` <span class="cat-chip-badge">${pendingAll}</span>`:''}
+  </button>`;
+  const catChips = todoCategories.map(cat=>{
+    const count = todos.filter(t=>!t.done && (t.cat||'General')===cat).length;
+    return `<button class="todo-cat-chip ${todoCat===cat?'active':''}" onclick="setTodoCat('${cat}')">
+      ${cat}${count>0?` <span class="cat-chip-badge">${count}</span>`:''}
+    </button>`;
+  }).join('');
+  catBar.innerHTML = allChip + catChips +
+    `<button class="todo-cat-chip add-cat" onclick="promptAddTodoCat()">+ Category</button>`;
 }
 
 function setTodoCat(cat){todoCat=cat;renderTodos();}
@@ -2326,6 +2342,7 @@ function promptAddTodoCat(){
 function renderSharedBanner(){
   const el=document.getElementById('todo-shared-banner');
   if(!el)return;
+  if(todoCat==='all'){el.innerHTML='';return;}
   const shared=sharedTodoLists.filter(s=>s.cat===todoCat);
   if(shared.length===0){el.innerHTML='';return;}
   el.innerHTML=`<div style="background:var(--blue-l);border:1px solid var(--blue);border-radius:var(--r2);padding:9px 14px;margin-bottom:12px;font-size:12px;color:var(--blue);display:flex;align-items:center;gap:8px">
@@ -2338,9 +2355,10 @@ function renderTodos(){
   renderTodoCatBar();
   renderSharedBanner();
 
-  const catTodos=todos.filter(t=>(t.cat||'General')===todoCat);
-  const pending=sortTodos(catTodos.filter(t=>!t.done));
-  const done=catTodos.filter(t=>t.done);
+  const isAllCat = todoCat === 'all';
+  const catTodos = isAllCat ? todos : todos.filter(t=>(t.cat||'General')===todoCat);
+  const pending  = sortTodos(catTodos.filter(t=>!t.done));
+  const done     = catTodos.filter(t=>t.done);
 
   const allPending=sortTodos(todos.filter(t=>!t.done));
   const counts={
@@ -2490,7 +2508,7 @@ function toggleTodo(id){const t=todos.find(x=>x.id===id);if(t)t.done=!t.done;per
 
 function addTodo(){
   const text=document.getElementById('todo-text-in').value.trim();
-  const cat=document.getElementById('todo-cat-select')?.value||todoCat;
+  const cat=document.getElementById('todo-cat-select')?.value||(todoCat==='all'?'General':todoCat);
   const dueRaw=document.getElementById('todo-due-in').value;
   const dueDate=dueRaw||todayDatetimeLocal();
   if(!text)return;
