@@ -1920,12 +1920,15 @@ function renderHabits() {
     ? '<div class="empty"><div class="empty-icon">🔁</div>No habits yet. Start one!</div>'
     : habits.map(h => {
         const done = h.history.includes(today);
-        return `<div style="padding:12px 0;border-bottom:1px solid var(--warm2)">
-          <div style="display:flex;align-items:center;gap:12px">
+        const rem  = getItemReminder('habit_'+h.id);
+        return `<div style="padding:12px 0;border-bottom:1px solid var(--warm2)" id="habit-row-${h.id}">
+          <div style="display:flex;align-items:center;gap:10px">
             <div class="check ${done?'done':''}" onclick="toggleHabit(${h.id})"></div>
             <span style="font-size:18px">${h.emoji}</span>
-            <span class="row-text ${done?'done':''}" style="font-size:14px">${h.name}</span>
+            <span class="row-text ${done?'done':''}" style="font-size:14px;flex:1">${h.name}</span>
             <span class="streak">🔥 ${h.streak}</span>
+            ${rem?`<span title="${rem.label}" style="font-size:13px;cursor:pointer;opacity:.7" onclick="openHabitEdit(${h.id})">⏰</span>`:''}
+            <button class="btn btn-ghost btn-sm" onclick="openHabitEdit(${h.id})" style="font-size:12px;padding:3px 8px">✏️</button>
             <button class="del" onclick="deleteHabit(${h.id})">×</button>
           </div>
           <div class="habit-dots">${last7.map(d=>`<div class="habit-dot ${h.history.includes(d)?'on':''}"></div>`).join('')}</div>
@@ -1966,18 +1969,17 @@ function renderHabits() {
 
     document.getElementById('habits-form').innerHTML = `
       <div class="form-box">
-        ${suggestionsHtml}
-        <div style="margin-top:${suggestionsHtml?'12px':'0'};padding-top:${suggestionsHtml?'12px':'0'};border-top:${suggestionsHtml?'1px solid var(--warm3)':'none'}">
-          <div style="font-size:11px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--text3);margin-bottom:8px">Or type your own</div>
+        ${buildItemReminderHTML('habit_new', null)}
+        <div style="margin-top:10px">
           <div class="input-row" style="margin-bottom:8px">
             <input class="input" id="habit-emoji-in" value="⭐" style="width:64px;text-align:center;flex-shrink:0">
             <input class="input" id="habit-name-in" placeholder="Habit name...">
           </div>
-          ${buildItemReminderHTML('habit_new', null)}
-          <div style="display:flex;gap:8px;margin-top:8px">
+          <div style="display:flex;gap:8px;margin-bottom:${suggestionsHtml?'12px':'0'}">
             <button class="btn btn-primary" onclick="addHabit()">Add Habit</button>
             <button class="btn btn-ghost" onclick="setHabitForm(false)">Cancel</button>
           </div>
+          ${suggestionsHtml}
         </div>
       </div>`;
   } else {
@@ -2084,8 +2086,18 @@ function toggleHabit(id) {
 function addHabit() {
   const name  = document.getElementById('habit-name-in').value.trim();
   const emoji = document.getElementById('habit-emoji-in').value.trim() || '⭐';
-  if (!name) return;
-  const id = uid();
+  if(!name){ showToast('Please enter a habit name.'); return; }
+  // Mandate preset selection if reminder toggle is ON
+  const toggle = document.getElementById('rem-toggle-habit_new');
+  if(toggle?.checked){
+    const selChip = document.querySelector('#rem-body-habit_new .rem-preset-chip.sel');
+    if(!selChip){ showToast('Please select a reminder time, or uncheck "Set reminder".'); return; }
+    if(selChip.getAttribute('onclick')?.includes("'custom'")){
+      const timeVal = document.getElementById('rem-time-habit_new')?.value;
+      if(!timeVal){ showToast('Please set a time for your custom reminder.'); return; }
+    }
+  }
+  const id = String(uid());
   habits.push({id, name, emoji, streak:0, history:[]});
   persist();
   applyItemReminder('habit_new', name);
@@ -2093,27 +2105,128 @@ function addHabit() {
 }
 function deleteHabit(id) { habits=habits.filter(h=>h.id!==id); persist(); renderAll(); }
 
+function openHabitEdit(id){
+  const h = habits.find(x=>x.id===id); if(!h) return;
+  const row = document.getElementById('habit-row-'+id); if(!row) return;
+  const rem = getItemReminder('habit_'+id);
+  row.innerHTML += `<div class="form-box" id="habit-edit-form-${id}" style="margin-top:10px">
+    <div class="input-row" style="margin-bottom:8px">
+      <input class="input" id="hef-emoji-${id}" value="${h.emoji}" style="width:64px;text-align:center;flex-shrink:0">
+      <input class="input" id="hef-name-${id}" value="${h.name}" placeholder="Habit name...">
+    </div>
+    ${buildItemReminderHTML('habit_'+id, rem)}
+    <div style="display:flex;gap:8px;margin-top:8px">
+      <button class="btn btn-primary btn-sm" onclick="saveHabitEdit(${id})">Save</button>
+      <button class="btn btn-ghost btn-sm" onclick="renderHabits()">Cancel</button>
+    </div>
+  </div>`;
+}
+
+function saveHabitEdit(id){
+  const h = habits.find(x=>x.id===id); if(!h) return;
+  const name  = document.getElementById('hef-name-'+id)?.value.trim();
+  const emoji = document.getElementById('hef-emoji-'+id)?.value.trim() || h.emoji;
+  if(!name){ showToast('Please enter a habit name.'); return; }
+  // Validate reminder if toggled on
+  const toggle = document.getElementById('rem-toggle-habit_'+id);
+  if(toggle?.checked){
+    const selChip = document.querySelector('#rem-body-habit_'+id+' .rem-preset-chip.sel');
+    if(!selChip){ showToast('Please select a reminder time.'); return; }
+    if(selChip.getAttribute('onclick')?.includes("'custom'")){
+      const timeVal = document.getElementById('rem-time-habit_'+id)?.value;
+      if(!timeVal){ showToast('Please set a time for your custom reminder.'); return; }
+    }
+  }
+  h.name = name; h.emoji = emoji;
+  persist();
+  applyItemReminder('habit_'+id, name);
+  renderHabits();
+  showToast('Habit updated!');
+}
+
 // ─────────────────────────────────────────────
 // GOALS
 // ─────────────────────────────────────────────
 let showGoalForm=false,editingGoalId=null;
 function renderGoals(){
-  document.getElementById('goals-list').innerHTML=goals.length===0
-    ?'<div class="empty"><div class="empty-icon">🎯</div>No goals yet. Dream big!</div>'
-    :goals.map(g=>{const pct=Math.min(100,Math.round(g.current/g.target*100));const fv=v=>g.unit==='₹'?`₹${fmt(v)}`:`${v} ${g.unit}`;return `<div class="goal-block"><div class="goal-header"><span style="font-size:20px">${g.emoji}</span><span class="goal-name">${g.name}</span><span class="goal-pct">${pct}%</span><button class="del" onclick="deleteGoal(${g.id})">×</button></div><div class="progress-wrap"><div class="progress-fill ${pct<30?'amber':''}" style="width:${pct}%"></div></div><div class="goal-footer"><span class="goal-meta">${fv(g.current)} of ${fv(g.target)}</span>${editingGoalId===g.id?`<div class="edit-row"><input class="input" id="goal-edit-val" type="number" value="${g.current}"><button class="btn btn-primary btn-sm" onclick="saveGoalProgress(${g.id})">Save</button><button class="btn btn-ghost btn-sm" onclick="editGoal(null)">✕</button></div>`:`<button style="font-size:12px;color:var(--sage);background:none;border:none;cursor:pointer;font-family:inherit" onclick="editGoal(${g.id})">Update</button>`}</div></div>`;}).join('');
-  document.getElementById('goals-form').innerHTML=showGoalForm?`
-    <div class="form-box"><div class="input-row" style="margin-bottom:8px"><input class="input" id="goal-emoji-in" value="🎯" style="width:64px;text-align:center;flex-shrink:0"><input class="input" id="goal-name-in" placeholder="Goal name..."></div><div class="input-row" style="margin-bottom:8px"><input class="input" id="goal-current-in" type="number" placeholder="Current" value="0"><input class="input" id="goal-target-in" type="number" placeholder="Target"><select class="input" id="goal-unit-in" style="width:auto;flex-shrink:0"><option value="books">books</option><option value="₹">₹ Rupees</option><option value="km">km</option><option value="hrs">hours</option><option value="times">times</option><option value="units">units</option></select></div>${buildItemReminderHTML('goal_new',null)}<div style="display:flex;gap:8px;margin-top:8px"><button class="btn btn-primary" onclick="addGoal()">Add Goal</button><button class="btn btn-ghost" onclick="setGoalForm(false)">Cancel</button></div></div>`
-    :`<button class="add-btn" onclick="setGoalForm(true)">+ Add goal</button>`;
+  const editGoalId = editingGoalId; // capture for closure
+  document.getElementById('goals-list').innerHTML = goals.length===0
+    ? '<div class="empty"><div class="empty-icon">🎯</div>No goals yet. Dream big!</div>'
+    : goals.map(g => {
+        const pct = Math.min(100, Math.round(g.current/g.target*100));
+        const fv  = v => g.unit==='₹' ? `₹${fmt(v)}` : `${v} ${g.unit}`;
+        const rem = getItemReminder('goal_'+g.id);
+        const isEditingThis = editGoalId === g.id;
+        return `<div class="goal-block" id="goal-block-${g.id}">
+          <div class="goal-header">
+            <span style="font-size:20px">${g.emoji}</span>
+            <span class="goal-name">${g.name}</span>
+            <span class="goal-pct">${pct}%</span>
+            ${rem ? `<span title="${rem.label}" style="font-size:13px;opacity:.7">⏰</span>` : ''}
+            <button class="btn btn-ghost btn-sm" onclick="openGoalEdit(${g.id})" style="font-size:12px;padding:3px 8px">✏️</button>
+            <button class="del" onclick="deleteGoal(${g.id})">×</button>
+          </div>
+          <div class="progress-wrap"><div class="progress-fill ${pct<30?'amber':''}" style="width:${pct}%"></div></div>
+          <div class="goal-footer">
+            <span class="goal-meta">${fv(g.current)} of ${fv(g.target)}</span>
+            ${isEditingThis
+              ? `<div class="edit-row">
+                  <input class="input" id="goal-edit-val" type="number" value="${g.current}" style="width:100px">
+                  <button class="btn btn-primary btn-sm" onclick="saveGoalProgress(${g.id})">Save</button>
+                  <button class="btn btn-ghost btn-sm" onclick="editGoal(null)">✕</button>
+                 </div>`
+              : `<button style="font-size:12px;color:var(--sage);background:none;border:none;cursor:pointer;font-family:inherit" onclick="editGoal(${g.id})">Update progress</button>`}
+          </div>
+        </div>`;
+      }).join('');
+
+  document.getElementById('goals-form').innerHTML = showGoalForm ? `
+    <div class="form-box">
+      ${buildItemReminderHTML('goal_new', null)}
+      <div style="margin-top:10px">
+        <div class="input-row" style="margin-bottom:8px">
+          <input class="input" id="goal-emoji-in" value="🎯" style="width:64px;text-align:center;flex-shrink:0">
+          <input class="input" id="goal-name-in" placeholder="Goal name...">
+        </div>
+        <div class="input-row" style="margin-bottom:8px">
+          <input class="input" id="goal-current-in" type="number" placeholder="Current" value="0">
+          <input class="input" id="goal-target-in" type="number" placeholder="Target">
+          <select class="input" id="goal-unit-in" style="width:auto;flex-shrink:0">
+            <option value="books">books</option>
+            <option value="₹">₹ Rupees</option>
+            <option value="km">km</option>
+            <option value="hrs">hours</option>
+            <option value="times">times</option>
+            <option value="units">units</option>
+          </select>
+        </div>
+        <div style="display:flex;gap:8px">
+          <button class="btn btn-primary" onclick="addGoal()">Add Goal</button>
+          <button class="btn btn-ghost" onclick="setGoalForm(false)">Cancel</button>
+        </div>
+      </div>
+    </div>` : `<button class="add-btn" onclick="setGoalForm(true)">+ Add goal</button>`;
 }
 function setGoalForm(v){showGoalForm=v;renderGoals();if(v)setTimeout(()=>document.getElementById('goal-name-in')?.focus(),50);}
 function editGoal(id){editingGoalId=id;renderGoals();if(id)setTimeout(()=>document.getElementById('goal-edit-val')?.focus(),50);}
 function addGoal(){
-  const name=document.getElementById('goal-name-in').value.trim();
-  const emoji=document.getElementById('goal-emoji-in').value.trim()||'🎯';
-  const current=parseFloat(document.getElementById('goal-current-in').value)||0;
-  const target=parseFloat(document.getElementById('goal-target-in').value);
-  const unit=document.getElementById('goal-unit-in').value;
-  if(!name||!target)return;
+  const name   = document.getElementById('goal-name-in').value.trim();
+  const emoji  = document.getElementById('goal-emoji-in').value.trim()||'🎯';
+  const current= parseFloat(document.getElementById('goal-current-in').value)||0;
+  const target = parseFloat(document.getElementById('goal-target-in').value);
+  const unit   = document.getElementById('goal-unit-in').value;
+  if(!name){ showToast('Please enter a goal name.'); return; }
+  if(!target){ showToast('Please enter a target value.'); return; }
+  // Mandate preset if reminder toggle is ON
+  const toggle = document.getElementById('rem-toggle-goal_new');
+  if(toggle?.checked){
+    const selChip = document.querySelector('#rem-body-goal_new .rem-preset-chip.sel');
+    if(!selChip){ showToast('Please select a reminder time, or uncheck "Set reminder".'); return; }
+    if(selChip.getAttribute('onclick')?.includes("'custom'")){
+      const timeVal = document.getElementById('rem-time-goal_new')?.value;
+      if(!timeVal){ showToast('Please set a custom reminder time.'); return; }
+    }
+  }
   const id=String(uid());
   goals.push({id,name,emoji,current,target,unit});
   persist();
@@ -2126,6 +2239,56 @@ function saveGoalProgress(id){
   persist();editingGoalId=null;renderAll();
 }
 function deleteGoal(id){goals=goals.filter(g=>g.id!==id);persist();renderAll();}
+
+function openGoalEdit(id){
+  const g = goals.find(x=>x.id===id); if(!g) return;
+  const block = document.getElementById('goal-block-'+id); if(!block) return;
+  const rem = getItemReminder('goal_'+id);
+  const div = document.createElement('div');
+  div.className = 'form-box'; div.style.marginTop='10px';
+  div.id = 'goal-edit-form-'+id;
+  div.innerHTML = `
+    ${buildItemReminderHTML('goal_'+id, rem)}
+    <div style="margin-top:10px">
+      <div class="input-row" style="margin-bottom:8px">
+        <input class="input" id="gef-emoji-${id}" value="${g.emoji}" style="width:64px;text-align:center;flex-shrink:0">
+        <input class="input" id="gef-name-${id}" value="${g.name}" placeholder="Goal name...">
+      </div>
+      <div class="input-row" style="margin-bottom:8px">
+        <input class="input" id="gef-current-${id}" type="number" value="${g.current}" placeholder="Current">
+        <input class="input" id="gef-target-${id}" type="number" value="${g.target}" placeholder="Target">
+        <select class="input" id="gef-unit-${id}" style="width:auto;flex-shrink:0">
+          ${['books','₹','km','hrs','times','units'].map(u=>`<option value="${u}" ${g.unit===u?'selected':''}>${u==='₹'?'₹ Rupees':u}</option>`).join('')}
+        </select>
+      </div>
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-primary btn-sm" onclick="saveGoalEdit(${id})">Save</button>
+        <button class="btn btn-ghost btn-sm" onclick="renderGoals()">Cancel</button>
+      </div>
+    </div>`;
+  block.appendChild(div);
+}
+
+function saveGoalEdit(id){
+  const g = goals.find(x=>x.id===id); if(!g) return;
+  const name    = document.getElementById('gef-name-'+id)?.value.trim();
+  const emoji   = document.getElementById('gef-emoji-'+id)?.value.trim() || g.emoji;
+  const current = parseFloat(document.getElementById('gef-current-'+id)?.value)||0;
+  const target  = parseFloat(document.getElementById('gef-target-'+id)?.value)||g.target;
+  const unit    = document.getElementById('gef-unit-'+id)?.value || g.unit;
+  if(!name){ showToast('Please enter a goal name.'); return; }
+  // Validate reminder if toggled on
+  const toggle = document.getElementById('rem-toggle-goal_'+id);
+  if(toggle?.checked){
+    const selChip = document.querySelector('#rem-body-goal_'+id+' .rem-preset-chip.sel');
+    if(!selChip){ showToast('Please select a reminder time, or uncheck "Set reminder".'); return; }
+  }
+  g.name=name; g.emoji=emoji; g.current=current; g.target=target; g.unit=unit;
+  persist();
+  applyItemReminder('goal_'+id, name);
+  renderGoals();
+  showToast('Goal updated!');
+}
 
 // ─────────────────────────────────────────────
 // TODOS — edit, radio priority, categories, drag, share
