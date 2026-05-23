@@ -4104,6 +4104,8 @@ async function addSharedExpense(listId){
 // ══════════════════════════════════════════════════════════════════════════
 // SHARED EXPENSE LIST — CSV IMPORT
 // ══════════════════════════════════════════════════════════════════════════
+// Cache parsed rows by listId so confirm button doesn't need inline JSON
+const _sharedCsvCache = {};
 
 // Download the same template used for personal spending
 function downloadSharedListTemplate(){
@@ -4225,6 +4227,9 @@ function parseSharedCsv(text, listId, fileName){
     return;
   }
 
+  // Cache parsed rows so confirm button can access them without inline JSON
+  _sharedCsvCache[listId] = parsed;
+
   // Show preview
   const total = parsed.reduce((a,r)=>a+r.amount, 0);
   const catCounts = {};
@@ -4233,32 +4238,135 @@ function parseSharedCsv(text, listId, fileName){
   previewEl.innerHTML = `
     <div style="background:var(--warm);border:1.5px solid var(--warm3);border-radius:var(--r2);padding:14px;margin-top:8px">
       <div style="font-size:13px;font-weight:600;color:var(--sage-dark);margin-bottom:8px">
-        📋 Preview — ${parsed.length} expenses · ₹${fmt(Math.round(total))} total
+        📋 Preview — <span id="shared-csv-summary-${listId}">${parsed.length} expenses · ₹${fmt(Math.round(total))} total</span>
+        <span style="font-size:11px;color:var(--text3);font-weight:400;margin-left:6px">Tap ✏️ to edit, × to remove a row</span>
       </div>
-      <div style="max-height:200px;overflow-y:auto;margin-bottom:10px">
-        ${parsed.slice(0,20).map(r=>`
-          <div style="display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid var(--warm2);font-size:12px">
-            <span style="width:24px;height:24px;border-radius:6px;background:${catBg(r.cat)};display:flex;align-items:center;justify-content:center;font-size:11px;flex-shrink:0">${catEmoji(r.cat)}</span>
-            <span style="flex:1;color:var(--text)">${r.desc}</span>
-            <span style="color:var(--text3);font-size:11px">${r.dateKey}</span>
-            <span style="font-weight:600;color:var(--sage-dark)">₹${fmt(r.amount)}</span>
+      <div id="shared-csv-rows-${listId}" style="max-height:320px;overflow-y:auto;margin-bottom:10px">
+        ${parsed.map((r,i)=>`
+          <div id="shared-csv-row-${listId}-${i}" style="padding:6px 0;border-bottom:1px solid var(--warm2)">
+            <div style="display:flex;align-items:center;gap:8px;font-size:12px">
+              <span style="width:24px;height:24px;border-radius:6px;background:${catBg(r.cat)};display:flex;align-items:center;justify-content:center;font-size:11px;flex-shrink:0">${catEmoji(r.cat)}</span>
+              <span style="flex:1;color:var(--text);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.desc}</span>
+              <span style="color:var(--text3);font-size:11px;white-space:nowrap">${r.dateKey}</span>
+              <span style="font-weight:600;color:var(--sage-dark);white-space:nowrap">₹${fmt(r.amount)}</span>
+              <button onclick="editSharedCsvRow(${listId},${i})" title="Edit"
+                style="background:none;border:none;cursor:pointer;font-size:13px;padding:2px 4px;opacity:.6;flex-shrink:0">✏️</button>
+              <button onclick="deleteSharedCsvRow(${listId},${i})" title="Remove"
+                style="background:none;border:none;cursor:pointer;font-size:13px;padding:2px 4px;color:var(--red);opacity:.7;flex-shrink:0">×</button>
+            </div>
           </div>`).join('')}
-        ${parsed.length>20?`<div style="font-size:11px;color:var(--text3);padding:6px 0">...and ${parsed.length-20} more rows</div>`:''}
       </div>
       ${errors.length>0?`<div style="font-size:11px;color:var(--red-dark);margin-bottom:8px">⚠️ ${errors.length} rows skipped: ${errors.slice(0,2).join(', ')}${errors.length>2?' ...':''}</div>`:''}
       <div style="display:flex;gap:8px">
-        <button class="btn btn-primary" style="flex:1" onclick="confirmSharedCsvImport(${listId},${JSON.stringify(parsed).replace(/</g,'\\u003c')})">
+        <button class="btn btn-primary" style="flex:1" id="shared-csv-confirm-${listId}" onclick="confirmSharedCsvImport(${listId})">
           ✓ Import ${parsed.length} Expenses
         </button>
-        <button class="btn btn-ghost" onclick="document.getElementById('shared-csv-preview-${listId}').innerHTML=''">Cancel</button>
+        <button class="btn btn-ghost" onclick="clearSharedCsvPreview(${listId})">Cancel</button>
       </div>
     </div>`;
 }
 
-async function confirmSharedCsvImport(listId, rows){
+
+function editSharedCsvRow(listId, idx){
+  const rows = _sharedCsvCache[listId];
+  if(!rows) return;
+  const r = rows[idx];
+  const rowEl = document.getElementById('shared-csv-row-'+listId+'-'+idx);
+  if(!rowEl) return;
+  const catNames = Object.keys(allCats());
+  const todayVal = (()=>{const d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');})();
+  // Convert dateKey to YYYY-MM-DD for the date input
+  const dateInput = r.dateKey ? r.dateKey.split('-').map((p,i)=>p.padStart(i===0?4:2,'0')).join('-') : todayVal;
+  rowEl.innerHTML = `
+    <div style="background:var(--warm);border-radius:var(--r2);padding:10px;margin:4px 0">
+      <div class="input-row" style="margin-bottom:6px">
+        <select class="input" id="ecr-cat-${listId}-${idx}" style="margin-bottom:0;flex-shrink:0;width:auto">
+          ${catNames.map(cat=>`<option value="${cat}" ${r.cat===cat?'selected':''}>${catEmoji(cat)} ${cat}</option>`).join('')}
+        </select>
+        <input class="input" id="ecr-desc-${listId}-${idx}" value="${r.desc}" placeholder="Description" style="margin-bottom:0">
+      </div>
+      <div class="input-row">
+        <input class="input" id="ecr-date-${listId}-${idx}" type="date" value="${dateInput}" style="margin-bottom:0">
+        <input class="input" id="ecr-amt-${listId}-${idx}" type="number" value="${r.amount}" min="0" style="margin-bottom:0;width:100px;flex-shrink:0">
+        <button class="btn btn-primary btn-sm" onclick="saveSharedCsvRow(${listId},${idx})">✓ Save</button>
+        <button class="btn btn-ghost btn-sm" onclick="refreshSharedCsvPreview(${listId})">✕</button>
+      </div>
+    </div>`;
+}
+
+function saveSharedCsvRow(listId, idx){
+  const rows = _sharedCsvCache[listId];
+  if(!rows) return;
+  const cat   = document.getElementById('ecr-cat-'+listId+'-'+idx)?.value || rows[idx].cat;
+  const desc  = (document.getElementById('ecr-desc-'+listId+'-'+idx)?.value||'').trim();
+  const dateRaw = document.getElementById('ecr-date-'+listId+'-'+idx)?.value || '';
+  const amt   = parseFloat(document.getElementById('ecr-amt-'+listId+'-'+idx)?.value||0);
+  if(!desc){ showToast('Description cannot be empty.'); return; }
+  if(isNaN(amt)||amt<=0){ showToast('Please enter a valid amount.'); return; }
+  let dateKey = rows[idx].dateKey;
+  if(dateRaw){ const p=dateRaw.split('-'); dateKey=parseInt(p[0])+'-'+parseInt(p[1])+'-'+parseInt(p[2]); }
+  rows[idx] = {...rows[idx], cat, desc, amount:amt, dateKey};
+  refreshSharedCsvPreview(listId);
+}
+
+function deleteSharedCsvRow(listId, idx){
+  const rows = _sharedCsvCache[listId];
+  if(!rows) return;
+  rows.splice(idx, 1);
+  if(rows.length === 0){
+    clearSharedCsvPreview(listId);
+    showToast('All rows removed.');
+    return;
+  }
+  refreshSharedCsvPreview(listId);
+}
+
+function refreshSharedCsvPreview(listId){
+  // Re-render the entire preview with current cached data
+  const rows = _sharedCsvCache[listId];
+  if(!rows || rows.length === 0){ clearSharedCsvPreview(listId); return; }
+
+  const total = rows.reduce((a,r)=>a+r.amount, 0);
+
+  // Update summary line
+  const summaryEl = document.getElementById('shared-csv-summary-'+listId);
+  if(summaryEl) summaryEl.textContent = rows.length + ' expenses · ₹' + fmt(Math.round(total)) + ' total';
+
+  // Update confirm button text
+  const confirmBtn = document.getElementById('shared-csv-confirm-'+listId);
+  if(confirmBtn) confirmBtn.textContent = '✓ Import ' + rows.length + ' Expenses';
+
+  // Re-render rows
+  const rowsEl = document.getElementById('shared-csv-rows-'+listId);
+  if(rowsEl) rowsEl.innerHTML = rows.map((r,i)=>`
+    <div id="shared-csv-row-${listId}-${i}" style="padding:6px 0;border-bottom:1px solid var(--warm2)">
+      <div style="display:flex;align-items:center;gap:8px;font-size:12px">
+        <span style="width:24px;height:24px;border-radius:6px;background:${catBg(r.cat)};display:flex;align-items:center;justify-content:center;font-size:11px;flex-shrink:0">${catEmoji(r.cat)}</span>
+        <span style="flex:1;color:var(--text);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.desc}</span>
+        <span style="color:var(--text3);font-size:11px;white-space:nowrap">${r.dateKey}</span>
+        <span style="font-weight:600;color:var(--sage-dark);white-space:nowrap">₹${fmt(r.amount)}</span>
+        <button onclick="editSharedCsvRow(${listId},${i})" title="Edit"
+          style="background:none;border:none;cursor:pointer;font-size:13px;padding:2px 4px;opacity:.6;flex-shrink:0">✏️</button>
+        <button onclick="deleteSharedCsvRow(${listId},${i})" title="Remove"
+          style="background:none;border:none;cursor:pointer;font-size:13px;padding:2px 4px;color:var(--red);opacity:.7;flex-shrink:0">×</button>
+      </div>
+    </div>`).join('');
+}
+
+function clearSharedCsvPreview(listId){
+  const el = document.getElementById('shared-csv-preview-'+listId);
+  if(el) el.innerHTML='';
+  delete _sharedCsvCache[listId];
+}
+
+async function confirmSharedCsvImport(listId){
+  const rows = _sharedCsvCache[listId];
+  if(!rows || rows.length === 0){ showToast('No data to import.'); return; }
+
   const lst = sharedExpenseLists.find(l => l.id === listId);
-  if(!lst) return;
-  const u = window.currentUser || currentUser;
+  if(!lst){ showToast('List not found.'); return; }
+
+  const u       = window.currentUser || currentUser;
   const addedBy = u?.name || 'Me';
   if(!lst.expenses) lst.expenses = [];
 
@@ -4271,8 +4379,8 @@ async function confirmSharedCsvImport(listId, rows){
   });
 
   persist();
+  delete _sharedCsvCache[listId];
 
-  // Clear preview and refresh detail view
   const previewEl = document.getElementById('shared-csv-preview-'+listId);
   if(previewEl) previewEl.innerHTML='';
   openSharedListDetail(listId);
