@@ -1421,6 +1421,7 @@ onAuthStateChanged(auth, async (user) => {
         <input class="amount-big-input" id="qa-amount" type="number" placeholder="₹ 0" min="0">
         <div class="quick-cats" id="qa-cats"></div>
         <input class="input" id="qa-desc" placeholder="Description (optional)" style="margin-bottom:8px">
+        <div id="qa-extra"></div>
         <div style="margin-bottom:12px">
           <label style="font-size:11px;color:var(--text3);display:block;margin-bottom:4px">Date</label>
           <input class="input" id="qa-date" type="date" style="margin-bottom:0">
@@ -3611,7 +3612,9 @@ function navToSpend(panel, btn){
 function updateFab(){
   const fab = document.getElementById('fab-quick-add');
   if(!fab) return;
-  const show = currentPage === 'spending' && spendTab === 'personal';
+  // Show on personal and groups tabs
+  const show = currentPage === 'spending' &&
+               (spendTab === 'personal' || spendTab === 'groups');
   fab.className = 'fab-quick-add' + (show?' visible':'');
 }
 
@@ -3622,6 +3625,56 @@ function openQuickAdd(){
   const sheet   = document.getElementById('quick-add-sheet');
   const overlay = document.getElementById('qa-overlay');
   if(!sheet||!overlay) return;
+
+  // Detect context: what is currently visible on the groups panel?
+  let qaContext = 'personal'; // default
+  let qaGroupId = null;
+  let qaListId  = null;
+
+  if(spendTab === 'groups'){
+    // Check if a shared list detail is open
+    const slDetail = document.getElementById('shared-list-detail');
+    if(slDetail && slDetail.style.display !== 'none'){
+      // Find which list is shown — look for the back button onclick
+      const backBtn = slDetail.querySelector('button[onclick*="closeSharedListDetail"]');
+      // Find list id from the add expense form id
+      const formEl = slDetail.querySelector('[id^="shared-expense-form-"]');
+      if(formEl){
+        qaListId  = parseInt(formEl.id.replace('shared-expense-form-',''));
+        qaContext = 'shared_list';
+      }
+    }
+    // Check if a group detail is open
+    const grpDetail = document.getElementById('group-detail-view');
+    if(grpDetail && grpDetail.style.display !== 'none' && qaContext === 'groups'){
+      // Find group id from the detail heading
+      const splitBtn = grpDetail.querySelector('button[onclick*="openSplitModal"]');
+      if(splitBtn){
+        const m = splitBtn.getAttribute('onclick')?.match(/\d+/);
+        if(m){ qaGroupId = parseInt(m[0]); qaContext = 'group_split'; }
+      }
+    }
+    if(qaContext === 'groups'){
+      // On groups list — ask user to open a group or shared list first
+      showToast('Open a group or shared list first, then tap + to add an expense.');
+      return;
+    }
+  }
+
+  // Sheet title based on context
+  const titles = {
+    personal:    'Quick Add Spending',
+    shared_list: 'Add to ' + (sharedExpenseLists.find(l=>l.id===qaListId)?.name || 'Shared List'),
+    group_split: 'Add Expense to ' + (groups.find(g=>g.id===qaGroupId)?.name || 'Group'),
+  };
+  const titleEl = sheet.querySelector('.sheet-title');
+  if(titleEl) titleEl.textContent = titles[qaContext] || 'Quick Add';
+
+  // Store context for submitQuickAdd
+  sheet.dataset.qaContext  = qaContext;
+  sheet.dataset.qaGroupId  = qaGroupId  || '';
+  sheet.dataset.qaListId   = qaListId   || '';
+
   // Populate category chips
   const cats = Object.keys(allCats()).slice(0,8);
   quickAddCat = cats[0];
@@ -3630,8 +3683,29 @@ function openQuickAdd(){
     `<button class="quick-cat-chip ${cat===quickAddCat?'sel':''}"
       onclick="setQaCat('${cat}',this)">${catEmoji(cat)} ${cat}</button>`
   ).join('');
-  // Reset form with today's date
-  const amtEl = document.getElementById('qa-amount');
+
+  // For group split — add "Who paid?" row
+  let extraHtml = '';
+  if(qaContext === 'group_split'){
+    const grp    = groups.find(g=>g.id===qaGroupId);
+    const u      = window.currentUser||currentUser;
+    const members= grp?.members || ['me'];
+    extraHtml = `<div style="margin-bottom:10px">
+      <label style="font-size:11px;color:var(--text3);display:block;margin-bottom:4px">Who paid?</label>
+      <select class="input" id="qa-paidby" style="margin-bottom:0">
+        <option value="me">Me</option>
+        ${members.filter(m=>m!=='me').map(fid=>{
+          const f=friends.find(x=>x.id===fid);
+          return f?`<option value="${fid}">${f.name}</option>`:'';
+        }).join('')}
+      </select>
+    </div>`;
+  }
+  const extraEl = document.getElementById('qa-extra');
+  if(extraEl) extraEl.innerHTML = extraHtml;
+
+  // Reset amount/desc/date
+  const amtEl  = document.getElementById('qa-amount');
   const descEl = document.getElementById('qa-desc');
   const dateEl = document.getElementById('qa-date');
   if(amtEl)  amtEl.value  = '';
@@ -3656,22 +3730,87 @@ function setQaCat(cat, btn){
   if(btn) btn.classList.add('sel');
 }
 
-function submitQuickAdd(){
-  const amount = parseFloat(document.getElementById('qa-amount')?.value||0);
+async function submitQuickAdd(){
+  const amount  = parseFloat(document.getElementById('qa-amount')?.value||0);
   if(isNaN(amount)||amount<=0){ showToast('Please enter a valid amount.'); return; }
   const desc    = (document.getElementById('qa-desc')?.value||'').trim() || quickAddCat;
   const dateRaw = document.getElementById('qa-date')?.value || '';
-  // Convert YYYY-MM-DD to our dateKey format (YYYY-M-D)
-  let dateKey = todayKey();
+  let dateKey   = todayKey();
   if(dateRaw){
     const parts = dateRaw.split('-');
     dateKey = parseInt(parts[0])+'-'+parseInt(parts[1])+'-'+parseInt(parts[2]);
   }
-  spends.push({id:uid(), cat:quickAddCat, desc, amount, date:dateKey});
-  persistSpend();
+
+  const sheet   = document.getElementById('quick-add-sheet');
+  const ctx     = sheet?.dataset.qaContext || 'personal';
+  const groupId = parseInt(sheet?.dataset.qaGroupId) || null;
+  const listId  = parseInt(sheet?.dataset.qaListId)  || null;
+
   closeQuickAdd();
-  renderPersonal();
-  showToast('✅ Added ₹' + fmt(amount) + ' to ' + quickAddCat);
+
+  if(ctx === 'shared_list' && listId){
+    // Add to shared expense list
+    const lst = sharedExpenseLists.find(l=>l.id===listId);
+    if(!lst){ showToast('Shared list not found.'); return; }
+    const u = window.currentUser||currentUser;
+    if(!lst.expenses) lst.expenses=[];
+    lst.expenses.push({id:uid(), cat:quickAddCat, desc, amount, date:dateKey,
+                       addedBy:u?.name||'Me', addedByUid:u?.uid||''});
+    persist();
+    openSharedListDetail(listId);
+    showToast('✅ Added ₹'+fmt(amount)+' to '+lst.name+'!');
+    // Push to members
+    if(window._fb){
+      const {db,doc,getDoc,setDoc}=window._fb;
+      for(const mUid of (lst.memberUids||[])){
+        if(mUid===u?.uid) continue;
+        try{
+          const snap=await getDoc(doc(db,'users',mUid));
+          const data=snap.exists()?snap.data():{};
+          const theirLists=(data.sharedExpenseLists||[]).map(l=>String(l.id)===String(listId)?lst:l);
+          if(!theirLists.some(l=>String(l.id)===String(listId))) theirLists.push(lst);
+          await setDoc(doc(db,'users',mUid),{sharedExpenseLists:theirLists},{merge:true});
+        }catch(e){console.warn('QA shared list push:',e);}
+      }
+    }
+
+  } else if(ctx === 'group_split' && groupId){
+    // Add to group as an equal split
+    const grp = groups.find(g=>g.id===groupId);
+    if(!grp){ showToast('Group not found.'); return; }
+    const paidBy  = document.getElementById('qa-paidby')?.value || 'me';
+    const members = grp.members || ['me'];
+    const share   = Math.round((amount/members.length)*100)/100;
+    const splitMembers = members.map(m=>({friendId:m, share, paid:m===paidBy}));
+    const newSplit = {id:uid(), groupId, desc, totalAmount:amount,
+                      paidBy, date:dateKey, members:splitMembers, splitType:'equal'};
+    splits.push(newSplit);
+    persist();
+    renderGroupDetail(groupId);
+    showToast('✅ Added ₹'+fmt(amount)+' to '+grp.name+'!');
+    // Push to group members
+    const u=window.currentUser||currentUser;
+    if(window._fb){
+      const {db,doc,getDoc,setDoc}=window._fb;
+      const groupSplits=splits.filter(s=>s.groupId===groupId);
+      for(const mUid of (grp.memberUids||[])){
+        if(mUid===u?.uid) continue;
+        try{
+          const snap=await getDoc(doc(db,'users',mUid));
+          const data=snap.exists()?snap.data():{};
+          const otherSplits=(data.splits||[]).filter(s=>String(s.groupId)!==String(groupId));
+          await setDoc(doc(db,'users',mUid),{splits:[...otherSplits,...groupSplits]},{merge:true});
+        }catch(e){console.warn('QA group split push:',e);}
+      }
+    }
+
+  } else {
+    // Default: personal spending
+    spends.push({id:uid(), cat:quickAddCat, desc, amount, date:dateKey});
+    persistSpend();
+    renderPersonal();
+    showToast('✅ Added ₹'+fmt(amount)+' to '+quickAddCat);
+  }
 }
 
 // ── Date range filter ────────────────────────────────────────────────────────
