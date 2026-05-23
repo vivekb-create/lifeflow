@@ -1154,6 +1154,13 @@ onAuthStateChanged(auth, async (user) => {
     border:1.5px solid var(--warm3);background:var(--warm2);color:var(--text2);
     cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all .15s;}
   .rem-day-chip.sel{background:var(--sage);color:white;border-color:var(--sage);}
+
+  /* ── SPENDING CHARTS ── */
+  .spend-chart-wrap{background:var(--card);border:1px solid var(--warm2);border-radius:var(--r);
+    padding:16px;margin-bottom:14px;}
+  .spend-chart-title{font-size:13px;font-weight:600;color:var(--text2);margin-bottom:12px;
+    display:flex;align-items:center;gap:8px;}
+  .spend-chart-canvas{max-height:220px;}
 </style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 </head>
@@ -1328,6 +1335,10 @@ onAuthStateChanged(auth, async (user) => {
             <div class="card">
               <div class="card-title">By category</div>
               <div id="spend-cats"></div>
+              <div id="spend-cat-chart-wrap" style="display:none;margin-top:12px;padding-top:12px;border-top:1px solid var(--warm2)">
+                <div style="font-size:11px;font-weight:600;color:var(--text3);margin-bottom:8px;text-transform:uppercase;letter-spacing:.05em">Chart</div>
+                <canvas id="personal-cat-chart" class="spend-chart-canvas"></canvas>
+              </div>
               <div style="margin-top:14px;border-top:1px solid var(--warm2);padding-top:14px">
                 <div class="card-title">Manage categories</div>
                 <div id="custom-cats-list"></div>
@@ -2741,22 +2752,46 @@ function renderPersonal(){
     ?'<div class="empty"><div class="empty-icon">📊</div>No data for this period</div>'
     :sorted.map(([cat,amt])=>`<div class="cat-bar"><div style="width:34px;height:34px;border-radius:9px;background:${catBg(cat)};display:flex;align-items:center;justify-content:center;font-size:15px;flex-shrink:0">${catEmoji(cat)}</div><span style="font-size:13px;flex:1;color:var(--text)">${cat}</span><span style="font-size:14px;font-weight:600">₹${fmt(amt)}</span></div>`).join('');
 
+  // Donut chart for category totals
+  const catChartWrap = document.getElementById('spend-cat-chart-wrap');
+  if(sorted.length > 0 && catChartWrap){
+    catChartWrap.style.display='block';
+    setTimeout(()=>renderDonutChart('personal-cat-chart',
+      sorted.map(([cat])=>catEmoji(cat)+' '+cat),
+      sorted.map(([,amt])=>Math.round(amt))
+    ),80);
+  } else if(catChartWrap){
+    catChartWrap.style.display='none';
+  }
+
 
   const cclEl=document.getElementById('custom-cats-list');
   if(cclEl)cclEl.innerHTML=customCats.length===0
     ?'<div style="font-size:12px;color:var(--text3);margin-bottom:8px">No custom categories yet.</div>'
-    :`<div style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:8px">${customCats.map(c=>`<span class="cat-chip" style="background:${c.bg};color:${c.color}">${c.emoji} ${c.name}<button class="del-chip" onclick="deleteCustomCat('${c.name}')">×</button></span>`).join('')}</div>`;
+    :`<div style="display:flex;flex-direction:column;gap:4px;margin-bottom:8px">
+      ${customCats.map(c=>`<div style="display:flex;align-items:center;gap:8px;padding:6px 10px;background:${c.bg};border-radius:var(--r2)">
+        <span style="font-size:18px">${c.emoji}</span>
+        <span style="font-size:13px;font-weight:500;color:${c.color};flex:1">${c.name}</span>
+        <button class="btn btn-ghost btn-sm" onclick="openEditCatModal('${c.name}')" style="font-size:11px;padding:3px 8px">✏️ Edit</button>
+        <button onclick="deleteCustomCat('${c.name}')" style="background:none;border:none;font-size:16px;cursor:pointer;color:var(--red);opacity:.6;padding:2px 4px">×</button>
+      </div>`).join('')}</div>`;
 
   const ccfEl=document.getElementById('custom-cat-form');
   if(ccfEl)ccfEl.innerHTML=showCatForm?`
     <div class="form-box" style="padding:10px">
+      <div style="font-size:11px;color:var(--text3);margin-bottom:6px;font-weight:600">Pick an icon</div>
+      <div style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:8px" id="ccat-icon-picker">
+        ${CAT_ICON_PRESETS.map(ic=>`<button onclick="selectCatIcon('${ic}',this)"
+          style="width:36px;height:36px;font-size:20px;border:2px solid var(--warm3);border-radius:8px;background:var(--warm);cursor:pointer;transition:all .1s"
+          class="cat-icon-btn">${ic}</button>`).join('')}
+      </div>
+      <input type="hidden" id="ccat-emoji" value="${CAT_ICON_PRESETS[0]}">
       <div class="input-row" style="margin-bottom:8px">
-        <input class="input" id="ccat-emoji" value="🏷️" style="width:56px;text-align:center;flex-shrink:0;margin-bottom:0">
         <input class="input" id="ccat-name" placeholder="Category name" style="margin-bottom:0">
         <input class="input" id="ccat-color" type="color" value="#6B8F71" style="width:42px;padding:4px;flex-shrink:0;margin-bottom:0">
       </div>
       <div style="display:flex;gap:8px">
-        <button class="btn btn-primary btn-sm" onclick="addCustomCat()">Add</button>
+        <button class="btn btn-primary btn-sm" onclick="addCustomCat()">Add Category</button>
         <button class="btn btn-ghost btn-sm" onclick="setCatForm(false)">Cancel</button>
       </div>
     </div>`:`<button class="add-btn" style="margin-top:0" onclick="setCatForm(true)">+ Add custom category</button>`;
@@ -2788,14 +2823,99 @@ function renderPersonal(){
 
 function setCatForm(v){showCatForm=v;renderPersonal();if(v)setTimeout(()=>document.getElementById('ccat-name')?.focus(),50);}
 function setSpendForm(v){showSpendForm=v;renderPersonal();if(v)setTimeout(()=>document.getElementById('spend-desc-in')?.focus(),50);}
+
+// ══════════════════════════════════════════════════════════════════════════
+// CATEGORY EDITING with icon picker
+// ══════════════════════════════════════════════════════════════════════════
+const CAT_ICON_PRESETS = [
+  '🍽️','🍔','☕','🍕','🛒','🥗','🍜','🍱',
+  '🚗','✈️','🚌','⛽','🏨','🚕','🛵','🚂',
+  '🛍️','👗','👟','💄','🎁','🛋️','📱','💻',
+  '💊','🏋️','🧘','🩺','🏥','🌿','🧬','🦷',
+  '📄','💡','📺','📶','🏠','💧','🔧','🧹',
+  '🎬','🎵','🎮','🎭','🎨','📚','🏖️','🎡',
+  '💰','💸','📈','💳','🏦','💼','📊','🎓',
+  '🎂','🎊','🎉','💐','🐾','⚽','🏀','🏕️',
+];
+
+function selectCatIcon(icon, btn){
+  // Update hidden input
+  const inp = document.getElementById('ccat-emoji') || document.getElementById('ecat-emoji');
+  if(inp) inp.value = icon;
+  // Highlight selected
+  document.querySelectorAll('.cat-icon-btn').forEach(b=>{
+    b.style.borderColor = 'var(--warm3)';
+    b.style.background  = 'var(--warm)';
+    b.style.transform   = '';
+  });
+  if(btn){
+    btn.style.borderColor = 'var(--sage)';
+    btn.style.background  = 'var(--sage-light)';
+    btn.style.transform   = 'scale(1.15)';
+  }
+}
+
+function openEditCatModal(catName){
+  const cat = customCats.find(c=>c.name===catName);
+  if(!cat) return;
+  document.getElementById('edit-cat-modal')?.remove();
+  const modal = document.createElement('div');
+  modal.className='modal-overlay'; modal.id='edit-cat-modal';
+  modal.innerHTML=`<div class="modal" style="max-width:400px">
+    <button class="modal-close" onclick="document.getElementById('edit-cat-modal').remove()">x</button>
+    <div class="modal-title">Edit Category</div>
+    <div style="font-size:11px;color:var(--text3);margin-bottom:6px;font-weight:600">Pick an icon</div>
+    <div style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:12px">
+      ${CAT_ICON_PRESETS.map(ic=>`<button onclick="selectCatIcon('${ic}',this)"
+        style="width:36px;height:36px;font-size:20px;border:2px solid ${ic===cat.emoji?'var(--sage)':'var(--warm3)'};border-radius:8px;background:${ic===cat.emoji?'var(--sage-light)':'var(--warm)'};cursor:pointer;transition:all .1s;${ic===cat.emoji?'transform:scale(1.15)':''}"
+        class="cat-icon-btn">${ic}</button>`).join('')}
+    </div>
+    <input type="hidden" id="ecat-emoji" value="${cat.emoji}">
+    <div class="input-row" style="margin-bottom:12px">
+      <input class="input" id="ecat-name" value="${cat.name}" placeholder="Category name" style="margin-bottom:0">
+      <input class="input" id="ecat-color" type="color" value="${cat.color||'#6B8F71'}" style="width:42px;padding:4px;flex-shrink:0;margin-bottom:0">
+    </div>
+    <div style="display:flex;gap:8px">
+      <button class="btn btn-primary" style="flex:1" onclick="saveEditCat('${catName}')">Save</button>
+      <button class="btn btn-ghost" onclick="document.getElementById('edit-cat-modal').remove()">Cancel</button>
+    </div>
+  </div>`;
+  document.body.appendChild(modal);
+}
+
+function saveEditCat(oldName){
+  const cat = customCats.find(c=>c.name===oldName);
+  if(!cat) return;
+  const newName  = (document.getElementById('ecat-name')?.value||'').trim();
+  const newEmoji = document.getElementById('ecat-emoji')?.value || cat.emoji;
+  const newColor = document.getElementById('ecat-color')?.value || cat.color;
+  if(!newName){ showToast('Category name cannot be empty.'); return; }
+  if(newName!==oldName && allCats()[newName]){ showToast('A category with that name already exists.'); return; }
+  // Update category
+  cat.name  = newName;
+  cat.emoji = newEmoji;
+  cat.color = newColor;
+  cat.bg    = newColor+'22';
+  // Update all spends/expenses that used old name
+  if(newName !== oldName){
+    spends.forEach(s=>{ if(s.cat===oldName) s.cat=newName; });
+    sharedExpenseLists.forEach(lst=>(lst.expenses||[]).forEach(e=>{ if(e.cat===oldName) e.cat=newName; }));
+    splits.forEach(sp=>{ if(sp.cat===oldName) sp.cat=newName; });
+  }
+  persistSpend();
+  document.getElementById('edit-cat-modal')?.remove();
+  renderPersonal();
+  showToast('Category updated!');
+}
+
 function addCustomCat(){
-  const name=(document.getElementById('ccat-name').value||'').trim();
-  const emoji=(document.getElementById('ccat-emoji').value||'').trim()||'🏷️';
-  const color=document.getElementById('ccat-color').value||'#6B8F71';
-  if(!name)return;
-  if(allCats()[name]){alert('Category already exists!');return;}
+  const name  = (document.getElementById('ccat-name')?.value||'').trim();
+  const emoji = (document.getElementById('ccat-emoji')?.value||'').trim() || '🏷️';
+  const color = document.getElementById('ccat-color')?.value||'#6B8F71';
+  if(!name){ showToast('Please enter a category name.'); return; }
+  if(allCats()[name]){ showToast('A category with that name already exists.'); return; }
   customCats.push({name,emoji,color,bg:color+'22'});
-  persistSpend();showCatForm=false;renderPersonal();
+  persistSpend(); showCatForm=false; renderPersonal();
 }
 function deleteCustomCat(name){customCats=customCats.filter(c=>c.name!==name);persistSpend();renderPersonal();}
 function addSpend(){
@@ -4022,12 +4142,97 @@ function renderSharedExpenseLists(){
           <div class="shared-list-meta">${(lst.expenses||[]).length} expenses · ${memberNames.join(', ')}</div>
         </div>
         <div class="shared-list-total">₹${fmt(Math.round(total))}</div>
+        <button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();openEditSharedListModal(${lst.id})"
+          style="font-size:12px;padding:4px 8px;flex-shrink:0" title="Edit list">✏️</button>
+        <button onclick="event.stopPropagation();deleteSharedList(${lst.id})"
+          style="background:none;border:none;font-size:16px;cursor:pointer;color:var(--red);opacity:.6;flex-shrink:0;padding:4px" title="Delete">×</button>
       </div>
       <div class="shared-list-members">
         ${memberNames.map(n => `<div class="shared-list-member-avatar" title="${n}">${n[0].toUpperCase()}</div>`).join('')}
       </div>
     </div>`;
   }).join('');
+}
+
+
+function deleteSharedList(listId){
+  if(!confirm('Delete this shared list and all its expenses?')) return;
+  sharedExpenseLists = sharedExpenseLists.filter(l => l.id !== listId);
+  persist();
+  renderSharedExpenseLists();
+  showToast('Shared list deleted.');
+}
+
+async function openEditSharedListModal(listId){
+  const lst = sharedExpenseLists.find(l => l.id === listId);
+  if(!lst) return;
+  const activeFriends = friends.filter(f => f.status === 'active');
+  const currentMemberIds = (lst.memberIds||[]).filter(m => m !== 'me');
+  document.getElementById('edit-shared-list-modal')?.remove();
+  const modal = document.createElement('div');
+  modal.className = 'modal-overlay'; modal.id = 'edit-shared-list-modal';
+  modal.innerHTML = `<div class="modal" style="max-width:400px">
+    <button class="modal-close" onclick="document.getElementById('edit-shared-list-modal').remove()">x</button>
+    <div class="modal-title">Edit Shared List</div>
+    <div class="input-row" style="margin-bottom:12px">
+      <input class="input" id="esl-emoji" value="${lst.emoji||'📋'}" style="width:56px;text-align:center;flex-shrink:0;margin-bottom:0;font-size:22px">
+      <input class="input" id="esl-name" value="${lst.name}" placeholder="List name" style="margin-bottom:0">
+    </div>
+    <div style="font-size:12px;color:var(--text3);margin-bottom:8px;font-weight:500">Members</div>
+    <div style="margin-bottom:16px">
+      <div style="padding:8px;background:var(--warm);border-radius:var(--r2);font-size:13px;margin-bottom:4px">
+        ✓ ${(window.currentUser||currentUser)?.name||'You'} (you)
+      </div>
+      ${activeFriends.length===0
+        ? '<div style="font-size:12px;color:var(--text3);padding:8px">No accepted friends yet.</div>'
+        : activeFriends.map(f=>`<label style="display:flex;align-items:center;gap:8px;padding:8px;border:1.5px solid var(--warm2);border-radius:var(--r2);cursor:pointer;margin-bottom:4px">
+            <input type="checkbox" class="esl-member-cb" value="${f.id}" ${currentMemberIds.includes(String(f.id))||currentMemberIds.includes(f.id)?'checked':''}>
+            <div class="friend-avatar" style="width:26px;height:26px;font-size:11px">${f.name[0].toUpperCase()}</div>
+            <span style="font-size:13px">${f.name}</span>
+          </label>`).join('')}
+    </div>
+    <div style="display:flex;gap:8px">
+      <button class="btn btn-primary" style="flex:1" onclick="saveEditSharedList(${listId})">Save Changes</button>
+      <button class="btn btn-ghost" onclick="document.getElementById('edit-shared-list-modal').remove()">Cancel</button>
+    </div>
+  </div>`;
+  document.body.appendChild(modal);
+}
+
+async function saveEditSharedList(listId){
+  const lst = sharedExpenseLists.find(l => l.id === listId);
+  if(!lst) return;
+  const name  = (document.getElementById('esl-name')?.value||'').trim() || lst.name;
+  const emoji = (document.getElementById('esl-emoji')?.value||'').trim() || lst.emoji;
+  const cbs   = document.querySelectorAll('.esl-member-cb:checked');
+  const selectedIds = Array.from(cbs).map(cb => Number(cb.value));
+  const u = window.currentUser||currentUser;
+  const newMemberIds  = ['me', ...selectedIds];
+  const newMemberUids = [u?.uid||''];
+  selectedIds.forEach(fid=>{
+    const f=friends.find(x=>x.id===fid);
+    if(f?.fromUid) newMemberUids.push(f.fromUid);
+  });
+  lst.name=name; lst.emoji=emoji;
+  lst.memberIds=newMemberIds; lst.memberUids=newMemberUids;
+  persist();
+  document.getElementById('edit-shared-list-modal')?.remove();
+  renderSharedExpenseLists();
+  showToast('Shared list updated!');
+  // Push to all members
+  if(window._fb){
+    const {db,doc,getDoc,setDoc}=window._fb;
+    for(const mUid of newMemberUids){
+      if(mUid===u?.uid) continue;
+      try{
+        const snap=await getDoc(doc(db,'users',mUid));
+        const data=snap.exists()?snap.data():{};
+        const theirLists=(data.sharedExpenseLists||[]).filter(l=>String(l.id)!==String(listId));
+        theirLists.push(lst);
+        await setDoc(doc(db,'users',mUid),{sharedExpenseLists:theirLists},{merge:true});
+      }catch(e){console.warn('saveEditSharedList push:',e);}
+    }
+  }
 }
 
 function openNewSharedListModal(){
@@ -4142,6 +4347,7 @@ function openSharedListDetail(listId){
               <span style="flex:1;font-size:13px">${cat}</span>
               <span style="font-size:13px;font-weight:600">₹${fmt(amt)}</span>
             </div>`).join('')}
+          <div style="margin-top:12px"><canvas id="shared-list-chart-${lst.id}" class="spend-chart-canvas"></canvas></div>
         </div>` : ''}
       <div>
         <div class="card-title" style="margin-bottom:8px">Expenses</div>
@@ -4168,6 +4374,17 @@ function openSharedListDetail(listId){
       <div id="shared-csv-preview-${lst.id}" style="margin-top:8px"></div>
       <div id="shared-expense-form-${lst.id}" style="margin-top:8px"></div>
     </div>`;
+}
+
+function _renderSharedListChart(listId, catSorted){
+  if(catSorted.length < 1) return;
+  setTimeout(()=>{
+    renderBarChart(
+      'shared-list-chart-'+listId,
+      catSorted.map(([cat])=>catEmoji(cat)+' '+cat),
+      catSorted.map(([,amt])=>Math.round(amt))
+    );
+  }, 80);
 }
 
 function closeSharedListDetail(){
@@ -5246,6 +5463,73 @@ function getItemReminder(itemId){
   return reminders.find(r => r.itemId === itemId) || null;
 }
 
+
+// ── Chart palette (matches app category colours) ─────────────────────────
+const CHART_PALETTE = [
+  '#6B8F71','#B8845A','#5A78B8','#B85A4A','#8A6BC4','#5A9898','#9C9C98',
+  '#4A7C59','#C4944A','#4A5898','#984A4A','#6A4AC4','#4A8888','#7C7C74',
+];
+
+function buildChartColors(count){
+  const colors=[], borders=[];
+  for(let i=0;i<count;i++){
+    const base=CHART_PALETTE[i%CHART_PALETTE.length];
+    colors.push(base+'CC');   // 80% opacity fill
+    borders.push(base);
+  }
+  return {colors, borders};
+}
+
+function renderDonutChart(canvasId, labels, data, title){
+  const canvas = document.getElementById(canvasId);
+  if(!canvas || typeof Chart==='undefined') return;
+  // Destroy existing chart if any
+  const existing = Chart.getChart(canvasId);
+  if(existing) existing.destroy();
+  const {colors,borders} = buildChartColors(labels.length);
+  new Chart(canvas, {
+    type:'doughnut',
+    data:{
+      labels,
+      datasets:[{data, backgroundColor:colors, borderColor:borders, borderWidth:2, hoverOffset:8}]
+    },
+    options:{
+      responsive:true, maintainAspectRatio:true,
+      cutout:'62%',
+      plugins:{
+        legend:{position:'right', labels:{font:{size:11,family:'DM Sans'},boxWidth:12,padding:10,color:'#5C5C58'}},
+        tooltip:{callbacks:{label:ctx=>`₹${ctx.parsed.toLocaleString('en-IN')} (${Math.round(ctx.parsed/ctx.dataset.data.reduce((a,b)=>a+b,0)*100)}%)`}}
+      }
+    }
+  });
+}
+
+function renderBarChart(canvasId, labels, data, title){
+  const canvas = document.getElementById(canvasId);
+  if(!canvas || typeof Chart==='undefined') return;
+  const existing = Chart.getChart(canvasId);
+  if(existing) existing.destroy();
+  const {colors,borders} = buildChartColors(labels.length);
+  new Chart(canvas, {
+    type:'bar',
+    data:{
+      labels,
+      datasets:[{data, backgroundColor:colors, borderColor:borders, borderWidth:1.5, borderRadius:6}]
+    },
+    options:{
+      responsive:true, maintainAspectRatio:true,
+      plugins:{
+        legend:{display:false},
+        tooltip:{callbacks:{label:ctx=>`₹${ctx.parsed.y.toLocaleString('en-IN')}`}}
+      },
+      scales:{
+        x:{ticks:{font:{size:10,family:'DM Sans'},maxRotation:30},grid:{display:false}},
+        y:{ticks:{font:{size:10},callback:v=>'₹'+v.toLocaleString('en-IN')},grid:{color:'#F0ECE6'}}
+      }
+    }
+  });
+}
+
 function showToast(msg){
   const t=document.createElement('div');
   t.style.cssText='position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#3D5C42;color:white;padding:10px 20px;border-radius:10px;font-size:13px;z-index:9999;box-shadow:0 4px 16px rgba(0,0,0,.2);transition:opacity .4s';
@@ -5513,13 +5797,28 @@ function renderGroupDetail(gid){
       </div>
       ${visibleBadge}
       <div class="card-title">Expenses</div>
-      <div class="card-title">Expenses</div>
       ${splitsHtml}
+      ${grpSplits.length>0?`
+        <div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--warm2)">
+          <div style="font-size:11px;font-weight:600;color:var(--text3);margin-bottom:8px;text-transform:uppercase;letter-spacing:.05em">By category</div>
+          <canvas id="group-chart-${gid}" class="spend-chart-canvas"></canvas>
+        </div>`:''}
       <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:4px">
         <button class="add-btn" style="flex:1" onclick="openSplitModal(${gid})">+ Add expense &amp; split</button>
         <button class="btn btn-ghost btn-sm" onclick="openEditGroupModal(${gid})" style="flex-shrink:0;white-space:nowrap">✏️ Edit Group</button>
       </div>
     </div>`;
+  // Render group bar chart
+  if(grpSplits.length > 0){
+    const grpCatTotals={};
+    grpSplits.forEach(s=>{ const k=s.cat||'Other'; grpCatTotals[k]=(grpCatTotals[k]||0)+(s.totalAmount||0); });
+    const grpSorted=Object.entries(grpCatTotals).sort((a,b)=>b[1]-a[1]);
+    setTimeout(()=>renderBarChart(
+      'group-chart-'+gid,
+      grpSorted.map(([cat])=>catEmoji(cat)+' '+cat),
+      grpSorted.map(([,amt])=>Math.round(amt))
+    ),80);
+  }
 }
 
 async function openEditGroupModal(gid){
