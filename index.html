@@ -4020,7 +4020,13 @@ function openSharedListDetail(listId){
               <button class="del" onclick="deleteSharedExpense(${lst.id},${e.id})">x</button>
             </div>`).join('')}
       </div>
-      <button class="add-btn" style="margin-top:12px" onclick="openAddSharedExpenseForm(${lst.id})">+ Add Expense</button>
+      <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">
+        <button class="add-btn" style="flex:1" onclick="openAddSharedExpenseForm(${lst.id})">+ Add Expense</button>
+        <button class="btn btn-ghost btn-sm" onclick="sharedListCsvImport(${lst.id})" title="Import from CSV">⬆ Import CSV</button>
+        <button class="btn btn-ghost btn-sm" onclick="downloadSharedListTemplate()" title="Download CSV template">⬇ Template</button>
+        <input type="file" id="shared-csv-input-${lst.id}" accept=".csv,text/csv" style="display:none" onchange="handleSharedCsvFile(event,${lst.id})">
+      </div>
+      <div id="shared-csv-preview-${lst.id}" style="margin-top:8px"></div>
       <div id="shared-expense-form-${lst.id}" style="margin-top:8px"></div>
     </div>`;
 }
@@ -4090,6 +4096,203 @@ async function addSharedExpense(listId){
         if(!theirLists.some(l => String(l.id) === String(listId))) theirLists.push(lst);
         await setDoc(doc(db,'users',memberUid), {sharedExpenseLists: theirLists}, {merge:true});
       }catch(e){ console.warn('addSharedExpense push:', e); }
+    }
+  }
+}
+
+
+// ══════════════════════════════════════════════════════════════════════════
+// SHARED EXPENSE LIST — CSV IMPORT
+// ══════════════════════════════════════════════════════════════════════════
+
+// Download the same template used for personal spending
+function downloadSharedListTemplate(){
+  const lines = [
+    '# LifeFlow Shared Expense List CSV Template',
+    '# Format: Date (DD/MM/YYYY), Description, Category, Amount, Notes (optional)',
+    '# Amount: numbers only, no ₹ symbol',
+    '# Category: Food | Travel | Shopping | Health | Bills | Entertainment | Other',
+    '',
+    'Date,Description,Category,Amount,Notes',
+    '15/01/2025,Grocery shopping,Food,450,Weekly groceries',
+    '15/01/2025,Petrol,Travel,800,Roadtrip fuel',
+    '16/01/2025,Hotel stay,Travel,3200,Night 1',
+    '16/01/2025,Dinner out,Food,1450,Restaurant',
+    '17/01/2025,Entry tickets,Entertainment,600,Museum',
+    '17/01/2025,Snacks,Food,320,',
+  ];
+  const blob = new Blob([lines.join('\n')], {type:'text/csv;charset=utf-8;'});
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href = url; a.download = 'lifeflow-shared-list-template.csv';
+  document.body.appendChild(a); a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  showToast('📄 Template downloaded! Fill in your expenses and import back.');
+}
+
+function sharedListCsvImport(listId){
+  const input = document.getElementById('shared-csv-input-'+listId);
+  if(input){ input.value=''; input.click(); }
+}
+
+function handleSharedCsvFile(e, listId){
+  const file = e.target.files[0];
+  if(!file) return;
+  const reader = new FileReader();
+  reader.onload = evt => parseSharedCsv(evt.target.result, listId, file.name);
+  reader.readAsText(file, 'UTF-8');
+  e.target.value = '';
+}
+
+function parseSharedCsv(text, listId, fileName){
+  const previewEl = document.getElementById('shared-csv-preview-'+listId);
+  if(!previewEl) return;
+
+  // Strip comment lines and empty lines
+  const rawLines = text.split('\n').filter(l => l.trim() && !l.trim().startsWith('#'));
+  if(rawLines.length < 2){
+    previewEl.innerHTML = `<div style="color:var(--red);font-size:12px;padding:8px;background:var(--red-l);border-radius:8px">
+      File appears empty or has no data rows.</div>`;
+    return;
+  }
+
+  // Parse header
+  function splitCsvLine(line){
+    const result=[]; let cur='', inQ=false;
+    for(const ch of line+','){
+      if(ch==='"'){ inQ=!inQ; }
+      else if(ch===','&&!inQ){ result.push(cur.trim()); cur=''; }
+      else cur+=ch;
+    }
+    return result;
+  }
+
+  const headers = splitCsvLine(rawLines[0]).map(h=>h.toLowerCase().replace(/[^a-z]/g,''));
+  const find = (names) => { for(const n of names){ const i=headers.indexOf(n); if(i>=0)return i; } return -1; };
+  const iDate = find(['date','dt']);
+  const iDesc = find(['description','desc','name','item','particulars']);
+  const iAmt  = find(['amount','amt','cost','price','rs','inr','value']);
+  const iCat  = find(['category','cat','type']);
+  const iNote = find(['notes','note','remarks','remark','comment']);
+
+  if(iDesc < 0 || iAmt < 0){
+    previewEl.innerHTML = `<div style="color:var(--red);font-size:12px;padding:8px;background:var(--red-l);border-radius:8px">
+      Could not find <strong>Description</strong> and <strong>Amount</strong> columns.<br>
+      Expected headers: Date, Description, Category, Amount, Notes</div>`;
+    return;
+  }
+
+  // Parse rows
+  const rows = rawLines.slice(1);
+  const parsed = []; const errors = [];
+
+  rows.forEach((line, idx) => {
+    const cells = splitCsvLine(line);
+    const desc  = cells[iDesc]?.trim() || '';
+    const amtRaw= (cells[iAmt]||'').replace(/[₹,\s]/g,'');
+    const amount= parseFloat(amtRaw);
+
+    if(!desc)  { errors.push(`Row ${idx+2}: empty description`); return; }
+    if(isNaN(amount)||amount<=0) { errors.push(`Row ${idx+2}: invalid amount "${cells[iAmt]||''}"`); return; }
+
+    // Parse date
+    let dateKey = todayKey();
+    if(iDate >= 0 && cells[iDate]?.trim()){
+      const raw = cells[iDate].trim();
+      // Try DD/MM/YYYY, MM/DD/YYYY, YYYY-MM-DD
+      const m1 = raw.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})$/);
+      const m2 = raw.match(/^(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})$/);
+      if(m1){
+        const [,d,mo,y] = m1;
+        const year = y.length===2 ? 2000+parseInt(y) : parseInt(y);
+        dateKey = `${year}-${parseInt(mo)}-${parseInt(d)}`;
+      } else if(m2){
+        const [,y,mo,d] = m2;
+        dateKey = `${parseInt(y)}-${parseInt(mo)}-${parseInt(d)}`;
+      }
+    }
+
+    const cat  = (iCat>=0 && cells[iCat]?.trim()) || 'Other';
+    const note = (iNote>=0 && cells[iNote]?.trim()) || '';
+
+    parsed.push({ desc, amount, dateKey, cat, note });
+  });
+
+  if(parsed.length === 0){
+    previewEl.innerHTML = `<div style="color:var(--red);font-size:12px;padding:8px;background:var(--red-l);border-radius:8px">
+      No valid rows found. ${errors.slice(0,3).join(' · ')}</div>`;
+    return;
+  }
+
+  // Show preview
+  const total = parsed.reduce((a,r)=>a+r.amount, 0);
+  const catCounts = {};
+  parsed.forEach(r=>{ catCounts[r.cat]=(catCounts[r.cat]||0)+1; });
+
+  previewEl.innerHTML = `
+    <div style="background:var(--warm);border:1.5px solid var(--warm3);border-radius:var(--r2);padding:14px;margin-top:8px">
+      <div style="font-size:13px;font-weight:600;color:var(--sage-dark);margin-bottom:8px">
+        📋 Preview — ${parsed.length} expenses · ₹${fmt(Math.round(total))} total
+      </div>
+      <div style="max-height:200px;overflow-y:auto;margin-bottom:10px">
+        ${parsed.slice(0,20).map(r=>`
+          <div style="display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid var(--warm2);font-size:12px">
+            <span style="width:24px;height:24px;border-radius:6px;background:${catBg(r.cat)};display:flex;align-items:center;justify-content:center;font-size:11px;flex-shrink:0">${catEmoji(r.cat)}</span>
+            <span style="flex:1;color:var(--text)">${r.desc}</span>
+            <span style="color:var(--text3);font-size:11px">${r.dateKey}</span>
+            <span style="font-weight:600;color:var(--sage-dark)">₹${fmt(r.amount)}</span>
+          </div>`).join('')}
+        ${parsed.length>20?`<div style="font-size:11px;color:var(--text3);padding:6px 0">...and ${parsed.length-20} more rows</div>`:''}
+      </div>
+      ${errors.length>0?`<div style="font-size:11px;color:var(--red-dark);margin-bottom:8px">⚠️ ${errors.length} rows skipped: ${errors.slice(0,2).join(', ')}${errors.length>2?' ...':''}</div>`:''}
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-primary" style="flex:1" onclick="confirmSharedCsvImport(${listId},${JSON.stringify(parsed).replace(/</g,'\\u003c')})">
+          ✓ Import ${parsed.length} Expenses
+        </button>
+        <button class="btn btn-ghost" onclick="document.getElementById('shared-csv-preview-${listId}').innerHTML=''">Cancel</button>
+      </div>
+    </div>`;
+}
+
+async function confirmSharedCsvImport(listId, rows){
+  const lst = sharedExpenseLists.find(l => l.id === listId);
+  if(!lst) return;
+  const u = window.currentUser || currentUser;
+  const addedBy = u?.name || 'Me';
+  if(!lst.expenses) lst.expenses = [];
+
+  rows.forEach(r => {
+    lst.expenses.push({
+      id: uid(), cat: r.cat, desc: r.desc, amount: r.amount,
+      date: r.dateKey, addedBy, addedByUid: u?.uid||'',
+      note: r.note||''
+    });
+  });
+
+  persist();
+
+  // Clear preview and refresh detail view
+  const previewEl = document.getElementById('shared-csv-preview-'+listId);
+  if(previewEl) previewEl.innerHTML='';
+  openSharedListDetail(listId);
+  showToast('✅ Imported ' + rows.length + ' expenses into ' + lst.name + '!');
+
+  // Push to all member docs
+  if(window._fb){
+    const {db, doc, getDoc, setDoc} = window._fb;
+    const memberUids = lst.memberUids || [];
+    for(const memberUid of memberUids){
+      if(memberUid === u?.uid) continue;
+      try{
+        const snap = await getDoc(doc(db,'users',memberUid));
+        const data = snap.exists() ? snap.data() : {};
+        const theirLists = (data.sharedExpenseLists||[]).map(l =>
+          String(l.id) === String(listId) ? lst : l
+        );
+        if(!theirLists.some(l => String(l.id) === String(listId))) theirLists.push(lst);
+        await setDoc(doc(db,'users',memberUid), {sharedExpenseLists: theirLists}, {merge:true});
+      }catch(e){ console.warn('CSV import push to member:', e); }
     }
   }
 }
