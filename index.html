@@ -4354,7 +4354,7 @@ function openSharedListDetail(listId){
         ${(lst.expenses||[]).length === 0
           ? '<div class="empty"><div style="font-size:24px">📋</div><div>No expenses yet</div></div>'
           : [...(lst.expenses||[])].reverse().map(e => `
-            <div class="shared-expense-row">
+            <div class="shared-expense-row" id="sl-exp-row-${lst.id}-${e.id}">
               <div style="width:30px;height:30px;border-radius:8px;background:${catBg(e.cat)};display:flex;align-items:center;justify-content:center;font-size:13px;flex-shrink:0">${catEmoji(e.cat)}</div>
               <div style="flex:1;min-width:0">
                 <div style="font-size:13px;color:var(--text)">${e.desc}</div>
@@ -4362,6 +4362,8 @@ function openSharedListDetail(listId){
               </div>
               <span class="shared-expense-who">${e.addedBy||'Me'}</span>
               <span style="font-size:14px;font-weight:600;color:var(--text)">₹${fmt(e.amount)}</span>
+              <button onclick="editSharedExpenseRow(${lst.id},${e.id})"
+                style="background:none;border:none;cursor:pointer;font-size:13px;padding:2px 4px;opacity:.6">✏️</button>
               <button class="del" onclick="deleteSharedExpense(${lst.id},${e.id})">x</button>
             </div>`).join('')}
       </div>
@@ -4374,6 +4376,14 @@ function openSharedListDetail(listId){
       <div id="shared-csv-preview-${lst.id}" style="margin-top:8px"></div>
       <div id="shared-expense-form-${lst.id}" style="margin-top:8px"></div>
     </div>`;
+  // Render chart after DOM updates
+  if(catSorted.length > 0){
+    setTimeout(()=>renderBarChart(
+      'shared-list-chart-'+lst.id,
+      catSorted.map(([cat])=>catEmoji(cat)+' '+cat),
+      catSorted.map(([,amt])=>Math.round(amt))
+    ), 80);
+  }
 }
 
 function _renderSharedListChart(listId, catSorted){
@@ -4757,6 +4767,63 @@ async function confirmSharedCsvImport(listId){
         if(!theirLists.some(l => String(l.id) === String(listId))) theirLists.push(lst);
         await setDoc(doc(db,'users',memberUid), {sharedExpenseLists: theirLists}, {merge:true});
       }catch(e){ console.warn('CSV import push to member:', e); }
+    }
+  }
+}
+
+
+function editSharedExpenseRow(listId, expId){
+  const lst = sharedExpenseLists.find(l=>l.id===listId); if(!lst) return;
+  const exp = (lst.expenses||[]).find(e=>e.id===expId); if(!exp) return;
+  const rowEl = document.getElementById('sl-exp-row-'+listId+'-'+expId); if(!rowEl) return;
+  const catNames = Object.keys(allCats());
+  // Convert dateKey to YYYY-MM-DD
+  const dp = (exp.date||todayKey()).split('-');
+  const dateVal = `${dp[0].padStart(4,'0')}-${(dp[1]||1).toString().padStart(2,'0')}-${(dp[2]||1).toString().padStart(2,'0')}`;
+  rowEl.innerHTML = `
+    <div style="width:100%;padding:8px;background:var(--warm);border-radius:var(--r2)">
+      <div class="input-row" style="margin-bottom:6px">
+        <select class="input" id="sle-cat-${expId}" style="margin-bottom:0">
+          ${catNames.map(cat=>`<option value="${cat}" ${exp.cat===cat?'selected':''}>${catEmoji(cat)} ${cat}</option>`).join('')}
+        </select>
+        <input class="input" id="sle-desc-${expId}" value="${exp.desc}" style="margin-bottom:0">
+      </div>
+      <div class="input-row">
+        <input class="input" id="sle-date-${expId}" type="date" value="${dateVal}" style="margin-bottom:0">
+        <input class="input" id="sle-amt-${expId}" type="number" value="${exp.amount}" min="0" style="margin-bottom:0;width:90px;flex-shrink:0">
+        <button class="btn btn-primary btn-sm" onclick="saveSharedExpenseEdit(${listId},${expId})">✓</button>
+        <button class="btn btn-ghost btn-sm" onclick="openSharedListDetail(${listId})">✕</button>
+      </div>
+    </div>`;
+}
+
+async function saveSharedExpenseEdit(listId, expId){
+  const lst = sharedExpenseLists.find(l=>l.id===listId); if(!lst) return;
+  const exp = (lst.expenses||[]).find(e=>e.id===expId); if(!exp) return;
+  const cat  = document.getElementById('sle-cat-'+expId)?.value || exp.cat;
+  const desc = (document.getElementById('sle-desc-'+expId)?.value||'').trim();
+  const amt  = parseFloat(document.getElementById('sle-amt-'+expId)?.value||0);
+  const dateRaw = document.getElementById('sle-date-'+expId)?.value||'';
+  if(!desc){ showToast('Description cannot be empty.'); return; }
+  if(isNaN(amt)||amt<=0){ showToast('Please enter a valid amount.'); return; }
+  let dateKey = exp.date;
+  if(dateRaw){ const p=dateRaw.split('-'); dateKey=parseInt(p[0])+'-'+parseInt(p[1])+'-'+parseInt(p[2]); }
+  exp.cat=cat; exp.desc=desc; exp.amount=amt; exp.date=dateKey;
+  persist();
+  openSharedListDetail(listId);
+  showToast('Expense updated!');
+  // Push to member docs
+  if(window._fb){
+    const u=window.currentUser||currentUser;
+    const {db,doc,getDoc,setDoc}=window._fb;
+    for(const mUid of (lst.memberUids||[])){
+      if(mUid===u?.uid) continue;
+      try{
+        const snap=await getDoc(doc(db,'users',mUid));
+        const data=snap.exists()?snap.data():{};
+        const theirLists=(data.sharedExpenseLists||[]).map(l=>String(l.id)===String(listId)?lst:l);
+        await setDoc(doc(db,'users',mUid),{sharedExpenseLists:theirLists},{merge:true});
+      }catch(e){console.warn('saveSharedExpenseEdit push:',e);}
     }
   }
 }
@@ -5753,6 +5820,70 @@ function deleteGroup(id){
   persistSpend();renderGroups();
 }
 function openGroup(id){openGroupId=id;renderGroupDetail(id);}
+
+function editGroupSplitRow(splitId, gid){
+  const sp = splits.find(s=>s.id===splitId); if(!sp) return;
+  const rowEl = document.getElementById('grp-split-row-'+splitId); if(!rowEl) return;
+  const catNames = Object.keys(allCats());
+  const dp = (sp.date||todayKey()).split('-');
+  const dateVal = `${(dp[0]||new Date().getFullYear()).toString().padStart(4,'0')}-${(dp[1]||1).toString().padStart(2,'0')}-${(dp[2]||1).toString().padStart(2,'0')}`;
+  const grp = groups.find(g=>g.id===gid);
+  const mNames = (sp.members||[]).map(m=>{
+    if(String(m.friendId)==='me') return (window.currentUser||currentUser)?.name||'Me';
+    const f=friends.find(x=>x.id===m.friendId); return f?f.name:'Member';
+  });
+  rowEl.innerHTML = `
+    <div style="width:100%;padding:8px;background:var(--warm);border-radius:var(--r2)">
+      <div class="input-row" style="margin-bottom:6px">
+        <select class="input" id="gse-cat-${splitId}" style="margin-bottom:0">
+          ${catNames.map(cat=>`<option value="${cat}" ${(sp.cat||'Other')===cat?'selected':''}>${catEmoji(cat)} ${cat}</option>`).join('')}
+        </select>
+        <input class="input" id="gse-desc-${splitId}" value="${sp.desc}" style="margin-bottom:0">
+      </div>
+      <div class="input-row">
+        <input class="input" id="gse-date-${splitId}" type="date" value="${dateVal}" style="margin-bottom:0">
+        <input class="input" id="gse-amt-${splitId}" type="number" value="${sp.totalAmount}" min="0" style="margin-bottom:0;width:90px;flex-shrink:0">
+        <button class="btn btn-primary btn-sm" onclick="saveGroupSplitEdit(${splitId},${gid})">✓</button>
+        <button class="btn btn-ghost btn-sm" onclick="renderGroupDetail(${gid})">✕</button>
+      </div>
+    </div>`;
+}
+
+async function saveGroupSplitEdit(splitId, gid){
+  const sp = splits.find(s=>s.id===splitId); if(!sp) return;
+  const cat  = document.getElementById('gse-cat-'+splitId)?.value || sp.cat || 'Other';
+  const desc = (document.getElementById('gse-desc-'+splitId)?.value||'').trim();
+  const amt  = parseFloat(document.getElementById('gse-amt-'+splitId)?.value||0);
+  const dateRaw = document.getElementById('gse-date-'+splitId)?.value||'';
+  if(!desc){ showToast('Description cannot be empty.'); return; }
+  if(isNaN(amt)||amt<=0){ showToast('Please enter a valid amount.'); return; }
+  let dateKey = sp.date;
+  if(dateRaw){ const p=dateRaw.split('-'); dateKey=parseInt(p[0])+'-'+parseInt(p[1])+'-'+parseInt(p[2]); }
+  // Update each member share proportionally
+  const share = Math.round(amt/(sp.members||[{share:1}]).length*100)/100;
+  sp.cat=cat; sp.desc=desc; sp.totalAmount=amt; sp.date=dateKey;
+  (sp.members||[]).forEach(m=>m.share=share);
+  persist();
+  renderGroupDetail(gid);
+  showToast('Expense updated!');
+  // Push updated splits to group members
+  const grp = groups.find(g=>g.id===gid);
+  if(grp && window._fb){
+    const u=window.currentUser||currentUser;
+    const {db,doc,getDoc,setDoc}=window._fb;
+    const groupSplits=splits.filter(s=>s.groupId===gid);
+    for(const mUid of (grp.memberUids||[])){
+      if(mUid===u?.uid) continue;
+      try{
+        const snap=await getDoc(doc(db,'users',mUid));
+        const data=snap.exists()?snap.data():{};
+        const other=(data.splits||[]).filter(s=>String(s.groupId)!==String(gid));
+        await setDoc(doc(db,'users',mUid),{splits:[...other,...groupSplits]},{merge:true});
+      }catch(e){console.warn('saveGroupSplitEdit push:',e);}
+    }
+  }
+}
+
 function closeGroup(){openGroupId=null;renderGroups();}
 
 function renderGroupDetail(gid){
@@ -5767,7 +5898,7 @@ function renderGroupDetail(gid){
       const paidCount=sp.members.filter(m=>m.paid).length;
       const expandedKey='exp_'+sp.id;
       const isOpen=!!(window._expandedSplits&&window._expandedSplits[expandedKey]);
-      return `<div style="border:1px solid ${allPaid?'var(--sage-mid)':'var(--warm2)'};border-radius:var(--r2);margin-bottom:8px;overflow:hidden;background:${allPaid?'rgba(168,196,172,.08)':'var(--card)'}">
+      return `<div id="grp-split-row-${sp.id}" style="border:1px solid ${allPaid?'var(--sage-mid)':'var(--warm2)'};border-radius:var(--r2);margin-bottom:8px;overflow:hidden;background:${allPaid?'rgba(168,196,172,.08)':'var(--card)'}">
         <div style="display:flex;align-items:center;gap:10px;padding:12px 14px;cursor:pointer;user-select:none" onclick="toggleExpense('${expandedKey}','exp-body-${sp.id}')">
           <span style="font-size:16px">${allPaid?'✅':'💸'}</span>
           <div style="flex:1;min-width:0">
@@ -5775,6 +5906,8 @@ function renderGroupDetail(gid){
             <div style="font-size:11px;color:var(--text3)">₹${fmt(sp.totalAmount)} · ${mName(sp.paidBy)} paid · ${paidCount}/${sp.members.length} paid</div>
           </div>
           <span style="font-size:11px;color:var(--text3);margin-right:4px">${isOpen?'▲':'▼'}</span>
+          <button onclick="event.stopPropagation();editGroupSplitRow(${sp.id},${gid})"
+            style="background:none;border:none;cursor:pointer;font-size:13px;padding:2px 4px;opacity:.6">✏️</button>
           <button class="del" onclick="event.stopPropagation();deleteSplit(${sp.id})">×</button>
         </div>
         <div id="exp-body-${sp.id}" style="display:${isOpen?'block':'none'};padding:0 14px 12px">
