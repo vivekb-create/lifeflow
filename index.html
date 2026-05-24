@@ -2653,6 +2653,12 @@ const XKEYS={customCats:'lf3_custom_cats',friends:'lf3_friends',friendReqs:'lf3_
 const BUILTIN_CATS={Food:{emoji:'🍽️',color:'#6B8F71',bg:'#EAF0EB'},Travel:{emoji:'🚗',color:'#B8845A',bg:'#F5EAE0'},Shopping:{emoji:'🛍️',color:'#5A78B8',bg:'#E5EAF5'},Health:{emoji:'💊',color:'#B85A4A',bg:'#F5E8E5'},Bills:{emoji:'📄',color:'#8A6BC4',bg:'#EDE5F5'},Entertainment:{emoji:'🎬',color:'#5A9898',bg:'#E5F0F0'},Other:{emoji:'📦',color:'#9C9C98',bg:'#F0F0F0'}};
 let _customCats=load(XKEYS.customCats,[]);
 let sharedExpenseLists = load('lf3_shared_expense_lists', []); // [{id,name,emoji,memberIds,memberUids,expenses:[]}]
+const _slDateMode = {};   // listId → 'all'|'month'|'last_month'|'week'|'custom'
+const _slDateFrom = {};   // listId → YYYY-MM-DD string
+const _slDateTo   = {};   // listId → YYYY-MM-DD string
+let   _grpDateMode = {};  // gid → same options
+let   _grpDateFrom = {};
+let   _grpDateTo   = {};
 let _friends=load(XKEYS.friends,[]);
 let _friendReqs=load(XKEYS.friendReqs,[]);
 let _groups=load(XKEYS.groups,[]);
@@ -4319,47 +4325,157 @@ function openSharedListDetail(listId){
   if(!detail) return;
   detail.style.display = 'block';
 
+  // ── Date filter state ──────────────────────────────────────────────────
+  const mode  = _slDateMode[listId] || 'all';
+  const from  = _slDateFrom[listId] || '';
+  const to    = _slDateTo[listId]   || '';
+
+  // ── Filter expenses by date range ─────────────────────────────────────
+  function slDateFilter(exps){
+    if(mode === 'all') return exps;
+    const now   = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    let f, t;
+    if(mode === 'month'){
+      f = new Date(now.getFullYear(), now.getMonth(), 1);
+      t = new Date(today.getTime() + 86399999);
+    } else if(mode === 'last_month'){
+      f = new Date(now.getFullYear(), now.getMonth()-1, 1);
+      t = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59);
+    } else if(mode === 'week'){
+      const day = today.getDay();
+      f = new Date(today); f.setDate(today.getDate() - (day===0?6:day-1));
+      t = new Date(today.getTime() + 86399999);
+    } else if(mode === 'custom' && from && to){
+      f = new Date(from); t = new Date(to); t.setHours(23,59,59,999);
+    } else return exps;
+    return exps.filter(e => {
+      const p = (e.date||'').split('-');
+      const d = new Date(parseInt(p[0]), parseInt(p[1])-1, parseInt(p[2]||1));
+      return d >= f && d <= t;
+    });
+  }
+
+  const allExps  = lst.expenses || [];
+  const filtered = slDateFilter(allExps);
+  const total    = allExps.reduce((a,e) => a+e.amount, 0);
+  const fTotal   = filtered.reduce((a,e) => a+e.amount, 0);
+
+  // ── Category totals (filtered) ─────────────────────────────────────────
   const byCat = {};
-  (lst.expenses||[]).forEach(e => { byCat[e.cat] = (byCat[e.cat]||0) + e.amount; });
+  filtered.forEach(e => { byCat[e.cat] = (byCat[e.cat]||0) + e.amount; });
   const catSorted = Object.entries(byCat).sort((a,b) => b[1]-a[1]);
-  const total = (lst.expenses||[]).reduce((a,e) => a+e.amount, 0);
+
+  // ── Per-member totals (filtered) ───────────────────────────────────────
+  const byMember = {};
+  filtered.forEach(e => { byMember[e.addedBy||'Me'] = (byMember[e.addedBy||'Me']||0) + e.amount; });
+  const memberSorted = Object.entries(byMember).sort((a,b) => b[1]-a[1]);
+
   const memberNames = (lst.memberIds||[]).map(mid => {
     if(mid === 'me') return (window.currentUser||currentUser)?.name||'Me';
     const f = friends.find(x => x.id === mid);
     return f ? f.name : '?';
   });
 
+  const modeLabels = {all:'All Time', month:'This Month', last_month:'Last Month', week:'This Week', custom:'Custom'};
+  const todayVal = (()=>{const d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');})();
+
   detail.innerHTML = `
     <div class="card" style="margin-bottom:12px">
-      <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
+
+      <!-- Header -->
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
         <button class="btn btn-ghost btn-sm" onclick="closeSharedListDetail()">← Back</button>
         <span style="font-size:22px">${lst.emoji}</span>
         <div style="flex:1">
           <div style="font-size:17px;font-weight:500;color:var(--sage-dark)">${lst.name}</div>
           <div style="font-size:11px;color:var(--text3)">${memberNames.join(', ')}</div>
         </div>
-        <div style="font-size:22px;font-weight:700;color:var(--sage-dark);font-family:'Cormorant Garamond',serif">₹${fmt(Math.round(total))}</div>
+        <button class="btn btn-ghost btn-sm" onclick="openEditSharedListModal(${lst.id})" style="flex-shrink:0">✏️</button>
       </div>
+
+      <!-- Summary banner -->
+      <div style="background:var(--sage-dark);border-radius:var(--r2);padding:14px 16px;margin-bottom:12px;color:white">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start">
+          <div>
+            <div style="font-size:11px;opacity:.7;margin-bottom:2px">${modeLabels[mode]||'All Time'}</div>
+            <div style="font-size:28px;font-weight:700;font-family:'Cormorant Garamond',serif">₹${fmt(Math.round(fTotal))}</div>
+            <div style="font-size:11px;opacity:.65;margin-top:2px">${filtered.length} expense${filtered.length!==1?'s':''}</div>
+          </div>
+          ${mode!=='all'?`<div style="text-align:right">
+            <div style="font-size:10px;opacity:.6;margin-bottom:2px">All time</div>
+            <div style="font-size:16px;font-weight:600;font-family:'Cormorant Garamond',serif">₹${fmt(Math.round(total))}</div>
+          </div>`:''}
+        </div>
+      </div>
+
+      <!-- Date filter chips -->
+      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px">
+        ${['all','month','last_month','week','custom'].map(m=>`
+          <button class="dr-chip ${mode===m?'active':''}" onclick="setSLDateMode(${lst.id},'${m}')">${
+            {all:'All Time',month:'This Month',last_month:'Last Month',week:'This Week',custom:'Custom'}[m]
+          }</button>`).join('')}
+      </div>
+      ${mode==='custom'?`<div style="display:flex;gap:6px;align-items:center;margin-bottom:12px;flex-wrap:wrap">
+        <input class="dr-date-input" type="date" id="sl-dr-from-${lst.id}" value="${from||todayVal}" onchange="setSLCustomRange(${lst.id})">
+        <span style="font-size:12px;color:var(--text3)">to</span>
+        <input class="dr-date-input" type="date" id="sl-dr-to-${lst.id}"   value="${to||todayVal}"   onchange="setSLCustomRange(${lst.id})">
+      </div>`:''}
+
+      <!-- Category totals + charts -->
       ${catSorted.length > 0 ? `
-        <div style="margin-bottom:14px">
+        <div style="margin-bottom:16px">
           <div class="card-title" style="margin-bottom:8px">By Category</div>
           ${catSorted.map(([cat,amt]) => {
+            const pct = fTotal > 0 ? Math.round(amt/fTotal*100) : 0;
             const isCustom = customCats.some(cc=>cc.name===cat);
-            return `<div class="cat-bar" style="align-items:center">
-              <div style="width:32px;height:32px;border-radius:8px;background:${catBg(cat)};display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0">${catEmoji(cat)}</div>
-              <span style="flex:1;font-size:13px">${cat}</span>
-              <span style="font-size:13px;font-weight:600">₹${fmt(amt)}</span>
-              ${isCustom ? `<button onclick="openEditCatModal('${cat}')" title="Edit category"
-                style="background:none;border:none;cursor:pointer;font-size:13px;padding:2px 6px;opacity:.55;flex-shrink:0">✏️</button>` : ''}
+            return `<div style="display:flex;align-items:center;gap:10px;padding:6px 0;border-bottom:1px solid var(--warm2)">
+              <div style="width:34px;height:34px;border-radius:9px;background:${catBg(cat)};display:flex;align-items:center;justify-content:center;font-size:15px;flex-shrink:0">${catEmoji(cat)}</div>
+              <div style="flex:1;min-width:0">
+                <div style="font-size:13px;font-weight:500">${cat}</div>
+                <div style="height:4px;background:var(--warm3);border-radius:2px;margin-top:4px">
+                  <div style="height:4px;background:var(--sage);border-radius:2px;width:${pct}%"></div>
+                </div>
+              </div>
+              <span style="font-size:13px;font-weight:600;white-space:nowrap">₹${fmt(Math.round(amt))}</span>
+              <span style="font-size:10px;color:var(--text3);white-space:nowrap">${pct}%</span>
+              ${isCustom?`<button onclick="openEditCatModal('${cat}')" title="Edit"
+                style="background:none;border:none;cursor:pointer;font-size:12px;padding:2px 4px;opacity:.5">✏️</button>`:''}
             </div>`;
           }).join('')}
-          <div style="margin-top:14px"><canvas id="shared-list-chart-${lst.id}" class="spend-chart-canvas"></canvas></div>
+
+          <!-- Charts row: donut + bar -->
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:14px">
+            <div>
+              <div style="font-size:11px;font-weight:600;color:var(--text3);margin-bottom:6px;text-align:center">Distribution</div>
+              <canvas id="sl-donut-${lst.id}" style="max-height:160px"></canvas>
+            </div>
+            <div>
+              <div style="font-size:11px;font-weight:600;color:var(--text3);margin-bottom:6px;text-align:center">Amounts</div>
+              <canvas id="sl-bar-${lst.id}" style="max-height:160px"></canvas>
+            </div>
+          </div>
+        </div>` : '<div class="empty" style="padding:20px 0"><div style="font-size:24px">📋</div><div>No expenses in this period</div></div>'}
+
+      <!-- Per-member breakdown -->
+      ${memberSorted.length > 1 ? `
+        <div style="margin-bottom:14px;padding:12px;background:var(--warm);border-radius:var(--r2)">
+          <div style="font-size:12px;font-weight:600;color:var(--text3);margin-bottom:8px;text-transform:uppercase;letter-spacing:.05em">Who spent what</div>
+          ${memberSorted.map(([name,amt])=>`
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+              <div class="friend-avatar" style="width:26px;height:26px;font-size:11px">${name[0].toUpperCase()}</div>
+              <span style="flex:1;font-size:13px">${name}</span>
+              <span style="font-size:13px;font-weight:600">₹${fmt(Math.round(amt))}</span>
+              <span style="font-size:10px;color:var(--text3)">${fTotal>0?Math.round(amt/fTotal*100):0}%</span>
+            </div>`).join('')}
         </div>` : ''}
+
+      <!-- Transactions -->
       <div>
-        <div class="card-title" style="margin-bottom:8px">Expenses</div>
-        ${(lst.expenses||[]).length === 0
-          ? '<div class="empty"><div style="font-size:24px">📋</div><div>No expenses yet</div></div>'
-          : [...(lst.expenses||[])].reverse().map(e => `
+        <div class="card-title" style="margin-bottom:8px">Transactions <span style="font-size:11px;font-weight:400;color:var(--text3)">(${filtered.length})</span></div>
+        ${filtered.length === 0
+          ? '<div style="font-size:13px;color:var(--text3);padding:12px 0">No transactions in this period.</div>'
+          : [...filtered].reverse().map(e => `
             <div class="shared-expense-row" id="sl-exp-row-${lst.id}-${e.id}">
               <div style="width:30px;height:30px;border-radius:8px;background:${catBg(e.cat)};display:flex;align-items:center;justify-content:center;font-size:13px;flex-shrink:0">${catEmoji(e.cat)}</div>
               <div style="flex:1;min-width:0">
@@ -4373,23 +4489,38 @@ function openSharedListDetail(listId){
               <button class="del" onclick="deleteSharedExpense(${lst.id},${e.id})">x</button>
             </div>`).join('')}
       </div>
+
+      <!-- Actions -->
       <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">
         <button class="add-btn" style="flex:1" onclick="openAddSharedExpenseForm(${lst.id})">+ Add Expense</button>
-        <button class="btn btn-ghost btn-sm" onclick="sharedListCsvImport(${lst.id})" title="Import from CSV">⬆ Import CSV</button>
-        <button class="btn btn-ghost btn-sm" onclick="downloadSharedListTemplate()" title="Download CSV template">⬇ Template</button>
+        <button class="btn btn-ghost btn-sm" onclick="sharedListCsvImport(${lst.id})">⬆ Import</button>
+        <button class="btn btn-ghost btn-sm" onclick="downloadSharedListTemplate()">⬇ Template</button>
         <input type="file" id="shared-csv-input-${lst.id}" accept=".csv,text/csv" style="display:none" onchange="handleSharedCsvFile(event,${lst.id})">
       </div>
       <div id="shared-csv-preview-${lst.id}" style="margin-top:8px"></div>
       <div id="shared-expense-form-${lst.id}" style="margin-top:8px"></div>
     </div>`;
-  // Render chart after DOM updates
+
+  // Render both charts
   if(catSorted.length > 0){
-    setTimeout(()=>renderBarChart(
-      'shared-list-chart-'+lst.id,
-      catSorted.map(([cat])=>catEmoji(cat)+' '+cat),
-      catSorted.map(([,amt])=>Math.round(amt))
-    ), 80);
+    const labels  = catSorted.map(([cat]) => catEmoji(cat)+' '+cat);
+    const amounts = catSorted.map(([,amt]) => Math.round(amt));
+    setTimeout(()=>{
+      renderDonutChart('sl-donut-'+lst.id, labels, amounts);
+      renderBarChart(  'sl-bar-'+lst.id,   labels, amounts);
+    }, 80);
   }
+}
+
+function setSLDateMode(listId, mode){
+  _slDateMode[listId] = mode;
+  if(mode !== 'custom'){ delete _slDateFrom[listId]; delete _slDateTo[listId]; }
+  openSharedListDetail(listId);
+}
+function setSLCustomRange(listId){
+  _slDateFrom[listId] = document.getElementById('sl-dr-from-'+listId)?.value || '';
+  _slDateTo[listId]   = document.getElementById('sl-dr-to-'+listId)?.value   || '';
+  openSharedListDetail(listId);
 }
 
 function _renderSharedListChart(listId, catSorted){
@@ -5893,13 +6024,48 @@ async function saveGroupSplitEdit(splitId, gid){
 function closeGroup(){openGroupId=null;renderGroups();}
 
 function renderGroupDetail(gid){
-  const g=groups.find(x=>x.id===gid);if(!g)return;
+  const g=groups.find(x=>x.id===gid); if(!g)return;
   document.getElementById('group-detail-view').style.display='block';
   document.getElementById('groups-list-view').style.display='none';
-  const groupSplits=splits.filter(s=>s.groupId===gid);
-  const splitsHtml=groupSplits.length===0
-    ?'<div class="empty"><div class="empty-icon">💸</div>No expenses yet</div>'
-    :groupSplits.map(sp=>{
+
+  // ── Date filter ────────────────────────────────────────────────────────
+  const mode = _grpDateMode[gid] || 'all';
+  const from = _grpDateFrom[gid] || '';
+  const to   = _grpDateTo[gid]   || '';
+
+  function grpDateFilter(sps){
+    if(mode==='all') return sps;
+    const now=new Date(), today=new Date(now.getFullYear(),now.getMonth(),now.getDate());
+    let f,t;
+    if(mode==='month'){ f=new Date(now.getFullYear(),now.getMonth(),1); t=new Date(today.getTime()+86399999); }
+    else if(mode==='last_month'){ f=new Date(now.getFullYear(),now.getMonth()-1,1); t=new Date(now.getFullYear(),now.getMonth(),0,23,59,59); }
+    else if(mode==='week'){ const d=today.getDay(); f=new Date(today); f.setDate(today.getDate()-(d===0?6:d-1)); t=new Date(today.getTime()+86399999); }
+    else if(mode==='custom'&&from&&to){ f=new Date(from); t=new Date(to); t.setHours(23,59,59,999); }
+    else return sps;
+    return sps.filter(s=>{ const p=(s.date||'').split('-'); const d=new Date(parseInt(p[0]),parseInt(p[1])-1,parseInt(p[2]||1)); return d>=f&&d<=t; });
+  }
+
+  const allSplits = splits.filter(s=>s.groupId===gid);
+  const grpSplits = grpDateFilter(allSplits);
+  const allTotal  = allSplits.reduce((a,s)=>a+(s.totalAmount||0),0);
+  const fTotal    = grpSplits.reduce((a,s)=>a+(s.totalAmount||0),0);
+
+  // ── Category totals ────────────────────────────────────────────────────
+  const gc={}; grpSplits.forEach(s=>{const k=s.cat||'Other';gc[k]=(gc[k]||0)+(s.totalAmount||0);});
+  const gcs=Object.entries(gc).sort((a,b)=>b[1]-a[1]);
+
+  // ── Per-member spending ────────────────────────────────────────────────
+  const byPayer={};
+  grpSplits.forEach(s=>{const n=mName(s.paidBy);byPayer[n]=(byPayer[n]||0)+(s.totalAmount||0);});
+  const payerSorted=Object.entries(byPayer).sort((a,b)=>b[1]-a[1]);
+
+  const modeLabels={all:'All Time',month:'This Month',last_month:'Last Month',week:'This Week',custom:'Custom'};
+  const todayVal=(()=>{const d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');})();
+
+  // ── Split rows HTML ────────────────────────────────────────────────────
+  const splitsHtml = grpSplits.length===0
+    ?'<div class="empty" style="padding:16px 0"><div class="empty-icon">💸</div>No expenses in this period</div>'
+    :grpSplits.map(sp=>{
       const allPaid=sp.members.every(m=>m.paid);
       const paidCount=sp.members.filter(m=>m.paid).length;
       const expandedKey='exp_'+sp.id;
@@ -5912,8 +6078,7 @@ function renderGroupDetail(gid){
             <div style="font-size:11px;color:var(--text3)">₹${fmt(sp.totalAmount)} · ${mName(sp.paidBy)} paid · ${paidCount}/${sp.members.length} paid</div>
           </div>
           <span style="font-size:11px;color:var(--text3);margin-right:4px">${isOpen?'▲':'▼'}</span>
-          <button onclick="event.stopPropagation();editGroupSplitRow(${sp.id},${gid})"
-            style="background:none;border:none;cursor:pointer;font-size:13px;padding:2px 4px;opacity:.6">✏️</button>
+          <button onclick="event.stopPropagation();editGroupSplitRow(${sp.id},${gid})" style="background:none;border:none;cursor:pointer;font-size:13px;padding:2px 4px;opacity:.6">✏️</button>
           <button class="del" onclick="event.stopPropagation();deleteSplit(${sp.id})">×</button>
         </div>
         <div id="exp-body-${sp.id}" style="display:${isOpen?'block':'none'};padding:0 14px 12px">
@@ -5922,56 +6087,118 @@ function renderGroupDetail(gid){
         </div>
       </div>`;
     }).join('');
-  const memberEmails = g.memberEmails || [];
-  const visibleBadge = memberEmails.length > 0
-    ? `<div style="font-size:11px;color:var(--sage);background:var(--sage-light);padding:7px 12px;border-radius:8px;margin-bottom:14px;line-height:1.5">
-        👁️ <strong>Shared with:</strong> ${memberEmails.join(' · ')}
-       </div>` : '';
+
+  const memberEmails=g.memberEmails||[];
+  const visibleBadge=memberEmails.length>0?`<div style="font-size:11px;color:var(--sage);background:var(--sage-light);padding:7px 12px;border-radius:8px;margin-bottom:10px;line-height:1.5">👁️ <strong>Shared with:</strong> ${memberEmails.join(' · ')}</div>`:'';
+
   document.getElementById('group-detail-view').innerHTML=`
     <div class="card">
-      <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
+      <!-- Header -->
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
         <button class="btn btn-ghost btn-sm" onclick="closeGroup()">← Back</button>
         <span style="font-size:20px">${g.emoji}</span>
-        <span style="font-size:18px;font-weight:500;color:var(--sage-dark)">${g.name}</span>
+        <span style="font-size:18px;font-weight:500;color:var(--sage-dark);flex:1">${g.name}</span>
+        <button class="btn btn-ghost btn-sm" onclick="openEditGroupModal(${gid})">✏️ Edit</button>
       </div>
       ${visibleBadge}
-      <div class="card-title">Expenses</div>
-      ${splitsHtml}
-      ${grpSplits.length>0?(()=>{
-        const gc={};
-        grpSplits.forEach(s=>{ const k=s.cat||'Other'; gc[k]=(gc[k]||0)+(s.totalAmount||0); });
-        const gcs=Object.entries(gc).sort((a,b)=>b[1]-a[1]);
-        return `<div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--warm2)">
+
+      <!-- Summary banner -->
+      <div style="background:var(--sage-dark);border-radius:var(--r2);padding:14px 16px;margin-bottom:12px;color:white">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start">
+          <div>
+            <div style="font-size:11px;opacity:.7;margin-bottom:2px">${modeLabels[mode]||'All Time'}</div>
+            <div style="font-size:28px;font-weight:700;font-family:'Cormorant Garamond',serif">₹${fmt(Math.round(fTotal))}</div>
+            <div style="font-size:11px;opacity:.65;margin-top:2px">${grpSplits.length} expense${grpSplits.length!==1?'s':''}</div>
+          </div>
+          ${mode!=='all'?`<div style="text-align:right">
+            <div style="font-size:10px;opacity:.6;margin-bottom:2px">All time</div>
+            <div style="font-size:16px;font-weight:600;font-family:'Cormorant Garamond',serif">₹${fmt(Math.round(allTotal))}</div>
+          </div>`:''}
+        </div>
+      </div>
+
+      <!-- Date filter chips -->
+      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px">
+        ${['all','month','last_month','week','custom'].map(m=>`
+          <button class="dr-chip ${mode===m?'active':''}" onclick="setGrpDateMode(${gid},'${m}')">${
+            {all:'All Time',month:'This Month',last_month:'Last Month',week:'This Week',custom:'Custom'}[m]
+          }</button>`).join('')}
+      </div>
+      ${mode==='custom'?`<div style="display:flex;gap:6px;align-items:center;margin-bottom:12px;flex-wrap:wrap">
+        <input class="dr-date-input" type="date" id="grp-dr-from-${gid}" value="${from||todayVal}" onchange="setGrpCustomRange(${gid})">
+        <span style="font-size:12px;color:var(--text3)">to</span>
+        <input class="dr-date-input" type="date" id="grp-dr-to-${gid}" value="${to||todayVal}" onchange="setGrpCustomRange(${gid})">
+      </div>`:''}
+
+      <!-- Category breakdown + charts -->
+      ${gcs.length>0?`
+        <div style="margin-bottom:14px">
           <div class="card-title" style="margin-bottom:8px">By Category</div>
           ${gcs.map(([cat,amt])=>{
+            const pct=fTotal>0?Math.round(amt/fTotal*100):0;
             const isCustom=customCats.some(cc=>cc.name===cat);
-            return `<div class="cat-bar" style="align-items:center">
-              <div style="width:32px;height:32px;border-radius:8px;background:${catBg(cat)};display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0">${catEmoji(cat)}</div>
-              <span style="flex:1;font-size:13px">${cat}</span>
-              <span style="font-size:13px;font-weight:600">₹${fmt(amt)}</span>
-              ${isCustom?`<button onclick="openEditCatModal('${cat}')" title="Edit category"
-                style="background:none;border:none;cursor:pointer;font-size:13px;padding:2px 6px;opacity:.55;flex-shrink:0">✏️</button>`:''}
+            return `<div style="display:flex;align-items:center;gap:10px;padding:6px 0;border-bottom:1px solid var(--warm2)">
+              <div style="width:34px;height:34px;border-radius:9px;background:${catBg(cat)};display:flex;align-items:center;justify-content:center;font-size:15px;flex-shrink:0">${catEmoji(cat)}</div>
+              <div style="flex:1;min-width:0">
+                <div style="font-size:13px;font-weight:500">${cat}</div>
+                <div style="height:4px;background:var(--warm3);border-radius:2px;margin-top:4px">
+                  <div style="height:4px;background:var(--sage);border-radius:2px;width:${pct}%"></div>
+                </div>
+              </div>
+              <span style="font-size:13px;font-weight:600;white-space:nowrap">₹${fmt(Math.round(amt))}</span>
+              <span style="font-size:10px;color:var(--text3);white-space:nowrap">${pct}%</span>
+              ${isCustom?`<button onclick="openEditCatModal('${cat}')" title="Edit" style="background:none;border:none;cursor:pointer;font-size:12px;padding:2px 4px;opacity:.5">✏️</button>`:''}
             </div>`;
           }).join('')}
-          <div style="margin-top:14px"><canvas id="group-chart-${gid}" class="spend-chart-canvas"></canvas></div>
-        </div>`;
-      })():''}
-      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:4px">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:14px">
+            <div><div style="font-size:11px;font-weight:600;color:var(--text3);margin-bottom:6px;text-align:center">Distribution</div><canvas id="grp-donut-${gid}" style="max-height:160px"></canvas></div>
+            <div><div style="font-size:11px;font-weight:600;color:var(--text3);margin-bottom:6px;text-align:center">Amounts</div><canvas id="grp-bar-${gid}" style="max-height:160px"></canvas></div>
+          </div>
+        </div>`:''}
+
+      <!-- Who paid breakdown -->
+      ${payerSorted.length>1?`
+        <div style="margin-bottom:14px;padding:12px;background:var(--warm);border-radius:var(--r2)">
+          <div style="font-size:12px;font-weight:600;color:var(--text3);margin-bottom:8px;text-transform:uppercase;letter-spacing:.05em">Who paid</div>
+          ${payerSorted.map(([name,amt])=>`
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+              <div class="friend-avatar" style="width:26px;height:26px;font-size:11px">${name[0].toUpperCase()}</div>
+              <span style="flex:1;font-size:13px">${name}</span>
+              <span style="font-size:13px;font-weight:600">₹${fmt(Math.round(amt))}</span>
+              <span style="font-size:10px;color:var(--text3)">${fTotal>0?Math.round(amt/fTotal*100):0}%</span>
+            </div>`).join('')}
+        </div>`:''}
+
+      <!-- Expenses list -->
+      <div class="card-title" style="margin-bottom:8px">Expenses <span style="font-size:11px;font-weight:400;color:var(--text3)">(${grpSplits.length})</span></div>
+      ${splitsHtml}
+
+      <!-- Actions -->
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">
         <button class="add-btn" style="flex:1" onclick="openSplitModal(${gid})">+ Add expense &amp; split</button>
-        <button class="btn btn-ghost btn-sm" onclick="openEditGroupModal(${gid})" style="flex-shrink:0;white-space:nowrap">✏️ Edit Group</button>
       </div>
     </div>`;
-  // Render group category bar chart
-  if(grpSplits.length > 0){
-    const _gc={};
-    grpSplits.forEach(s=>{ const k=s.cat||'Other'; _gc[k]=(_gc[k]||0)+(s.totalAmount||0); });
-    const _gcs=Object.entries(_gc).sort((a,b)=>b[1]-a[1]);
-    setTimeout(()=>renderBarChart(
-      'group-chart-'+gid,
-      _gcs.map(([cat])=>catEmoji(cat)+' '+cat),
-      _gcs.map(([,amt])=>Math.round(amt))
-    ),80);
+
+  // Render both charts
+  if(gcs.length>0){
+    const labels  = gcs.map(([cat])=>catEmoji(cat)+' '+cat);
+    const amounts = gcs.map(([,amt])=>Math.round(amt));
+    setTimeout(()=>{
+      renderDonutChart('grp-donut-'+gid, labels, amounts);
+      renderBarChart(  'grp-bar-'+gid,   labels, amounts);
+    },80);
   }
+}
+
+function setGrpDateMode(gid, mode){
+  _grpDateMode[gid]=mode;
+  if(mode!=='custom'){ delete _grpDateFrom[gid]; delete _grpDateTo[gid]; }
+  renderGroupDetail(gid);
+}
+function setGrpCustomRange(gid){
+  _grpDateFrom[gid]=document.getElementById('grp-dr-from-'+gid)?.value||'';
+  _grpDateTo[gid]  =document.getElementById('grp-dr-to-'+gid)?.value||'';
+  renderGroupDetail(gid);
 }
 
 async function openEditGroupModal(gid){
