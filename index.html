@@ -2917,6 +2917,103 @@ function addCustomCat(){
   customCats.push({name,emoji,color,bg:color+'22'});
   persistSpend(); showCatForm=false; renderPersonal();
 }
+
+// ══════════════════════════════════════════════════════════════════════════
+// Category management panel — reused in shared list + group detail
+// ══════════════════════════════════════════════════════════════════════════
+function buildCatManagementHTML(containerId){
+  // All categories (built-in + custom) with edit/add
+  const builtIn  = ['Food','Travel','Shopping','Health','Bills','Entertainment','Other'];
+  const custOnly = customCats.filter(c => !builtIn.includes(c.name));
+  return `<div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--warm2)">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;cursor:pointer"
+      onclick="this.nextElementSibling.style.display=this.nextElementSibling.style.display==='none'?'block':'none';this.querySelector('.cat-chevron').style.transform=this.nextElementSibling.style.display==='block'?'rotate(180deg)':''">
+      <span style="font-size:12px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.06em">
+        📂 Manage Categories
+      </span>
+      <span class="cat-chevron" style="font-size:11px;color:var(--text3);transition:transform .2s">▼</span>
+    </div>
+    <div style="display:none" id="${containerId}-cat-mgmt">
+      ${builtIn.map(cat=>`
+        <div style="display:flex;align-items:center;gap:8px;padding:5px 8px;background:var(--warm);border-radius:var(--r2);margin-bottom:3px">
+          <span style="font-size:18px">${catEmoji(cat)}</span>
+          <span style="font-size:13px;flex:1;color:var(--text2)">${cat}</span>
+          <span style="font-size:10px;color:var(--text3);background:var(--warm2);padding:1px 6px;border-radius:5px">Built-in</span>
+        </div>`).join('')}
+      ${custOnly.map(cat=>`
+        <div style="display:flex;align-items:center;gap:8px;padding:5px 8px;background:${cat.bg||'#F0F0F0'};border-radius:var(--r2);margin-bottom:3px">
+          <span style="font-size:18px">${cat.emoji}</span>
+          <span style="font-size:13px;flex:1;font-weight:500;color:${cat.color}">${cat.name}</span>
+          <button class="btn btn-ghost btn-sm" onclick="openEditCatModal('${cat.name}')" style="font-size:11px;padding:2px 7px">✏️</button>
+          <button onclick="deleteCustomCat('${cat.name}')" style="background:none;border:none;font-size:15px;cursor:pointer;color:var(--red);opacity:.6;padding:2px 4px">×</button>
+        </div>`).join('')}
+      <button class="add-btn" style="margin-top:6px;font-size:12px;padding:6px 12px"
+        onclick="openAddCatInContext('${containerId}')">+ Add Category</button>
+      <div id="${containerId}-add-cat-form" style="margin-top:6px"></div>
+    </div>
+  </div>`;
+}
+
+function openAddCatInContext(containerId){
+  const formEl = document.getElementById(containerId+'-add-cat-form');
+  if(!formEl) return;
+  formEl.innerHTML = `<div class="form-box" style="padding:10px">
+    <div style="font-size:11px;color:var(--text3);margin-bottom:6px;font-weight:600">Pick an icon</div>
+    <div style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:8px">
+      ${CAT_ICON_PRESETS.map(ic=>`<button onclick="selectContextCatIcon('${ic}',this,'${containerId}')"
+        style="width:32px;height:32px;font-size:18px;border:2px solid var(--warm3);border-radius:8px;background:var(--warm);cursor:pointer"
+        class="ctx-icon-btn-${containerId}">${ic}</button>`).join('')}
+    </div>
+    <input type="hidden" id="${containerId}-icon" value="${CAT_ICON_PRESETS[0]}">
+    <div class="input-row" style="margin-bottom:6px">
+      <input class="input" id="${containerId}-cname" placeholder="Category name" style="margin-bottom:0">
+      <input class="input" id="${containerId}-ccolor" type="color" value="#6B8F71" style="width:38px;padding:3px;flex-shrink:0;margin-bottom:0">
+    </div>
+    <div style="display:flex;gap:6px">
+      <button class="btn btn-primary btn-sm" onclick="saveContextCat('${containerId}')">Add</button>
+      <button class="btn btn-ghost btn-sm" onclick="document.getElementById('${containerId}-add-cat-form').innerHTML=''">Cancel</button>
+    </div>
+  </div>`;
+}
+
+function selectContextCatIcon(icon, btn, containerId){
+  document.querySelectorAll('.ctx-icon-btn-'+containerId).forEach(b=>{
+    b.style.borderColor='var(--warm3)'; b.style.background='var(--warm)';
+  });
+  if(btn){ btn.style.borderColor='var(--sage)'; btn.style.background='var(--sage-light)'; }
+  const inp = document.getElementById(containerId+'-icon');
+  if(inp) inp.value = icon;
+}
+
+function saveContextCat(containerId){
+  const name  = (document.getElementById(containerId+'-cname')?.value||'').trim();
+  const emoji = document.getElementById(containerId+'-icon')?.value || '🏷️';
+  const color = document.getElementById(containerId+'-ccolor')?.value || '#6B8F71';
+  if(!name){ showToast('Please enter a category name.'); return; }
+  if(allCats()[name]){ showToast('Category already exists.'); return; }
+  customCats.push({name, emoji, color, bg:color+'22'});
+  persist();
+  // Refresh the cat management section in the current context
+  const mgmt = document.getElementById(containerId+'-cat-mgmt');
+  if(mgmt && mgmt.style.display !== 'none'){
+    const container = mgmt.closest('[id$="-cat-mgmt"]')?.parentElement;
+    // Rebuild the whole cat panel by re-opening the detail
+    // For simplicity just update the mgmt div
+    const parent = document.getElementById(containerId+'-cat-mgmt');
+    if(parent){
+      const newHtml = buildCatManagementHTML(containerId);
+      const wrapper = parent.parentElement;
+      if(wrapper){
+        wrapper.outerHTML = newHtml;
+        // Re-show the panel
+        const newMgmt = document.getElementById(containerId+'-cat-mgmt');
+        if(newMgmt) newMgmt.style.display = 'block';
+      }
+    }
+  }
+  showToast(emoji + ' ' + name + ' category added!');
+}
+
 function deleteCustomCat(name){customCats=customCats.filter(c=>c.name!==name);persistSpend();renderPersonal();}
 function addSpend(){
   const cat    = document.getElementById('spend-cat-in').value;
@@ -4367,6 +4464,7 @@ function openSharedListDetail(listId){
               <button class="del" onclick="deleteSharedExpense(${lst.id},${e.id})">x</button>
             </div>`).join('')}
       </div>
+      ${buildCatManagementHTML('sl-'+lst.id)}
       <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">
         <button class="add-btn" style="flex:1" onclick="openAddSharedExpenseForm(${lst.id})">+ Add Expense</button>
         <button class="btn btn-ghost btn-sm" onclick="sharedListCsvImport(${lst.id})" title="Import from CSV">⬆ Import CSV</button>
@@ -5936,6 +6034,7 @@ function renderGroupDetail(gid){
           <div style="font-size:11px;font-weight:600;color:var(--text3);margin-bottom:8px;text-transform:uppercase;letter-spacing:.05em">By category</div>
           <canvas id="group-chart-${gid}" class="spend-chart-canvas"></canvas>
         </div>`:''}
+      ${buildCatManagementHTML('grp-'+gid)}
       <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:4px">
         <button class="add-btn" style="flex:1" onclick="openSplitModal(${gid})">+ Add expense &amp; split</button>
         <button class="btn btn-ghost btn-sm" onclick="openEditGroupModal(${gid})" style="flex-shrink:0;white-space:nowrap">✏️ Edit Group</button>
