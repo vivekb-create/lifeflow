@@ -1351,6 +1351,13 @@ onAuthStateChanged(auth, async (user) => {
             </div>
             <div class="card">
               <div class="card-title" id="spend-list-title">Transactions</div>
+              <div style="position:relative;margin-bottom:8px">
+                <input class="input" id="personal-tx-search" placeholder="🔍 Search by description, category or amount"
+                  oninput="_txSearch['personal']=this.value;_txPage['personal']=0;_renderPersonalTxList()"
+                  style="padding-left:12px;margin-bottom:0">
+                <button id="personal-tx-clear" onclick="_txSearch['personal']='';document.getElementById('personal-tx-search').value='';_txPage['personal']=0;_renderPersonalTxList()"
+                  style="display:none;position:absolute;right:10px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;font-size:16px;color:var(--text3)">×</button>
+              </div>
               <div id="spend-list"></div>
               <div id="spend-form"></div>
             </div>
@@ -2838,19 +2845,7 @@ function renderPersonal(){
       </div>
     </div>`:`<button class="add-btn" style="margin-top:0" onclick="setCatForm(true)">+ Add custom category</button>`;
 
-  const _pq  = (_txSearch['personal']||'').toLowerCase();
-  const _pall = [...rangeSpends].reverse();
-  const _pfilt= _pq?_pall.filter(s=>(s.desc||'').toLowerCase().includes(_pq)||(s.cat||'').toLowerCase().includes(_pq)||String(s.amount).includes(_pq)):_pall;
-  const _pp   = _txPage['personal']||0;
-  const _ppage= _pfilt.slice(_pp*PAGE_SIZE,(_pp+1)*PAGE_SIZE);
-  const slEl=document.getElementById('spend-list');
-  if(slEl) slEl.innerHTML =
-    buildTxSearchBar('personal','Search by description, category or amount') +
-    (_pfilt.length===0&&!showSpendForm
-      ?'<div class="empty"><div class="empty-icon">₹</div>'+(rangeSpends.length===0?'No transactions for this period':'No results for "'+(_txSearch['personal']||'')+'"')+'</div>'
-      :_ppage.map(s=>`<div class="spend-row"><div class="cat-emoji" style="background:${catBg(s.cat)}">${catEmoji(s.cat)}</div><div class="spend-desc"><div class="spend-desc-name">${s.desc}</div><div class="spend-desc-cat">${s.cat} · ${s.date}</div></div><span class="spend-amount">₹${fmt(s.amount)}</span><button class="del" onclick="deleteSpend(${s.id})">×</button></div>`).join('')
-    ) +
-    buildPagination('personal',_pfilt.length,_pp);
+  _renderPersonalTxList();
 
   const allCatNames=Object.keys(allCats());
   const sfEl=document.getElementById('spend-form');
@@ -4529,8 +4524,14 @@ function openSharedListDetail(listId){
           const sfilt=sq?[...filtered].reverse().filter(e=>(e.desc||'').toLowerCase().includes(sq)||(e.cat||'').toLowerCase().includes(sq)||String(e.amount).includes(sq)):[...filtered].reverse();
           const sp=_txPage[ctx]||0;
           const spage=sfilt.slice(sp*PAGE_SIZE,(sp+1)*PAGE_SIZE);
-          return buildTxSearchBar(ctx,'Search transactions...')+
-          (sfilt.length===0?'<div style="font-size:13px;color:var(--text3);padding:12px 0">'+(filtered.length===0?'No transactions in this period.':'No results.')+'</div>':
+          return `<div style="position:relative;margin-bottom:8px">
+            <input class="input" id="tx-search-${ctx}" value="${sq.replace(/"/g,'&quot;')}"
+              placeholder="🔍 Search transactions..."
+              oninput="event.stopPropagation();_txSearch['${ctx}']=this.value;_txPage['${ctx}']=0;_renderSLTxOnly(${lst.id})"
+              style="padding-left:12px;margin-bottom:0">
+            ${sq?`<button onclick="event.stopPropagation();_txSearch['${ctx}']='';document.getElementById('tx-search-${ctx}').value='';_txPage['${ctx}']=0;_renderSLTxOnly(${lst.id})" style="position:absolute;right:10px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;font-size:16px;color:var(--text3)">×</button>`:''}
+          </div>`+
+          `<div id="sl-tx-results-${lst.id}">`+(sfilt.length===0?'<div style="font-size:13px;color:var(--text3);padding:12px 0">'+(filtered.length===0?'No transactions in this period.':'No results.')+'</div>':
             spage.map(e=>`<div class="shared-expense-row" id="sl-exp-row-${lst.id}-${e.id}">
               <div style="width:30px;height:30px;border-radius:8px;background:${catBg(e.cat)};display:flex;align-items:center;justify-content:center;font-size:13px;flex-shrink:0">${catEmoji(e.cat)}</div>
               <div style="flex:1;min-width:0"><div style="font-size:13px;color:var(--text)">${e.desc}</div><div style="font-size:10px;color:var(--text3)">${e.date} · ${e.cat}</div></div>
@@ -4539,7 +4540,7 @@ function openSharedListDetail(listId){
               <button onclick="editSharedExpenseRow(${lst.id},${e.id})" style="background:none;border:none;cursor:pointer;font-size:13px;padding:2px 4px;opacity:.6">✏️</button>
               <button class="del" onclick="deleteSharedExpense(${lst.id},${e.id})">x</button>
             </div>`).join('')
-          )+buildPagination(ctx,sfilt.length,sp);
+          )+'</div>'+buildPagination(ctx,sfilt.length,sp);
         })()}
       </div>
 
@@ -5867,8 +5868,8 @@ function renderCategoriesPage(){
           <div class="card-title" style="margin-bottom:0">Spending by Category</div>
           <div style="font-size:18px;font-weight:700;color:var(--sage-dark);font-family:'Cormorant Garamond',serif">₹${fmt(Math.round(total))}</div>
         </div>
-        <!-- Pie chart -->
-        <div style="position:relative;height:240px;margin-bottom:14px">
+        <!-- Pie chart container — has stable ID so chart persists -->
+        <div id="cat-pie-wrap" style="position:relative;height:260px;margin-bottom:14px;min-height:260px">
           <canvas id="cat-page-pie" style="position:absolute;inset:0;width:100%;height:100%"></canvas>
         </div>
         <!-- Category grid -->
@@ -5923,11 +5924,21 @@ function renderCategoriesPage(){
       <div id="cat-page-add-form" style="margin-top:8px"></div>
     </div>`;
 
-  // Render pie chart
+  // Render pie chart — use requestAnimationFrame to ensure DOM is painted
   if(catSorted.length > 0){
     const labels  = catSorted.map(([cat]) => catEmoji(cat)+' '+cat);
     const amounts = catSorted.map(([,amt]) => Math.round(amt));
-    setTimeout(()=>renderDonutChart('cat-page-pie', labels, amounts), 80);
+    const _doPie = () => {
+      const wrap = document.getElementById('cat-pie-wrap');
+      const canvas = document.getElementById('cat-page-pie');
+      if(!canvas || !wrap || typeof Chart==='undefined') return;
+      // Force dimensions if not set
+      if(wrap.offsetWidth === 0) { setTimeout(_doPie, 100); return; }
+      canvas.width  = wrap.offsetWidth;
+      canvas.height = 260;
+      renderDonutChart('cat-page-pie', labels, amounts);
+    };
+    requestAnimationFrame(()=>setTimeout(_doPie, 50));
   }
 }
 
@@ -6027,6 +6038,114 @@ function refreshTxList(contextId){
   }
 }
 
+
+// Render only the personal tx list without rebuilding the search input
+function _renderPersonalTxList(){
+  const rangeSpends = spendsInRange();
+  const _pq   = (_txSearch['personal']||'').toLowerCase();
+  const _pall = [...rangeSpends].reverse();
+  const _pfilt= _pq?_pall.filter(s=>(s.desc||'').toLowerCase().includes(_pq)||(s.cat||'').toLowerCase().includes(_pq)||String(s.amount).includes(_pq)):_pall;
+  const _pp   = _txPage['personal']||0;
+  const _ppage= _pfilt.slice(_pp*PAGE_SIZE,(_pp+1)*PAGE_SIZE);
+  // Update clear button visibility without touching the input
+  const clrBtn = document.getElementById('personal-tx-clear');
+  if(clrBtn) clrBtn.style.display = _pq ? 'block' : 'none';
+  const slEl = document.getElementById('spend-list');
+  if(!slEl) return;
+  slEl.innerHTML =
+    (_pfilt.length===0&&!showSpendForm
+      ?'<div class="empty"><div class="empty-icon">₹</div>'+(rangeSpends.length===0?'No transactions for this period':'No results for "'+(_txSearch['personal']||'')+'"')+'</div>'
+      :_ppage.map(s=>`<div class="spend-row"><div class="cat-emoji" style="background:${catBg(s.cat)}">${catEmoji(s.cat)}</div><div class="spend-desc"><div class="spend-desc-name">${s.desc}</div><div class="spend-desc-cat">${s.cat} · ${s.date}</div></div><span class="spend-amount">₹${fmt(s.amount)}</span><button class="del" onclick="deleteSpend(${s.id})">×</button></div>`).join('')
+    ) +
+    buildPagination('personal',_pfilt.length,_pp);
+}
+
+function _renderSLTxOnly(listId){
+  const lst = sharedExpenseLists.find(l=>l.id===listId); if(!lst) return;
+  const ctx = 'sl_'+listId;
+  // Re-apply the current date filter
+  const mode=_slDateMode[listId]||'all', from=_slDateFrom[listId]||'', to=_slDateTo[listId]||'';
+  function slFilt(exps){
+    if(mode==='all') return exps;
+    const now=new Date(),today=new Date(now.getFullYear(),now.getMonth(),now.getDate());
+    let f,t;
+    if(mode==='month'){f=new Date(now.getFullYear(),now.getMonth(),1);t=new Date(today.getTime()+86399999);}
+    else if(mode==='last_month'){f=new Date(now.getFullYear(),now.getMonth()-1,1);t=new Date(now.getFullYear(),now.getMonth(),0,23,59,59);}
+    else if(mode==='week'){const d=today.getDay();f=new Date(today);f.setDate(today.getDate()-(d===0?6:d-1));t=new Date(today.getTime()+86399999);}
+    else if(mode==='custom'&&from&&to){f=new Date(from);t=new Date(to);t.setHours(23,59,59,999);}
+    else return exps;
+    return exps.filter(e=>{const p=(e.date||'').split('-');const d=new Date(parseInt(p[0]),parseInt(p[1])-1,parseInt(p[2]||1));return d>=f&&d<=t;});
+  }
+  const filtered = slFilt(lst.expenses||[]);
+  const sq  = (_txSearch[ctx]||'').toLowerCase();
+  const sfilt = sq ? [...filtered].reverse().filter(e=>(e.desc||'').toLowerCase().includes(sq)||(e.cat||'').toLowerCase().includes(sq)||String(e.amount).includes(sq)) : [...filtered].reverse();
+  const sp  = _txPage[ctx]||0;
+  const spage = sfilt.slice(sp*PAGE_SIZE,(sp+1)*PAGE_SIZE);
+  const resultsEl = document.getElementById('sl-tx-results-'+listId);
+  if(!resultsEl) return;
+  resultsEl.innerHTML = (sfilt.length===0
+    ?'<div style="font-size:13px;color:var(--text3);padding:12px 0">'+(filtered.length===0?'No transactions.':'No results.')+'</div>'
+    :spage.map(e=>`<div class="shared-expense-row" id="sl-exp-row-${listId}-${e.id}">
+      <div style="width:30px;height:30px;border-radius:8px;background:${catBg(e.cat)};display:flex;align-items:center;justify-content:center;font-size:13px;flex-shrink:0">${catEmoji(e.cat)}</div>
+      <div style="flex:1;min-width:0"><div style="font-size:13px;color:var(--text)">${e.desc}</div><div style="font-size:10px;color:var(--text3)">${e.date} · ${e.cat}</div></div>
+      <span class="shared-expense-who">${e.addedBy||'Me'}</span>
+      <span style="font-size:14px;font-weight:600;color:var(--text)">₹${fmt(e.amount)}</span>
+      <button onclick="editSharedExpenseRow(${listId},${e.id})" style="background:none;border:none;cursor:pointer;font-size:13px;padding:2px 4px;opacity:.6">✏️</button>
+      <button class="del" onclick="deleteSharedExpense(${listId},${e.id})">x</button>
+    </div>`).join('')
+  ) + buildPagination(ctx,sfilt.length,sp);
+  // Re-focus the search input
+  const searchEl = document.getElementById('tx-search-'+ctx);
+  if(searchEl && document.activeElement !== searchEl) searchEl.focus();
+}
+
+function _renderGrpTxOnly(gid){
+  const ctx = 'grp_'+gid;
+  const mode=_grpDateMode[gid]||'all', from=_grpDateFrom[gid]||'', to=_grpDateTo[gid]||'';
+  function grpFilt(sps){
+    if(mode==='all') return sps;
+    const now=new Date(),today=new Date(now.getFullYear(),now.getMonth(),now.getDate());
+    let f,t;
+    if(mode==='month'){f=new Date(now.getFullYear(),now.getMonth(),1);t=new Date(today.getTime()+86399999);}
+    else if(mode==='last_month'){f=new Date(now.getFullYear(),now.getMonth()-1,1);t=new Date(now.getFullYear(),now.getMonth(),0,23,59,59);}
+    else if(mode==='week'){const d=today.getDay();f=new Date(today);f.setDate(today.getDate()-(d===0?6:d-1));t=new Date(today.getTime()+86399999);}
+    else if(mode==='custom'&&from&&to){f=new Date(from);t=new Date(to);t.setHours(23,59,59,999);}
+    else return sps;
+    return sps.filter(s=>{const p=(s.date||'').split('-');const d=new Date(parseInt(p[0]),parseInt(p[1])-1,parseInt(p[2]||1));return d>=f&&d<=t;});
+  }
+  const allSplits = splits.filter(s=>s.groupId===gid);
+  const grpSplits = grpFilt(allSplits);
+  const gq  = (_txSearch[ctx]||'').toLowerCase();
+  const gfilt = gq ? grpSplits.filter(s=>(s.desc||'').toLowerCase().includes(gq)||(s.cat||'').toLowerCase().includes(gq)||String(s.totalAmount).includes(gq)) : grpSplits;
+  const gp = _txPage[ctx]||0;
+  const gpage = gfilt.slice(gp*PAGE_SIZE,(gp+1)*PAGE_SIZE);
+  const resultsEl = document.getElementById('grp-tx-results-'+gid);
+  if(!resultsEl) return;
+  resultsEl.innerHTML = (gpage.length===0
+    ?'<div class="empty" style="padding:12px 0">No results.</div>'
+    :gpage.map(sp=>{
+      const allPaid=sp.members.every(m=>m.paid);
+      const paidCount=sp.members.filter(m=>m.paid).length;
+      const expandedKey='exp_'+sp.id;
+      const isOpen=!!(window._expandedSplits&&window._expandedSplits[expandedKey]);
+      return `<div id="grp-split-row-${sp.id}" style="border:1px solid ${allPaid?'var(--sage-mid)':'var(--warm2)'};border-radius:var(--r2);margin-bottom:8px;overflow:hidden;background:${allPaid?'rgba(168,196,172,.08)':'var(--card)'}">
+        <div style="display:flex;align-items:center;gap:10px;padding:12px 14px;cursor:pointer" onclick="toggleExpense('${expandedKey}','exp-body-${sp.id}')">
+          <span style="font-size:16px">${allPaid?'✅':'💸'}</span>
+          <div style="flex:1;min-width:0"><div style="font-size:14px;font-weight:500;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${sp.desc}</div><div style="font-size:11px;color:var(--text3)">₹${fmt(sp.totalAmount)} · ${mName(sp.paidBy)} paid · ${paidCount}/${sp.members.length} paid</div></div>
+          <span style="font-size:11px;color:var(--text3);margin-right:4px">${isOpen?'▲':'▼'}</span>
+          <button onclick="event.stopPropagation();editGroupSplitRow(${sp.id},${gid})" style="background:none;border:none;cursor:pointer;font-size:13px;padding:2px 4px;opacity:.6">✏️</button>
+          <button class="del" onclick="event.stopPropagation();deleteSplit(${sp.id})">×</button>
+        </div>
+        <div id="exp-body-${sp.id}" style="display:${isOpen?'block':'none'};padding:0 14px 12px">
+          <div style="font-size:11px;color:var(--text3);margin-bottom:8px">${sp.splitType==='percent'?'Percentage split':'Equal split'} · ${sp.date}</div>
+          ${sp.members.map(m=>`<div class="split-row"><div class="friend-avatar" style="width:28px;height:28px;font-size:11px">${mName(m.friendId)[0]}</div><span style="flex:1;font-size:13px">${mName(m.friendId)}</span><span class="split-amount">₹${fmt(m.share)}</span><button class="split-paid-btn ${m.paid?'paid':'unpaid'}" onclick="toggleSplitPaid(${sp.id},'${m.friendId}')">${m.paid?'✓ Paid':'Mark Paid'}</button></div>`).join('')}
+        </div>
+      </div>`;
+    }).join('')
+  ) + buildPagination(ctx,gfilt.length,gp);
+  const searchEl = document.getElementById('tx-search-'+ctx);
+  if(searchEl && document.activeElement !== searchEl) searchEl.focus();
+}
 function showToast(msg){
   const t=document.createElement('div');
   t.style.cssText='position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#3D5C42;color:white;padding:10px 20px;border-radius:10px;font-size:13px;z-index:9999;box-shadow:0 4px 16px rgba(0,0,0,.2);transition:opacity .4s';
@@ -6496,7 +6615,13 @@ function renderGroupDetail(gid){
             </div>
           </div>`;
         }).join('');
-        return buildTxSearchBar(ctx,'Search expenses...')+pagedHtml+buildPagination(ctx,gfilt.length,gp);
+        return `<div style="position:relative;margin-bottom:8px">
+          <input class="input" id="tx-search-${ctx}" value="${gq.replace(/"/g,'&quot;')}"
+            placeholder="🔍 Search expenses..."
+            oninput="event.stopPropagation();_txSearch['${ctx}']=this.value;_txPage['${ctx}']=0;_renderGrpTxOnly(${gid})"
+            style="padding-left:12px;margin-bottom:0">
+          ${gq?`<button onclick="event.stopPropagation();_txSearch['${ctx}']='';document.getElementById('tx-search-${ctx}').value='';_txPage['${ctx}']=0;_renderGrpTxOnly(${gid})" style="position:absolute;right:10px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;font-size:16px;color:var(--text3)">×</button>`:''}
+        </div><div id="grp-tx-results-${gid}">`+pagedHtml+'</div>'+buildPagination(ctx,gfilt.length,gp);
       })()}
 
       <!-- Actions -->
