@@ -1772,6 +1772,8 @@ function _waitAndFlushSave(){
 }
 
 const CAT_COLORS={Food:'#6B8F71',Travel:'#B8845A',Shopping:'#5A78B8',Health:'#B85A4A',Bills:'#8A6BC4',Entertainment:'#5A9898',Other:'#9C9C98'};
+const _BUILTINS=new Set(['Food','Travel','Shopping','Health','Bills','Entertainment','Other']);
+function isEditableCat(cat){ return !_BUILTINS.has(cat); }
 const CAT_BG={Food:'#EAF0EB',Travel:'#F5EAE0',Shopping:'#E5EAF5',Health:'#F5E8E5',Bills:'#EDE5F5',Entertainment:'#E5F0F0',Other:'#F0F0F0'};
 const CAT_EMJ={Food:'🍽️',Travel:'🚗',Shopping:'🛍️',Health:'💊',Bills:'📄',Entertainment:'🎬',Other:'📦'};
 
@@ -2862,6 +2864,14 @@ function selectCatIcon(icon, btn){
 }
 
 function openEditCatModal(catName){
+  // Auto-register the category if it's not in customCats yet
+  // (e.g. categories from CSV import that aren't in the custom list)
+  if(!customCats.find(c=>c.name===catName) && isEditableCat(catName)){
+    // Inherit the current emoji/color if it exists in CAT_EMJ/CAT_COLORS
+    const existingEmoji = CAT_EMJ[catName] || '🏷️';
+    const existingColor = CAT_COLORS[catName] || '#9C9C98';
+    customCats.push({name:catName, emoji:existingEmoji, color:existingColor, bg:existingColor+'22'});
+  }
   const cat = customCats.find(c=>c.name===catName);
   if(!cat) return;
   document.getElementById('edit-cat-modal')?.remove();
@@ -4425,35 +4435,33 @@ function openSharedListDetail(listId){
       <!-- Category totals + charts -->
       ${catSorted.length > 0 ? `
         <div style="margin-bottom:16px">
-          <div class="card-title" style="margin-bottom:8px">By Category</div>
-          ${catSorted.map(([cat,amt]) => {
-            const pct = fTotal > 0 ? Math.round(amt/fTotal*100) : 0;
-            const isCustom = customCats.some(cc=>cc.name===cat);
-            return `<div style="display:flex;align-items:center;gap:10px;padding:6px 0;border-bottom:1px solid var(--warm2)">
-              <div style="width:34px;height:34px;border-radius:9px;background:${catBg(cat)};display:flex;align-items:center;justify-content:center;font-size:15px;flex-shrink:0">${catEmoji(cat)}</div>
-              <div style="flex:1;min-width:0">
-                <div style="font-size:13px;font-weight:500">${cat}</div>
-                <div style="height:4px;background:var(--warm3);border-radius:2px;margin-top:4px">
-                  <div style="height:4px;background:var(--sage);border-radius:2px;width:${pct}%"></div>
-                </div>
-              </div>
-              <span style="font-size:13px;font-weight:600;white-space:nowrap">₹${fmt(Math.round(amt))}</span>
-              <span style="font-size:10px;color:var(--text3);white-space:nowrap">${pct}%</span>
-              ${isCustom?`<button onclick="openEditCatModal('${cat}')" title="Edit"
-                style="background:none;border:none;cursor:pointer;font-size:12px;padding:2px 4px;opacity:.5">✏️</button>`:''}
-            </div>`;
-          }).join('')}
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+            <div class="card-title" style="margin-bottom:0">By Category</div>
+            <span style="font-size:11px;color:var(--text3)">${catSorted.length} categories</span>
+          </div>
 
-          <!-- Charts row: donut + bar -->
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:14px">
-            <div>
-              <div style="font-size:11px;font-weight:600;color:var(--text3);margin-bottom:6px;text-align:center">Distribution</div>
-              <canvas id="sl-donut-${lst.id}" style="max-height:160px"></canvas>
-            </div>
-            <div>
-              <div style="font-size:11px;font-weight:600;color:var(--text3);margin-bottom:6px;text-align:center">Amounts</div>
-              <canvas id="sl-bar-${lst.id}" style="max-height:160px"></canvas>
-            </div>
+          <!-- Compact 2-col grid for many categories -->
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:14px">
+            ${catSorted.map(([cat,amt]) => {
+              const pct=fTotal>0?Math.round(amt/fTotal*100):0;
+              return `<div style="display:flex;align-items:center;gap:8px;padding:8px;background:var(--warm);border-radius:var(--r2);cursor:${isEditableCat(cat)?'pointer':'default'}"
+                ${isEditableCat(cat)?`onclick="openEditCatModal('${cat}')" title="Tap to edit"`:''}">
+                <div style="width:28px;height:28px;border-radius:7px;background:${catBg(cat)};display:flex;align-items:center;justify-content:center;font-size:13px;flex-shrink:0">${catEmoji(cat)}</div>
+                <div style="flex:1;min-width:0;overflow:hidden">
+                  <div style="font-size:11px;color:var(--text2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${cat}${isEditableCat(cat)?' ✏️':''}</div>
+                  <div style="font-size:13px;font-weight:700;color:var(--sage-dark)">₹${amt>=1000?Math.round(amt/100)/10+'k':fmt(Math.round(amt))}</div>
+                  <div style="height:3px;background:var(--warm3);border-radius:2px;margin-top:3px">
+                    <div style="height:3px;background:var(--sage);border-radius:2px;width:${pct}%"></div>
+                  </div>
+                </div>
+                <span style="font-size:10px;color:var(--text3);flex-shrink:0">${pct}%</span>
+              </div>`;
+            }).join('')}
+          </div>
+
+          <!-- Single donut chart - much more reliable than grid of 2 canvases -->
+          <div style="position:relative;height:220px;margin-top:4px">
+            <canvas id="sl-donut-${lst.id}" style="position:absolute;inset:0;width:100%;height:100%"></canvas>
           </div>
         </div>` : '<div class="empty" style="padding:20px 0"><div style="font-size:24px">📋</div><div>No expenses in this period</div></div>'}
 
@@ -4501,14 +4509,11 @@ function openSharedListDetail(listId){
       <div id="shared-expense-form-${lst.id}" style="margin-top:8px"></div>
     </div>`;
 
-  // Render both charts
+  // Render donut chart with legend on right
   if(catSorted.length > 0){
     const labels  = catSorted.map(([cat]) => catEmoji(cat)+' '+cat);
     const amounts = catSorted.map(([,amt]) => Math.round(amt));
-    setTimeout(()=>{
-      renderDonutChart('sl-donut-'+lst.id, labels, amounts);
-      renderBarChart(  'sl-bar-'+lst.id,   labels, amounts);
-    }, 80);
+    setTimeout(()=>renderDonutChart('sl-donut-'+lst.id, labels, amounts), 100);
   }
 }
 
@@ -5687,10 +5692,15 @@ function buildChartColors(count){
 function renderDonutChart(canvasId, labels, data, title){
   const canvas = document.getElementById(canvasId);
   if(!canvas || typeof Chart==='undefined') return;
-  // Destroy existing chart if any
   const existing = Chart.getChart(canvasId);
   if(existing) existing.destroy();
   const {colors,borders} = buildChartColors(labels.length);
+  // Use absolute positioning parent — set canvas size explicitly
+  const parent = canvas.parentElement;
+  if(parent && parent.style.position === 'relative'){
+    canvas.width  = parent.offsetWidth  || 380;
+    canvas.height = parent.offsetHeight || 220;
+  }
   new Chart(canvas, {
     type:'doughnut',
     data:{
@@ -5698,10 +5708,27 @@ function renderDonutChart(canvasId, labels, data, title){
       datasets:[{data, backgroundColor:colors, borderColor:borders, borderWidth:2, hoverOffset:8}]
     },
     options:{
-      responsive:true, maintainAspectRatio:true,
-      cutout:'62%',
+      responsive:true,
+      maintainAspectRatio:false,
+      cutout:'58%',
       plugins:{
-        legend:{position:'right', labels:{font:{size:11,family:'DM Sans'},boxWidth:12,padding:10,color:'#5C5C58'}},
+        legend:{
+          position: labels.length > 6 ? 'bottom' : 'right',
+          labels:{font:{size:10,family:'DM Sans'},boxWidth:10,padding:8,color:'#5C5C58',
+            // Truncate long label names
+            generateLabels: chart => {
+              const ds = chart.data.datasets[0];
+              const total = ds.data.reduce((a,b)=>a+b,0);
+              return chart.data.labels.map((lbl,i)=>({
+                text: (lbl.length>14?lbl.slice(0,12)+'…':lbl) + '  ₹'+(ds.data[i]>=1000?Math.round(ds.data[i]/100)/10+'k':ds.data[i].toLocaleString('en-IN')),
+                fillStyle: ds.backgroundColor[i],
+                strokeStyle: ds.borderColor[i],
+                lineWidth: 1,
+                index: i
+              }));
+            }
+          }
+        },
         tooltip:{callbacks:{label:ctx=>`₹${ctx.parsed.toLocaleString('en-IN')} (${Math.round(ctx.parsed/ctx.dataset.data.reduce((a,b)=>a+b,0)*100)}%)`}}
       }
     }
@@ -6133,28 +6160,34 @@ function renderGroupDetail(gid){
       <!-- Category breakdown + charts -->
       ${gcs.length>0?`
         <div style="margin-bottom:14px">
-          <div class="card-title" style="margin-bottom:8px">By Category</div>
-          ${gcs.map(([cat,amt])=>{
-            const pct=fTotal>0?Math.round(amt/fTotal*100):0;
-            const isCustom=customCats.some(cc=>cc.name===cat);
-            return `<div style="display:flex;align-items:center;gap:10px;padding:6px 0;border-bottom:1px solid var(--warm2)">
-              <div style="width:34px;height:34px;border-radius:9px;background:${catBg(cat)};display:flex;align-items:center;justify-content:center;font-size:15px;flex-shrink:0">${catEmoji(cat)}</div>
-              <div style="flex:1;min-width:0">
-                <div style="font-size:13px;font-weight:500">${cat}</div>
-                <div style="height:4px;background:var(--warm3);border-radius:2px;margin-top:4px">
-                  <div style="height:4px;background:var(--sage);border-radius:2px;width:${pct}%"></div>
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+            <div class="card-title" style="margin-bottom:0">By Category</div>
+            <span style="font-size:11px;color:var(--text3)">${gcs.length} categories</span>
+          </div>
+          <!-- Compact 2-col grid -->
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:14px">
+            ${gcs.map(([cat,amt])=>{
+              const pct=fTotal>0?Math.round(amt/fTotal*100):0;
+              return `<div style="display:flex;align-items:center;gap:8px;padding:8px;background:var(--warm);border-radius:var(--r2);cursor:${isEditableCat(cat)?'pointer':'default'}"
+                ${isEditableCat(cat)?`onclick="openEditCatModal('${cat}')" title="Tap to edit"`:''}">
+                <div style="width:28px;height:28px;border-radius:7px;background:${catBg(cat)};display:flex;align-items:center;justify-content:center;font-size:13px;flex-shrink:0">${catEmoji(cat)}</div>
+                <div style="flex:1;min-width:0;overflow:hidden">
+                  <div style="font-size:11px;color:var(--text2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${cat}${isEditableCat(cat)?' ✏️':''}</div>
+                  <div style="font-size:13px;font-weight:700;color:var(--sage-dark)">₹${amt>=1000?Math.round(amt/100)/10+'k':fmt(Math.round(amt))}</div>
+                  <div style="height:3px;background:var(--warm3);border-radius:2px;margin-top:3px">
+                    <div style="height:3px;background:var(--sage);border-radius:2px;width:${pct}%"></div>
+                  </div>
                 </div>
-              </div>
-              <span style="font-size:13px;font-weight:600;white-space:nowrap">₹${fmt(Math.round(amt))}</span>
-              <span style="font-size:10px;color:var(--text3);white-space:nowrap">${pct}%</span>
-              ${isCustom?`<button onclick="openEditCatModal('${cat}')" title="Edit" style="background:none;border:none;cursor:pointer;font-size:12px;padding:2px 4px;opacity:.5">✏️</button>`:''}
-            </div>`;
-          }).join('')}
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:14px">
-            <div><div style="font-size:11px;font-weight:600;color:var(--text3);margin-bottom:6px;text-align:center">Distribution</div><canvas id="grp-donut-${gid}" style="max-height:160px"></canvas></div>
-            <div><div style="font-size:11px;font-weight:600;color:var(--text3);margin-bottom:6px;text-align:center">Amounts</div><canvas id="grp-bar-${gid}" style="max-height:160px"></canvas></div>
+                <span style="font-size:10px;color:var(--text3);flex-shrink:0">${pct}%</span>
+              </div>`;
+            }).join('')}
+          </div>
+          <!-- Donut chart with fixed height container -->
+          <div style="position:relative;height:220px">
+            <canvas id="grp-donut-${gid}" style="position:absolute;inset:0;width:100%;height:100%"></canvas>
           </div>
         </div>`:''}
+
 
       <!-- Who paid breakdown -->
       ${payerSorted.length>1?`
@@ -6179,14 +6212,11 @@ function renderGroupDetail(gid){
       </div>
     </div>`;
 
-  // Render both charts
+  // Render donut chart
   if(gcs.length>0){
     const labels  = gcs.map(([cat])=>catEmoji(cat)+' '+cat);
     const amounts = gcs.map(([,amt])=>Math.round(amt));
-    setTimeout(()=>{
-      renderDonutChart('grp-donut-'+gid, labels, amounts);
-      renderBarChart(  'grp-bar-'+gid,   labels, amounts);
-    },80);
+    setTimeout(()=>renderDonutChart('grp-donut-'+gid, labels, amounts), 100);
   }
 }
 
