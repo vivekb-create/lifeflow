@@ -1230,6 +1230,10 @@ onAuthStateChanged(auth, async (user) => {
             <span class="nav-sub-icon">✅</span>
             <span class="nav-sub-label">Settle Up</span>
           </button>
+          <button class="nav-sub-item" id="nav-sub-categories" onclick="navToSpend('categories',this)">
+            <span class="nav-sub-icon">📂</span>
+            <span class="nav-sub-label">Categories</span>
+          </button>
         </div>
       </div>
       <div class="nav-section">Personal</div>
@@ -1407,6 +1411,14 @@ onAuthStateChanged(auth, async (user) => {
           <!-- Shared List Detail -->
           <div id="shared-list-detail" style="display:none"></div>
         </div>
+        <!-- CATEGORIES -->
+        <div class="spend-panel" id="spend-panel-categories">
+          <div class="section-head" style="padding:0 0 12px">
+            <div class="section-title" style="font-size:18px">Manage Categories</div>
+          </div>
+          <div id="categories-page-content"></div>
+        </div>
+
         <!-- SETTLE UP -->
         <div class="spend-panel" id="spend-panel-settle">
           <div class="card" style="margin-bottom:16px">
@@ -2667,6 +2679,28 @@ let _groups=load(XKEYS.groups,[]);
 let _splits=load(XKEYS.splits,[]);
 let customCats=_customCats,friends=_friends,friendReqs=_friendReqs,groups=_groups,splits=_splits;
 
+
+// ── Auto-sync all used categories into customCats ─────────────────────────
+// Ensures any category from CSV, personal, shared list, or group shows up
+function syncAllCategoriesToCustom(){
+  const builtinNames = new Set(Object.keys(BUILTIN_CATS));
+  const known = new Set(customCats.map(c=>c.name));
+  const toAdd = new Set();
+  // Collect from personal spends
+  spends.forEach(s=>{ if(s.cat&&!builtinNames.has(s.cat)&&!known.has(s.cat)) toAdd.add(s.cat); });
+  // Collect from shared expense lists
+  sharedExpenseLists.forEach(lst=>(lst.expenses||[]).forEach(e=>{
+    if(e.cat&&!builtinNames.has(e.cat)&&!known.has(e.cat)) toAdd.add(e.cat);
+  }));
+  // Collect from group splits
+  splits.forEach(s=>{ if(s.cat&&!builtinNames.has(s.cat)&&!known.has(s.cat)) toAdd.add(s.cat); });
+  if(toAdd.size===0) return;
+  toAdd.forEach(name=>{
+    customCats.push({name, emoji:'🏷️', color:'#9C9C98', bg:'#9C9C9822'});
+    known.add(name);
+  });
+  persist();
+}
 function allCats(){const m={...BUILTIN_CATS};customCats.forEach(c=>{m[c.name]={emoji:c.emoji,color:c.color,bg:c.bg};});return m;}
 function catEmoji(n){return(allCats()[n]||{emoji:'📦'}).emoji;}
 function catColor(n){return(allCats()[n]||{color:'#9C9C98'}).color;}
@@ -2687,13 +2721,13 @@ function setSpendTab(tab,btn){
   // Persist spend tab
   try { sessionStorage.setItem('lf_last_spend_tab', tab); } catch{}
   // Update section title
-  const titles={personal:'Personal Spending',friends:'Friends',groups:'Groups',settle:'Settle Up'};
+  const titles={personal:'Personal Spending',friends:'Friends',groups:'Groups',settle:'Settle Up',categories:'Categories'};
   const stEl=document.getElementById('spend-section-title');
   if(stEl) stEl.textContent=titles[tab]||'Spending';
   // Sync sidebar sub-items
   document.querySelectorAll('.nav-sub-item').forEach(x=>x.classList.remove('active'));
   document.getElementById('nav-sub-'+tab)?.classList.add('active');
-  renderSpending();
+  if(tab==='categories') renderCategoriesPage(); else renderSpending();
   updateFab();
 }
 
@@ -2804,11 +2838,19 @@ function renderPersonal(){
       </div>
     </div>`:`<button class="add-btn" style="margin-top:0" onclick="setCatForm(true)">+ Add custom category</button>`;
 
-  const todayEntries=[...rangeSpends].reverse();
+  const _pq  = (_txSearch['personal']||'').toLowerCase();
+  const _pall = [...rangeSpends].reverse();
+  const _pfilt= _pq?_pall.filter(s=>(s.desc||'').toLowerCase().includes(_pq)||(s.cat||'').toLowerCase().includes(_pq)||String(s.amount).includes(_pq)):_pall;
+  const _pp   = _txPage['personal']||0;
+  const _ppage= _pfilt.slice(_pp*PAGE_SIZE,(_pp+1)*PAGE_SIZE);
   const slEl=document.getElementById('spend-list');
-  if(slEl)slEl.innerHTML=todayEntries.length===0&&!showSpendForm
-    ?'<div class="empty"><div class="empty-icon">₹</div>No transactions today</div>'
-    :todayEntries.map(s=>`<div class="spend-row"><div class="cat-emoji" style="background:${catBg(s.cat)}">${catEmoji(s.cat)}</div><div class="spend-desc"><div class="spend-desc-name">${s.desc}</div><div class="spend-desc-cat">${s.cat}</div></div><span class="spend-amount">₹${fmt(s.amount)}</span><button class="del" onclick="deleteSpend(${s.id})">×</button></div>`).join('');
+  if(slEl) slEl.innerHTML =
+    buildTxSearchBar('personal','Search by description, category or amount') +
+    (_pfilt.length===0&&!showSpendForm
+      ?'<div class="empty"><div class="empty-icon">₹</div>'+(rangeSpends.length===0?'No transactions for this period':'No results for "'+(_txSearch['personal']||'')+'"')+'</div>'
+      :_ppage.map(s=>`<div class="spend-row"><div class="cat-emoji" style="background:${catBg(s.cat)}">${catEmoji(s.cat)}</div><div class="spend-desc"><div class="spend-desc-name">${s.desc}</div><div class="spend-desc-cat">${s.cat} · ${s.date}</div></div><span class="spend-amount">₹${fmt(s.amount)}</span><button class="del" onclick="deleteSpend(${s.id})">×</button></div>`).join('')
+    ) +
+    buildPagination('personal',_pfilt.length,_pp);
 
   const allCatNames=Object.keys(allCats());
   const sfEl=document.getElementById('spend-form');
@@ -4478,24 +4520,27 @@ function openSharedListDetail(listId){
             </div>`).join('')}
         </div>` : ''}
 
-      <!-- Transactions -->
+      <!-- Transactions with search + pagination -->
       <div>
         <div class="card-title" style="margin-bottom:8px">Transactions <span style="font-size:11px;font-weight:400;color:var(--text3)">(${filtered.length})</span></div>
-        ${filtered.length === 0
-          ? '<div style="font-size:13px;color:var(--text3);padding:12px 0">No transactions in this period.</div>'
-          : [...filtered].reverse().map(e => `
-            <div class="shared-expense-row" id="sl-exp-row-${lst.id}-${e.id}">
+        ${(()=>{
+          const ctx='sl_'+lst.id;
+          const sq=(_txSearch[ctx]||'').toLowerCase();
+          const sfilt=sq?[...filtered].reverse().filter(e=>(e.desc||'').toLowerCase().includes(sq)||(e.cat||'').toLowerCase().includes(sq)||String(e.amount).includes(sq)):[...filtered].reverse();
+          const sp=_txPage[ctx]||0;
+          const spage=sfilt.slice(sp*PAGE_SIZE,(sp+1)*PAGE_SIZE);
+          return buildTxSearchBar(ctx,'Search transactions...')+
+          (sfilt.length===0?'<div style="font-size:13px;color:var(--text3);padding:12px 0">'+(filtered.length===0?'No transactions in this period.':'No results.')+'</div>':
+            spage.map(e=>`<div class="shared-expense-row" id="sl-exp-row-${lst.id}-${e.id}">
               <div style="width:30px;height:30px;border-radius:8px;background:${catBg(e.cat)};display:flex;align-items:center;justify-content:center;font-size:13px;flex-shrink:0">${catEmoji(e.cat)}</div>
-              <div style="flex:1;min-width:0">
-                <div style="font-size:13px;color:var(--text)">${e.desc}</div>
-                <div style="font-size:10px;color:var(--text3)">${e.date} · ${e.cat}</div>
-              </div>
+              <div style="flex:1;min-width:0"><div style="font-size:13px;color:var(--text)">${e.desc}</div><div style="font-size:10px;color:var(--text3)">${e.date} · ${e.cat}</div></div>
               <span class="shared-expense-who">${e.addedBy||'Me'}</span>
               <span style="font-size:14px;font-weight:600;color:var(--text)">₹${fmt(e.amount)}</span>
-              <button onclick="editSharedExpenseRow(${lst.id},${e.id})"
-                style="background:none;border:none;cursor:pointer;font-size:13px;padding:2px 4px;opacity:.6">✏️</button>
+              <button onclick="editSharedExpenseRow(${lst.id},${e.id})" style="background:none;border:none;cursor:pointer;font-size:13px;padding:2px 4px;opacity:.6">✏️</button>
               <button class="del" onclick="deleteSharedExpense(${lst.id},${e.id})">x</button>
-            </div>`).join('')}
+            </div>`).join('')
+          )+buildPagination(ctx,sfilt.length,sp);
+        })()}
       </div>
 
       <!-- Actions -->
@@ -4887,6 +4932,7 @@ async function confirmSharedCsvImport(listId){
   });
 
   persist();
+  syncAllCategoriesToCustom();  // register any new categories from import
   delete _sharedCsvCache[listId];
 
   const previewEl = document.getElementById('shared-csv-preview-'+listId);
@@ -5761,6 +5807,226 @@ function renderBarChart(canvasId, labels, data, title){
   });
 }
 
+
+// ══════════════════════════════════════════════════════════════════════════
+// MANAGE CATEGORIES PAGE
+// ══════════════════════════════════════════════════════════════════════════
+let _catPageFilter = 'all';  // 'all' | 'personal' | listId | groupId
+
+function renderCategoriesPage(){
+  syncAllCategoriesToCustom();
+  const el = document.getElementById('categories-page-content');
+  if(!el) return;
+
+  // Build a unified list of all expenses across all 3 sources
+  function getAllExpenses(){
+    const all = [];
+    spends.forEach(s => all.push({...s, _source:'personal', _sourceLabel:'Personal'}));
+    sharedExpenseLists.forEach(lst =>
+      (lst.expenses||[]).forEach(e => all.push({...e, _source:'list_'+lst.id, _sourceLabel:lst.emoji+' '+lst.name}))
+    );
+    splits.forEach(s => {
+      const g = groups.find(x=>x.id===s.groupId);
+      if(g) all.push({id:s.id, cat:s.cat||'Other', desc:s.desc, amount:s.totalAmount,
+        date:s.date, _source:'grp_'+s.groupId, _sourceLabel:g.emoji+' '+g.name});
+    });
+    return all;
+  }
+
+  const allExp = getAllExpenses();
+
+  // Source filter options
+  const sources = [{id:'all', label:'All Sources'}];
+  sources.push({id:'personal', label:'💳 Personal'});
+  sharedExpenseLists.forEach(lst => sources.push({id:'list_'+lst.id, label:lst.emoji+' '+lst.name}));
+  const grpIds = [...new Set(splits.map(s=>s.groupId).filter(Boolean))];
+  grpIds.forEach(gid => { const g=groups.find(x=>x.id===gid); if(g) sources.push({id:'grp_'+gid, label:g.emoji+' '+g.name}); });
+
+  // Filter
+  const filtered = _catPageFilter === 'all' ? allExp
+    : allExp.filter(e => e._source === _catPageFilter || (_catPageFilter === 'personal' && e._source === 'personal'));
+
+  // Category totals
+  const byCat = {};
+  filtered.forEach(e => { byCat[e.cat] = (byCat[e.cat]||0) + (e.amount||0); });
+  const catSorted = Object.entries(byCat).sort((a,b) => b[1]-a[1]);
+  const total = filtered.reduce((a,e) => a+(e.amount||0), 0);
+  const allCatList = [...new Set([...Object.keys(BUILTIN_CATS), ...customCats.map(c=>c.name)])].sort();
+
+  el.innerHTML = `
+    <!-- Source filter chips -->
+    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px">
+      ${sources.map(s=>`<button class="dr-chip ${_catPageFilter===s.id?'active':''}"
+        onclick="_catPageFilter='${s.id}';renderCategoriesPage()">${s.label}</button>`).join('')}
+    </div>
+
+    <!-- Pie chart + totals -->
+    ${catSorted.length > 0 ? `
+      <div class="card" style="margin-bottom:14px">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+          <div class="card-title" style="margin-bottom:0">Spending by Category</div>
+          <div style="font-size:18px;font-weight:700;color:var(--sage-dark);font-family:'Cormorant Garamond',serif">₹${fmt(Math.round(total))}</div>
+        </div>
+        <!-- Pie chart -->
+        <div style="position:relative;height:240px;margin-bottom:14px">
+          <canvas id="cat-page-pie" style="position:absolute;inset:0;width:100%;height:100%"></canvas>
+        </div>
+        <!-- Category grid -->
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
+          ${catSorted.map(([cat,amt])=>{
+            const pct = total>0 ? Math.round(amt/total*100) : 0;
+            return `<div style="display:flex;align-items:center;gap:8px;padding:8px;background:var(--warm);border-radius:var(--r2);cursor:${isEditableCat(cat)?'pointer':'default'}"
+              ${isEditableCat(cat)?`onclick="openEditCatModal('${cat}')" title="Edit category"`:''}
+            >
+              <div style="width:28px;height:28px;border-radius:7px;background:${catBg(cat)};display:flex;align-items:center;justify-content:center;font-size:13px;flex-shrink:0">${catEmoji(cat)}</div>
+              <div style="flex:1;min-width:0">
+                <div style="font-size:11px;color:var(--text2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${cat}${isEditableCat(cat)?' ✏️':''}</div>
+                <div style="font-size:13px;font-weight:700;color:var(--sage-dark)">₹${amt>=1000?Math.round(amt/100)/10+'k':fmt(Math.round(amt))}</div>
+              </div>
+              <span style="font-size:10px;color:var(--text3)">${pct}%</span>
+            </div>`;
+          }).join('')}
+        </div>
+      </div>` : '<div class="empty"><div class="empty-icon">📂</div>No expenses found for this filter.</div>'}
+
+    <!-- All categories list with actions -->
+    <div class="card" style="margin-bottom:14px">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+        <div class="card-title" style="margin-bottom:0">All Categories</div>
+        <button class="btn btn-primary btn-sm" onclick="openAddCatFromCatPage()">+ Add</button>
+      </div>
+      <!-- Built-in -->
+      <div style="font-size:10px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px">Built-in</div>
+      <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px">
+        ${Object.entries(BUILTIN_CATS).map(([name,cat])=>`
+          <div style="display:flex;align-items:center;gap:6px;padding:6px 10px;background:var(--warm);border-radius:12px">
+            <span style="font-size:15px">${cat.emoji}</span>
+            <span style="font-size:12px;color:var(--text2)">${name}</span>
+          </div>`).join('')}
+      </div>
+      <!-- Custom -->
+      <div style="font-size:10px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px">Custom ${customCats.length>0?`(${customCats.length})`:''}</div>
+      ${customCats.length===0
+        ? '<div style="font-size:12px;color:var(--text3);padding:8px 0">No custom categories yet.</div>'
+        : `<div style="display:flex;flex-direction:column;gap:4px">
+          ${customCats.map(cat=>`
+            <div style="display:flex;align-items:center;gap:8px;padding:8px 10px;background:${cat.bg||'#F0F0F0'};border-radius:var(--r2)">
+              <span style="font-size:18px">${cat.emoji}</span>
+              <span style="font-size:13px;font-weight:500;color:${cat.color};flex:1">${cat.name}</span>
+              <span style="font-size:10px;color:var(--text3);background:var(--warm2);padding:1px 6px;border-radius:5px">
+                ${allExp.filter(e=>e.cat===cat.name).length} uses
+              </span>
+              <button class="btn btn-ghost btn-sm" onclick="openEditCatModal('${cat.name}')" style="font-size:11px;padding:2px 8px">✏️</button>
+              <button onclick="deleteCustomCat('${cat.name}')" style="background:none;border:none;cursor:pointer;font-size:15px;color:var(--red);opacity:.6;padding:2px 5px">×</button>
+            </div>`).join('')}
+        </div>`}
+      <div id="cat-page-add-form" style="margin-top:8px"></div>
+    </div>`;
+
+  // Render pie chart
+  if(catSorted.length > 0){
+    const labels  = catSorted.map(([cat]) => catEmoji(cat)+' '+cat);
+    const amounts = catSorted.map(([,amt]) => Math.round(amt));
+    setTimeout(()=>renderDonutChart('cat-page-pie', labels, amounts), 80);
+  }
+}
+
+function openAddCatFromCatPage(){
+  const form = document.getElementById('cat-page-add-form');
+  if(!form) return;
+  form.innerHTML = `<div class="form-box" style="padding:10px">
+    <div style="font-size:11px;color:var(--text3);margin-bottom:6px;font-weight:600">Pick an icon</div>
+    <div style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:8px">
+      ${CAT_ICON_PRESETS.map(ic=>`<button onclick="selectCatIcon('${ic}',this)"
+        style="width:32px;height:32px;font-size:18px;border:2px solid var(--warm3);border-radius:8px;background:var(--warm);cursor:pointer"
+        class="cat-icon-btn">${ic}</button>`).join('')}
+    </div>
+    <input type="hidden" id="ccat-emoji" value="${CAT_ICON_PRESETS[0]}">
+    <div class="input-row" style="margin-bottom:6px">
+      <input class="input" id="ccat-name" placeholder="Category name" style="margin-bottom:0">
+      <input class="input" id="ccat-color" type="color" value="#6B8F71" style="width:38px;padding:3px;flex-shrink:0;margin-bottom:0">
+    </div>
+    <div style="display:flex;gap:6px">
+      <button class="btn btn-primary btn-sm" onclick="addCustomCatFromPage()">Add Category</button>
+      <button class="btn btn-ghost btn-sm" onclick="document.getElementById('cat-page-add-form').innerHTML=''">Cancel</button>
+    </div>
+  </div>`;
+}
+
+function addCustomCatFromPage(){
+  const name  = (document.getElementById('ccat-name')?.value||'').trim();
+  const emoji = document.getElementById('ccat-emoji')?.value || '🏷️';
+  const color = document.getElementById('ccat-color')?.value || '#6B8F71';
+  if(!name){ showToast('Please enter a category name.'); return; }
+  if(allCats()[name]){ showToast('Category already exists.'); return; }
+  customCats.push({name, emoji, color, bg:color+'22'});
+  persist();
+  renderCategoriesPage();
+  showToast(emoji + ' ' + name + ' added!');
+}
+
+
+// ══════════════════════════════════════════════════════════════════════════
+// SEARCH + PAGINATION helpers
+// ══════════════════════════════════════════════════════════════════════════
+const PAGE_SIZE = 15;
+const _txSearch = {};   // contextId → search string
+const _txPage   = {};   // contextId → current page (0-indexed)
+
+function filterTxBySearch(items, q){
+  if(!q) return items;
+  const s = q.toLowerCase();
+  return items.filter(e =>
+    (e.desc||'').toLowerCase().includes(s) ||
+    (e.cat||'').toLowerCase().includes(s)  ||
+    String(e.amount||'').includes(s)
+  );
+}
+
+function buildTxSearchBar(contextId, placeholder){
+  const q = _txSearch[contextId] || '';
+  return `<div style="position:relative;margin-bottom:10px">
+    <input class="input" id="tx-search-${contextId}" value="${q.replace(/"/g,'&quot;')}"
+      placeholder="🔍 ${placeholder||'Search transactions...'}"
+      oninput="_txSearch['${contextId}']=this.value;_txPage['${contextId}']=0;refreshTxList('${contextId}')"
+      style="padding-left:12px;margin-bottom:0">
+    ${q?`<button onclick="_txSearch['${contextId}']='';\document.getElementById('tx-search-${contextId}').value='';_txPage['${contextId}']=0;refreshTxList('${contextId}')"
+      style="position:absolute;right:10px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;font-size:16px;color:var(--text3)">×</button>`:''}
+  </div>`;
+}
+
+function buildPagination(contextId, total, currentPage){
+  const pages = Math.ceil(total / PAGE_SIZE);
+  if(pages <= 1) return '';
+  const buttons = [];
+  for(let i=0;i<pages;i++){
+    const active = i === currentPage;
+    buttons.push(`<button onclick="_txPage['${contextId}']=${i};refreshTxList('${contextId}')"
+      style="min-width:30px;height:30px;border:1.5px solid ${active?'var(--sage)':'var(--warm3)'};
+        border-radius:8px;background:${active?'var(--sage)':'var(--warm)'};
+        color:${active?'white':'var(--text2)'};font-size:12px;font-weight:${active?'600':'400'};
+        cursor:pointer;font-family:'DM Sans',sans-serif;padding:0 4px">${i+1}</button>`);
+  }
+  const from = currentPage*PAGE_SIZE+1, to = Math.min((currentPage+1)*PAGE_SIZE, total);
+  return `<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-top:10px;padding-top:10px;border-top:1px solid var(--warm2)">
+    <span style="font-size:11px;color:var(--text3);flex:1">${from}–${to} of ${total}</span>
+    ${buttons.join('')}
+  </div>`;
+}
+
+// refreshTxList dispatches to the right renderer based on contextId prefix
+function refreshTxList(contextId){
+  if(contextId === 'personal'){
+    renderPersonal();
+  } else if(contextId.startsWith('sl_')){
+    const listId = parseInt(contextId.slice(3));
+    openSharedListDetail(listId);
+  } else if(contextId.startsWith('grp_')){
+    const gid = parseInt(contextId.slice(4));
+    renderGroupDetail(gid);
+  }
+}
+
 function showToast(msg){
   const t=document.createElement('div');
   t.style.cssText='position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#3D5C42;color:white;padding:10px 20px;border-radius:10px;font-size:13px;z-index:9999;box-shadow:0 4px 16px rgba(0,0,0,.2);transition:opacity .4s';
@@ -6202,9 +6468,36 @@ function renderGroupDetail(gid){
             </div>`).join('')}
         </div>`:''}
 
-      <!-- Expenses list -->
+      <!-- Expenses with search + pagination -->
       <div class="card-title" style="margin-bottom:8px">Expenses <span style="font-size:11px;font-weight:400;color:var(--text3)">(${grpSplits.length})</span></div>
-      ${splitsHtml}
+      ${(()=>{
+        const ctx='grp_'+gid;
+        const gq=(_txSearch[ctx]||'').toLowerCase();
+        const gfilt=gq?grpSplits.filter(s=>(s.desc||'').toLowerCase().includes(gq)||(s.cat||'').toLowerCase().includes(gq)||String(s.totalAmount).includes(gq)):grpSplits;
+        const gp=_txPage[ctx]||0;
+        // rebuild splitsHtml for current page only
+        const gpage=gfilt.slice(gp*PAGE_SIZE,(gp+1)*PAGE_SIZE);
+        const pagedHtml=gpage.length===0?'<div class="empty" style="padding:12px 0">No results.</div>':gpage.map(sp=>{
+          const allPaid=sp.members.every(m=>m.paid);
+          const paidCount=sp.members.filter(m=>m.paid).length;
+          const expandedKey='exp_'+sp.id;
+          const isOpen=!!(window._expandedSplits&&window._expandedSplits[expandedKey]);
+          return `<div id="grp-split-row-${sp.id}" style="border:1px solid ${allPaid?'var(--sage-mid)':'var(--warm2)'};border-radius:var(--r2);margin-bottom:8px;overflow:hidden;background:${allPaid?'rgba(168,196,172,.08)':'var(--card)'}">
+            <div style="display:flex;align-items:center;gap:10px;padding:12px 14px;cursor:pointer;user-select:none" onclick="toggleExpense('${expandedKey}','exp-body-${sp.id}')">
+              <span style="font-size:16px">${allPaid?'✅':'💸'}</span>
+              <div style="flex:1;min-width:0"><div style="font-size:14px;font-weight:500;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${sp.desc}</div><div style="font-size:11px;color:var(--text3)">₹${fmt(sp.totalAmount)} · ${mName(sp.paidBy)} paid · ${paidCount}/${sp.members.length} paid</div></div>
+              <span style="font-size:11px;color:var(--text3);margin-right:4px">${isOpen?'▲':'▼'}</span>
+              <button onclick="event.stopPropagation();editGroupSplitRow(${sp.id},${gid})" style="background:none;border:none;cursor:pointer;font-size:13px;padding:2px 4px;opacity:.6">✏️</button>
+              <button class="del" onclick="event.stopPropagation();deleteSplit(${sp.id})">×</button>
+            </div>
+            <div id="exp-body-${sp.id}" style="display:${isOpen?'block':'none'};padding:0 14px 12px">
+              <div style="font-size:11px;color:var(--text3);margin-bottom:8px">${sp.splitType==='percent'?'Percentage split':'Equal split'} · ${sp.date}</div>
+              ${sp.members.map(m=>`<div class="split-row"><div class="friend-avatar" style="width:28px;height:28px;font-size:11px">${mName(m.friendId)[0]}</div><span style="flex:1;font-size:13px">${mName(m.friendId)}</span><span class="split-amount">₹${fmt(m.share)}</span><button class="split-paid-btn ${m.paid?'paid':'unpaid'}" onclick="toggleSplitPaid(${sp.id},'${m.friendId}')">${m.paid?'✓ Paid':'Mark Paid'}</button></div>`).join('')}
+            </div>
+          </div>`;
+        }).join('');
+        return buildTxSearchBar(ctx,'Search expenses...')+pagedHtml+buildPagination(ctx,gfilt.length,gp);
+      })()}
 
       <!-- Actions -->
       <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">
