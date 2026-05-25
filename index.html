@@ -1161,6 +1161,33 @@ onAuthStateChanged(auth, async (user) => {
   .spend-chart-title{font-size:13px;font-weight:600;color:var(--text2);margin-bottom:12px;
     display:flex;align-items:center;gap:8px;}
   .spend-chart-canvas{max-height:220px;}
+
+  /* ── HABITS ENHANCED ── */
+  .habit-freq-tabs{display:flex;gap:4px;margin-bottom:12px;}
+  .habit-freq-tab{padding:5px 14px;border-radius:12px;font-size:12px;font-weight:500;
+    border:1.5px solid var(--warm3);background:var(--warm2);color:var(--text2);
+    cursor:pointer;transition:all .15s;}
+  .habit-freq-tab.active{background:var(--sage);color:white;border-color:var(--sage);}
+  .habit-week-days{display:flex;gap:5px;margin-bottom:8px;}
+  .habit-week-day{width:34px;height:34px;border-radius:50%;font-size:11px;font-weight:600;
+    border:1.5px solid var(--warm3);background:var(--warm2);color:var(--text2);
+    cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all .15s;}
+  .habit-week-day.sel{background:var(--sage);color:white;border-color:var(--sage);}
+  .habit-drag-handle{cursor:grab;color:var(--text3);font-size:16px;padding:0 4px;
+    user-select:none;touch-action:none;}
+  .habit-drag-handle:active{cursor:grabbing;}
+  .habit-row-dragging{opacity:.4;background:var(--sage-light) !important;}
+  .habit-row-drag-over{border-top:2px solid var(--sage) !important;}
+  /* Motivational popup */
+  .habit-popup{position:fixed;top:50%;left:50%;transform:translate(-50%,-60%) scale(.8);
+    background:var(--sage-dark);color:white;border-radius:20px;padding:20px 24px;
+    text-align:center;z-index:500;pointer-events:none;opacity:0;
+    transition:all .3s cubic-bezier(.34,1.56,.64,1);max-width:280px;width:90%;
+    box-shadow:0 20px 60px rgba(0,0,0,.3);}
+  .habit-popup.show{opacity:1;transform:translate(-50%,-50%) scale(1);}
+  .habit-popup-emoji{font-size:40px;margin-bottom:8px;}
+  .habit-popup-msg{font-size:16px;font-weight:600;line-height:1.4;}
+  .habit-popup-sub{font-size:12px;opacity:.8;margin-top:6px;}
 </style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 </head>
@@ -1272,6 +1299,7 @@ onAuthStateChanged(auth, async (user) => {
       <!-- HOME -->
       <div class="page active" id="page-home">
         <div class="grid-3" id="home-stats"></div>
+        <div id="home-quote" style="font-size:13px;line-height:1.5;margin-bottom:12px;padding:10px 14px;background:var(--warm);border-radius:var(--r2);border-left:3px solid var(--sage-mid)"></div>
         <div class="grid-2">
           <div>
             <div class="card" id="home-habits-card"></div>
@@ -1289,6 +1317,7 @@ onAuthStateChanged(auth, async (user) => {
         <div class="section-head"><div class="section-title">Daily Disciplines</div></div>
         <div class="card">
           <div class="card-title">Track your habits</div>
+          <div id="habits-freq-tabs" class="habit-freq-tabs"></div>
           <div id="habits-list"></div>
           <div id="habits-form"></div>
         </div>
@@ -1909,6 +1938,35 @@ function renderAll(){renderPage(currentPage);}
 function renderHome(){
   const today=todayKey();
   const doneH=habits.filter(h=>h.history.includes(today)).length;
+  // Daily motivational quote
+  const MQUOTES=[
+    {q:"The secret of getting ahead is getting started.",a:"Mark Twain"},
+    {q:"It does not matter how slowly you go as long as you do not stop.",a:"Confucius"},
+    {q:"Believe you can and you're halfway there.",a:"Theodore Roosevelt"},
+    {q:"The only way to do great work is to love what you do.",a:"Steve Jobs"},
+    {q:"Success is not final, failure is not fatal: courage to continue is what counts.",a:"Winston Churchill"},
+    {q:"Discipline is the bridge between goals and accomplishment.",a:"Jim Rohn"},
+    {q:"You don't have to be great to start, but you have to start to be great.",a:"Zig Ziglar"},
+    {q:"Small daily improvements over time lead to stunning results.",a:"Robin Sharma"},
+    {q:"We are what we repeatedly do. Excellence is a habit.",a:"Aristotle"},
+    {q:"Opportunities don't happen. You create them.",a:"Chris Grosser"},
+    {q:"The mind is everything. What you think you become.",a:"Buddha"},
+    {q:"In the middle of difficulty lies opportunity.",a:"Albert Einstein"},
+    {q:"Fall seven times, stand up eight.",a:"Japanese Proverb"},
+    {q:"Your future is created by what you do today, not tomorrow.",a:"Robert Kiyosaki"},
+    {q:"It always seems impossible until it's done.",a:"Nelson Mandela"},
+    {q:"Don't count the days, make the days count.",a:"Muhammad Ali"},
+    {q:"The secret of your future is hidden in your daily routine.",a:"Mike Murdock"},
+    {q:"Either you run the day or the day runs you.",a:"Jim Rohn"},
+    {q:"An investment in knowledge pays the best interest.",a:"Benjamin Franklin"},
+    {q:"Energy and persistence conquer all things.",a:"Benjamin Franklin"},
+  ];
+  const qEl=document.getElementById('home-quote');
+  if(qEl){
+    const qi=new Date().getDate()%MQUOTES.length;
+    const mq=MQUOTES[qi];
+    qEl.innerHTML=`<span style="font-style:italic;color:var(--text2)">"${mq.q}"</span><span style="font-size:11px;color:var(--text3);font-weight:500;margin-left:6px">— ${mq.a}</span>`;
+  }
   const pend=todos.filter(t=>!t.done).length;
   const daySpend=spends.filter(s=>s.date===today).reduce((a,b)=>a+b.amount,0);
   const monthSpend=spends.reduce((a,b)=>a+b.amount,0);
@@ -1944,10 +2002,12 @@ function renderHome(){
 // ─────────────────────────────────────────────
 // HABITS
 // ─────────────────────────────────────────────
-let showHabitForm = false;
-let habitSuggestions = [];       // [{name, emoji, why}]
-let suggestionsLoaded = false;
-let suggestionsLoading = false;
+let showHabitForm   = false;
+let habitFreqFilter = 'all';   // 'all' | 'daily' | 'weekly'
+let habitSuggestions    = [];
+let suggestionsLoaded   = false;
+let suggestionsLoading  = false;
+let _dragSrcHabitId = null;
 
 function renderHabits() {
   const today = todayKey();
@@ -1956,22 +2016,63 @@ function renderHabits() {
     return `${d.getFullYear()}-${d.getMonth()+1}-${d.getDate()}`;
   });
 
-  document.getElementById('habits-list').innerHTML = habits.length === 0
-    ? '<div class="empty"><div class="empty-icon">🔁</div>No habits yet. Start one!</div>'
-    : habits.map(h => {
-        const done = h.history.includes(today);
-        const rem  = getItemReminder('habit_'+h.id);
-        return `<div style="padding:12px 0;border-bottom:1px solid var(--warm2)" id="habit-row-${h.id}">
-          <div style="display:flex;align-items:center;gap:10px">
+  // Frequency filter tabs
+  const allDailyCount   = habits.filter(h=>(h.freq||'daily')==='daily').length;
+  const allWeeklyCount  = habits.filter(h=>h.freq==='weekly').length;
+  document.getElementById('habits-freq-tabs').innerHTML = `
+    <button class="habit-freq-tab ${habitFreqFilter==='all'?'active':''}" onclick="habitFreqFilter='all';renderHabits()">All (${habits.length})</button>
+    <button class="habit-freq-tab ${habitFreqFilter==='daily'?'active':''}" onclick="habitFreqFilter='daily';renderHabits()">Daily (${allDailyCount})</button>
+    <button class="habit-freq-tab ${habitFreqFilter==='weekly'?'active':''}" onclick="habitFreqFilter='weekly';renderHabits()">Weekly (${allWeeklyCount})</button>
+  `;
+
+  const filtered = habitFreqFilter==='all' ? habits
+    : habits.filter(h=>(habitFreqFilter==='daily'?(h.freq||'daily')==='daily':h.freq==='weekly'));
+
+  document.getElementById('habits-list').innerHTML = filtered.length === 0
+    ? `<div class="empty"><div class="empty-icon">🔁</div>${habits.length===0?'No habits yet. Start one!':'No '+habitFreqFilter+' habits.'}</div>`
+    : filtered.map(h => {
+        const done   = h.history.includes(today);
+        const rem    = getItemReminder('habit_'+h.id);
+        const isWeekly = h.freq === 'weekly';
+        const weekDays = h.weekDays || [1,2,3,4,5];
+        const DAYS_SHORT = ['Su','Mo','Tu','We','Th','Fr','Sa'];
+
+        // For weekly: compute current week streak
+        let weekDotHtml = '';
+        if(isWeekly){
+          // Show this week's target days
+          weekDotHtml = `<div style="display:flex;gap:4px;margin-top:8px;flex-wrap:wrap">
+            ${weekDays.map(di=>{
+              // Find the most recent occurrence of this day in last 14 days
+              const recent = last7.find(dk=>{const d2=new Date(dk.split('-')[0],dk.split('-')[1]-1,dk.split('-')[2]);return d2.getDay()===di;});
+              const done2  = recent && h.history.includes(recent);
+              return `<div style="padding:2px 8px;border-radius:8px;font-size:10px;font-weight:600;background:${done2?'var(--sage)':'var(--warm3)'};color:${done2?'white':'var(--text3)'}">${DAYS_SHORT[di]}</div>`;
+            }).join('')}
+          </div>`;
+        } else {
+          weekDotHtml = `<div class="habit-dots">${last7.map(d=>`<div class="habit-dot ${h.history.includes(d)?'on':''}"></div>`).join('')}</div>`;
+        }
+
+        return `<div style="padding:12px 0;border-bottom:1px solid var(--warm2)" id="habit-row-${h.id}"
+          draggable="true"
+          ondragstart="_dragSrcHabitId=${h.id}"
+          ondragover="event.preventDefault();document.getElementById('habit-row-${h.id}').classList.add('habit-row-drag-over')"
+          ondragleave="document.getElementById('habit-row-${h.id}').classList.remove('habit-row-drag-over')"
+          ondrop="dropHabitOnRow(${h.id})">
+          <div style="display:flex;align-items:center;gap:8px">
+            <span class="habit-drag-handle" title="Drag to reorder">⠿</span>
             <div class="check ${done?'done':''}" onclick="toggleHabit(${h.id})"></div>
             <span style="font-size:18px">${h.emoji}</span>
-            <span class="row-text ${done?'done':''}" style="font-size:14px;flex:1">${h.name}</span>
-            <span class="streak">🔥 ${h.streak}</span>
-            ${rem?`<span title="${rem.label}" style="font-size:13px;cursor:pointer;opacity:.7" onclick="openHabitEdit(${h.id})">⏰</span>`:''}
-            <button class="btn btn-ghost btn-sm" onclick="openHabitEdit(${h.id})" style="font-size:12px;padding:3px 8px">✏️</button>
+            <div style="flex:1;min-width:0">
+              <span class="row-text ${done?'done':''}" style="font-size:14px">${h.name}</span>
+              ${isWeekly?`<span style="font-size:10px;color:var(--sage);background:var(--sage-light);padding:1px 6px;border-radius:5px;margin-left:6px">Weekly</span>`:''}
+            </div>
+            <span class="streak" style="white-space:nowrap">🔥 ${isWeekly?h.weekStreak||0:h.streak}</span>
+            ${rem?`<span title="${rem.label}" style="font-size:12px;cursor:pointer;opacity:.6" onclick="openHabitEditModal(${h.id})">⏰</span>`:''}
+            <button class="btn btn-ghost btn-sm" onclick="openHabitEditModal(${h.id})" style="font-size:12px;padding:3px 8px">✏️</button>
             <button class="del" onclick="deleteHabit(${h.id})">×</button>
           </div>
-          <div class="habit-dots">${last7.map(d=>`<div class="habit-dot ${h.history.includes(d)?'on':''}"></div>`).join('')}</div>
+          ${weekDotHtml}
         </div>`;
       }).join('');
 
@@ -2119,9 +2220,18 @@ Return ONLY a JSON array, no markdown, no explanation, like:
 function toggleHabit(id) {
   const h = habits.find(x=>x.id===id); if(!h) return;
   const today = todayKey();
-  if (h.history.includes(today)) { h.history=h.history.filter(d=>d!==today); h.streak=Math.max(0,h.streak-1); }
-  else { h.history.push(today); h.streak++; }
-  persist(); renderAll();
+  const wasMarked = h.history.includes(today);
+  if(wasMarked){
+    h.history = h.history.filter(d=>d!==today);
+    if(h.freq==='weekly') h.weekStreak=Math.max(0,(h.weekStreak||0)-1);
+    else h.streak=Math.max(0,h.streak-1);
+  } else {
+    h.history.push(today);
+    if(h.freq==='weekly') h.weekStreak=(h.weekStreak||0)+1;
+    else h.streak++;
+    showHabitPopup(true);
+  }
+  persist(); renderHabits();
 }
 function addHabit() {
   const name  = document.getElementById('habit-name-in').value.trim();
@@ -2145,22 +2255,7 @@ function addHabit() {
 }
 function deleteHabit(id) { habits=habits.filter(h=>h.id!==id); persist(); renderAll(); }
 
-function openHabitEdit(id){
-  const h = habits.find(x=>x.id===id); if(!h) return;
-  const row = document.getElementById('habit-row-'+id); if(!row) return;
-  const rem = getItemReminder('habit_'+id);
-  row.innerHTML += `<div class="form-box" id="habit-edit-form-${id}" style="margin-top:10px">
-    <div class="input-row" style="margin-bottom:8px">
-      <input class="input" id="hef-emoji-${id}" value="${h.emoji}" style="width:64px;text-align:center;flex-shrink:0">
-      <input class="input" id="hef-name-${id}" value="${h.name}" placeholder="Habit name...">
-    </div>
-    ${buildItemReminderHTML('habit_'+id, rem)}
-    <div style="display:flex;gap:8px;margin-top:8px">
-      <button class="btn btn-primary btn-sm" onclick="saveHabitEdit(${id})">Save</button>
-      <button class="btn btn-ghost btn-sm" onclick="renderHabits()">Cancel</button>
-    </div>
-  </div>`;
-}
+function openHabitEdit(id){ openHabitEditModal(id); }
 
 function saveHabitEdit(id){
   const h = habits.find(x=>x.id===id); if(!h) return;
@@ -6146,6 +6241,138 @@ function _renderGrpTxOnly(gid){
   const searchEl = document.getElementById('tx-search-'+ctx);
   if(searchEl && document.activeElement !== searchEl) searchEl.focus();
 }
+
+// ── Motivational messages shown after toggling a habit ────────────────────
+const HABIT_MOTIVATIONS = [
+  {emoji:'🔥', msg:'Streak alive!', sub:'You showed up. That\'s everything.'},
+  {emoji:'💪', msg:'Unstoppable!', sub:'One more rep in the game of life.'},
+  {emoji:'🌱', msg:'Growing daily', sub:'Small steps compound into greatness.'},
+  {emoji:'⚡', msg:'Momentum!', sub:'Energy creates energy. Keep going.'},
+  {emoji:'🏆', msg:'Champion move', sub:'Winners do what losers won\'t.'},
+  {emoji:'✨', msg:'You did it!', sub:'Consistency is the magic ingredient.'},
+  {emoji:'🎯', msg:'On target!', sub:'Every check-in rewires your brain.'},
+  {emoji:'🌟', msg:'Brilliant!', sub:'Your future self is cheering you on.'},
+  {emoji:'🚀', msg:'Blast off!', sub:'Habits are the compound interest of self-improvement.'},
+  {emoji:'🌊', msg:'Flow state', sub:'Discipline is freedom — Marcus Aurelius'},
+  {emoji:'🦋', msg:'Transforming', sub:'You are what you repeatedly do.'},
+  {emoji:'💎', msg:'Diamond mind', sub:'Pressure creates diamonds. Keep pushing.'},
+];
+
+function showHabitPopup(isMarking){
+  if(!isMarking) return; // only show when marking done, not unmarking
+  const m = HABIT_MOTIVATIONS[Math.floor(Math.random()*HABIT_MOTIVATIONS.length)];
+  let popup = document.getElementById('habit-motivation-popup');
+  if(!popup){
+    popup = document.createElement('div');
+    popup.id = 'habit-motivation-popup';
+    popup.className = 'habit-popup';
+    document.body.appendChild(popup);
+  }
+  popup.innerHTML = `<div class="habit-popup-emoji">${m.emoji}</div>
+    <div class="habit-popup-msg">${m.msg}</div>
+    <div class="habit-popup-sub">${m.sub}</div>`;
+  popup.classList.add('show');
+  setTimeout(()=>popup.classList.remove('show'), 1800);
+}
+
+// ── Drag and drop ──────────────────────────────────────────────────────────
+function dropHabitOnRow(targetId){
+  document.querySelectorAll('[id^="habit-row-"]').forEach(r=>r.classList.remove('habit-row-drag-over','habit-row-dragging'));
+  if(_dragSrcHabitId === null || _dragSrcHabitId === targetId) return;
+  const srcIdx = habits.findIndex(h=>h.id===_dragSrcHabitId);
+  const tgtIdx = habits.findIndex(h=>h.id===targetId);
+  if(srcIdx<0||tgtIdx<0) return;
+  const [moved] = habits.splice(srcIdx,1);
+  habits.splice(tgtIdx,0,moved);
+  _dragSrcHabitId = null;
+  persist(); renderHabits();
+}
+
+// ── openHabitEditModal — full modal with icon picker ──────────────────────
+function openHabitEditModal(id){
+  const h = habits.find(x=>x.id===id); if(!h) return;
+  const rem  = getItemReminder('habit_'+id);
+  const isWeekly  = h.freq === 'weekly';
+  const weekDays  = h.weekDays || [1,2,3,4,5];
+  const DAYS_SHORT = ['Su','Mo','Tu','We','Th','Fr','Sa'];
+  document.getElementById('habit-edit-modal')?.remove();
+  const modal = document.createElement('div');
+  modal.className='modal-overlay'; modal.id='habit-edit-modal';
+  modal.innerHTML=`<div class="modal" style="max-width:420px">
+    <button class="modal-close" onclick="document.getElementById('habit-edit-modal').remove()">x</button>
+    <div class="modal-title">Edit Habit</div>
+
+    <!-- Icon picker -->
+    <div style="font-size:11px;color:var(--text3);margin-bottom:6px;font-weight:600">Icon</div>
+    <div style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:10px">
+      ${CAT_ICON_PRESETS.map(ic=>`<button onclick="selectHabitIcon('${ic}',this)"
+        style="width:34px;height:34px;font-size:18px;border:2px solid ${h.emoji===ic?'var(--sage)':'var(--warm3)'};border-radius:8px;background:${h.emoji===ic?'var(--sage-light)':'var(--warm)'};cursor:pointer"
+        class="habit-icon-btn">${ic}</button>`).join('')}
+    </div>
+    <input type="hidden" id="hem-emoji-${id}" value="${h.emoji}">
+
+    <!-- Name -->
+    <input class="input" id="hem-name-${id}" value="${h.name}" placeholder="Habit name..." style="margin-bottom:10px">
+
+    <!-- Frequency -->
+    <div style="font-size:11px;color:var(--text3);margin-bottom:6px;font-weight:600">Frequency</div>
+    <div style="display:flex;gap:6px;margin-bottom:10px">
+      <button id="hem-freq-daily-${id}" class="habit-freq-tab ${!isWeekly?'active':''}"
+        onclick="hemSetFreq('${id}','daily')">Daily</button>
+      <button id="hem-freq-weekly-${id}" class="habit-freq-tab ${isWeekly?'active':''}"
+        onclick="hemSetFreq('${id}','weekly')">Weekly</button>
+    </div>
+    <div id="hem-weekdays-${id}" style="display:${isWeekly?'flex':'none'};gap:5px;flex-wrap:wrap;margin-bottom:10px">
+      ${DAYS_SHORT.map((d,i)=>`<button class="habit-week-day ${weekDays.includes(i)?'sel':''}"
+        data-day="${i}" onclick="this.classList.toggle('sel')" id="hem-day-${id}-${i}">${d}</button>`).join('')}
+    </div>
+
+    <!-- Reminder -->
+    ${buildItemReminderHTML('habit_'+id, rem)}
+
+    <div style="display:flex;gap:8px;margin-top:12px">
+      <button class="btn btn-primary" style="flex:1" onclick="saveHabitEditModal(${id})">Save</button>
+      <button class="btn btn-ghost" onclick="document.getElementById('habit-edit-modal').remove()">Cancel</button>
+    </div>
+  </div>`;
+  document.body.appendChild(modal);
+}
+
+function selectHabitIcon(icon, btn){
+  document.querySelectorAll('.habit-icon-btn').forEach(b=>{
+    b.style.borderColor='var(--warm3)'; b.style.background='var(--warm)';
+  });
+  if(btn){ btn.style.borderColor='var(--sage)'; btn.style.background='var(--sage-light)'; }
+  // Find the hidden input — it's in the same modal
+  const modal = btn?.closest('.modal');
+  const inp = modal?.querySelector('[id^="hem-emoji-"]');
+  if(inp) inp.value = icon;
+}
+
+function hemSetFreq(id, freq){
+  document.getElementById('hem-freq-daily-'+id)?.classList.toggle('active', freq==='daily');
+  document.getElementById('hem-freq-weekly-'+id)?.classList.toggle('active', freq==='weekly');
+  const wd = document.getElementById('hem-weekdays-'+id);
+  if(wd) wd.style.display = freq==='weekly'?'flex':'none';
+}
+
+function saveHabitEditModal(id){
+  const h    = habits.find(x=>x.id===id); if(!h) return;
+  const name = document.getElementById('hem-name-'+id)?.value.trim();
+  const emoji= document.getElementById('hem-emoji-'+id)?.value.trim() || h.emoji;
+  if(!name){ showToast('Please enter a habit name.'); return; }
+  const freqDaily  = document.getElementById('hem-freq-daily-'+id)?.classList.contains('active');
+  const freq       = freqDaily ? 'daily' : 'weekly';
+  const selDays    = [...document.querySelectorAll(`#hem-weekdays-${id} .habit-week-day.sel`)].map(b=>parseInt(b.dataset.day));
+  h.name=name; h.emoji=emoji; h.freq=freq;
+  if(freq==='weekly') h.weekDays = selDays.length>0?selDays:[1,2,3,4,5];
+  persist();
+  applyItemReminder('habit_'+id, name);
+  document.getElementById('habit-edit-modal')?.remove();
+  renderHabits();
+  showToast('Habit updated!');
+}
+
 function showToast(msg){
   const t=document.createElement('div');
   t.style.cssText='position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#3D5C42;color:white;padding:10px 20px;border-radius:10px;font-size:13px;z-index:9999;box-shadow:0 4px 16px rgba(0,0,0,.2);transition:opacity .4s';
@@ -8407,5 +8634,6 @@ async function sendFriendRequest(){
 }
 </script>
 
+<div class="habit-popup" id="habit-motivation-popup"></div>
 </body>
 </html>
