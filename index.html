@@ -1275,6 +1275,112 @@ onAuthStateChanged(auth, async (user) => {
   /* Add form */
   .vb-add-form{background:var(--warm);border:1.5px solid var(--warm3);
     border-radius:var(--r);padding:14px;margin-bottom:10px;}
+
+  /* ══ DRAGGABLE DASHBOARD ══ */
+  .dash-grid{
+    display:grid;
+    grid-template-columns:repeat(2,1fr);
+    gap:12px;
+    position:relative;
+  }
+  @media(min-width:700px){.dash-grid{grid-template-columns:repeat(3,1fr);}}
+  @media(min-width:1000px){.dash-grid{grid-template-columns:repeat(4,1fr);}}
+
+  .dash-widget{
+    background:var(--card);border:1px solid var(--warm2);
+    border-radius:var(--r);padding:0;
+    cursor:default;
+    transition:box-shadow .2s, transform .2s;
+    position:relative;
+    min-height:120px;
+  }
+  .dash-widget.dragging{
+    opacity:.5;transform:scale(.97);
+    box-shadow:0 8px 32px rgba(0,0,0,.18);
+    z-index:100;
+  }
+  .dash-widget.drag-over{
+    outline:2px dashed var(--sage);
+    outline-offset:2px;
+    background:var(--sage-light);
+  }
+  .dash-widget-handle{
+    display:flex;align-items:center;justify-content:space-between;
+    padding:9px 12px 4px;
+    cursor:grab;
+    user-select:none;
+    touch-action:none;
+    border-bottom:1px solid var(--warm2);
+  }
+  .dash-widget-handle:active{cursor:grabbing;}
+  .dash-widget-label{font-size:10px;font-weight:600;color:var(--text3);
+    text-transform:uppercase;letter-spacing:.07em;}
+  .dash-widget-drag-icon{font-size:14px;color:var(--warm3);}
+  .dash-widget-body{padding:10px 12px 12px;}
+
+  /* Vision board span options */
+  .dash-widget-full{grid-column:1/-1;}
+  .dash-widget-half{grid-column:span 1;}
+  @media(min-width:700px){
+    .dash-widget-2{grid-column:span 2;}
+  }
+
+  /* Vision board resize handle */
+  .vb-resize-bar{
+    display:flex;align-items:center;justify-content:center;
+    padding:4px;cursor:ns-resize;color:var(--warm3);font-size:14px;
+    background:var(--warm);border-top:1px solid var(--warm2);
+    border-radius:0 0 var(--r) var(--r);user-select:none;
+  }
+  .vb-resize-bar:hover{color:var(--sage);background:var(--warm2);}
+  .vb-size-toggle{display:flex;gap:5px;margin-top:8px;}
+  .vb-size-btn2{padding:3px 10px;border-radius:8px;font-size:11px;border:1.5px solid var(--warm3);
+    background:var(--warm2);cursor:pointer;color:var(--text2);transition:all .15s;}
+  .vb-size-btn2.active{background:var(--sage);color:white;border-color:var(--sage);}
+
+  /* ══ VB CARD STYLE VARIANTS ══ */
+  /* Sticky note */
+  .vb-card.style-sticky{
+    background:linear-gradient(145deg,#FFFDE7,#FFF9C4);
+    box-shadow:3px 3px 8px rgba(0,0,0,.15),0 1px 2px rgba(0,0,0,.08);
+    border-radius:2px 12px 12px 2px;
+    border-left:5px solid var(--vb-accent,#F9A825);
+  }
+  .vb-card.style-sticky::before{display:none;}
+  /* Pinned note */
+  .vb-card.style-pinned{
+    background:linear-gradient(160deg,#FAFAFA 0%,#F5F0E8 100%);
+    box-shadow:2px 4px 14px rgba(0,0,0,.12),0 1px 3px rgba(0,0,0,.06);
+    border-radius:3px;
+    border:none;
+    padding-top:22px;
+  }
+  .vb-card.style-pinned::before{display:none;}
+  .vb-card.style-pinned::after{
+    content:'';position:absolute;top:-8px;left:50%;transform:translateX(-50%);
+    width:18px;height:18px;border-radius:50%;
+    background:radial-gradient(circle at 35% 35%, #FF6B6B, #C0392B);
+    box-shadow:0 2px 6px rgba(192,57,43,.5);
+    z-index:2;
+  }
+  /* Card style (default) — already styled */
+  .vb-card.style-card{/* default styles apply */}
+  /* Fancy: tape effect */
+  .vb-card.style-tape{
+    background:white;border-radius:2px;border:none;
+    box-shadow:2px 3px 10px rgba(0,0,0,.12);
+  }
+  .vb-card.style-tape::before{
+    content:'';position:absolute;top:-10px;left:50%;transform:translateX(-50%);
+    width:50px;height:20px;background:rgba(180,220,255,.7);
+    z-index:2;border-radius:2px;
+  }
+  /* Style picker chips */
+  .vb-style-chips{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;}
+  .vb-style-chip{padding:5px 10px;border-radius:10px;border:1.5px solid var(--warm3);
+    background:var(--warm2);cursor:pointer;font-size:12px;transition:all .15s;white-space:nowrap;}
+  .vb-style-chip.sel{border-color:var(--sage);background:var(--sage-light);}
+
 </style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 </head>
@@ -1386,28 +1492,72 @@ onAuthStateChanged(auth, async (user) => {
 
       <!-- HOME -->
       <div class="page active" id="page-home">
-        <div class="grid-3" id="home-stats"></div>
-        <!-- Vision Board -->
-        <div class="vision-board-section" id="vision-board-section">
-          <div class="vision-board-header">
-            <div>
-              <div class="vision-board-title">✨ My Vision Board</div>
-              <div class="vision-board-subtitle">Visualise your dreams — tap cards to edit</div>
+        <!-- Stats row — always top -->
+        <div class="grid-3" id="home-stats" style="margin-bottom:14px"></div>
+
+        <!-- Draggable widget grid -->
+        <div class="dash-grid" id="dash-grid">
+
+          <!-- Vision Board widget — spans full width -->
+          <div class="dash-widget dash-widget-full" id="dw-vision" data-widget="vision">
+            <div class="dash-widget-handle" onmousedown="dashDragStart(event,'dw-vision')" ontouchstart="dashDragStart(event,'dw-vision')">
+              <span class="dash-widget-label">✨ Vision Board</span>
+              <div style="display:flex;align-items:center;gap:6px">
+                <button class="btn btn-primary btn-sm" onclick="event.stopPropagation();openVBAddForm()" style="font-size:11px;padding:3px 10px">+ Add</button>
+                <span class="dash-widget-drag-icon">⠿</span>
+              </div>
             </div>
-            <button class="btn btn-primary btn-sm" onclick="openVBAddForm()">+ Add</button>
+            <div class="dash-widget-body" style="padding:10px">
+              <div id="vb-add-form-wrap"></div>
+              <div class="vision-board" id="vision-board" style="min-height:var(--vb-min-h,120px);resize:vertical;overflow:auto"></div>
+              <div class="vb-resize-bar" title="Drag to resize">
+                ⠿ resize
+              </div>
+              <div class="vb-size-toggle">
+                <button class="vb-size-btn2 active" id="vbsz-compact" onclick="setVBSize('compact')">Compact</button>
+                <button class="vb-size-btn2" id="vbsz-medium"  onclick="setVBSize('medium')">Medium</button>
+                <button class="vb-size-btn2" id="vbsz-tall"    onclick="setVBSize('tall')">Tall</button>
+                <button class="vb-size-btn2" id="vbsz-full"    onclick="setVBSize('full')">Full</button>
+              </div>
+            </div>
           </div>
-          <div id="vb-add-form-wrap"></div>
-          <div class="vision-board" id="vision-board"></div>
-        </div>
-        <div class="grid-2">
-          <div>
-            <div class="card" id="home-habits-card"></div>
-            <div class="card" id="home-todos-card"></div>
+
+          <!-- Habits widget -->
+          <div class="dash-widget" id="dw-habits" data-widget="habits">
+            <div class="dash-widget-handle" onmousedown="dashDragStart(event,'dw-habits')" ontouchstart="dashDragStart(event,'dw-habits')">
+              <span class="dash-widget-label">🔁 Habits</span>
+              <span class="dash-widget-drag-icon">⠿</span>
+            </div>
+            <div class="dash-widget-body" id="home-habits-card"></div>
           </div>
-          <div>
-            <div class="card" id="home-goals-card"></div>
-            <div class="card" id="home-spend-card"></div>
+
+          <!-- Todos widget -->
+          <div class="dash-widget" id="dw-todos" data-widget="todos">
+            <div class="dash-widget-handle" onmousedown="dashDragStart(event,'dw-todos')" ontouchstart="dashDragStart(event,'dw-todos')">
+              <span class="dash-widget-label">✅ To-Do</span>
+              <span class="dash-widget-drag-icon">⠿</span>
+            </div>
+            <div class="dash-widget-body" id="home-todos-card"></div>
           </div>
+
+          <!-- Goals widget -->
+          <div class="dash-widget" id="dw-goals" data-widget="goals">
+            <div class="dash-widget-handle" onmousedown="dashDragStart(event,'dw-goals')" ontouchstart="dashDragStart(event,'dw-goals')">
+              <span class="dash-widget-label">🎯 Goals</span>
+              <span class="dash-widget-drag-icon">⠿</span>
+            </div>
+            <div class="dash-widget-body" id="home-goals-card"></div>
+          </div>
+
+          <!-- Spending widget -->
+          <div class="dash-widget" id="dw-spend" data-widget="spend">
+            <div class="dash-widget-handle" onmousedown="dashDragStart(event,'dw-spend')" ontouchstart="dashDragStart(event,'dw-spend')">
+              <span class="dash-widget-label">₹ Spending</span>
+              <span class="dash-widget-drag-icon">⠿</span>
+            </div>
+            <div class="dash-widget-body" id="home-spend-card"></div>
+          </div>
+
         </div>
       </div>
 
@@ -2072,6 +2222,7 @@ function renderHome(){
   const daySpend=spends.filter(s=>s.date===today).reduce((a,b)=>a+b.amount,0);
   const monthSpend=spends.reduce((a,b)=>a+b.amount,0);
   renderVisionBoard();
+  applyDashOrder();
   document.getElementById('home-stats').innerHTML=`
     <div class="stat-card"><div class="stat-label">Habits today</div><div class="stat-value">${doneH}<span style="font-size:18px;color:var(--text3)">/${habits.length}</span></div><div class="stat-sub">${doneH===habits.length?'🌿 All done!':`${habits.length-doneH} remaining`}</div></div>
     <div class="stat-card"><div class="stat-label">Tasks pending</div><div class="stat-value">${pend}</div><div class="stat-sub">${todos.filter(t=>t.done).length} completed</div></div>
@@ -6547,7 +6698,7 @@ function renderVisionBoard(){
     const fontStyle = `font-family:'${card.font}',cursive;`;
     const sizeStyle = `font-size:${card.size||'16px'};`;
     const colorStyle= `color:${card.color||'#2C2C2A'};`;
-    return `<div class="vb-card" id="vb-card-${card.id}"
+    return `<div class="vb-card style-${card.style||'card'}" id="vb-card-${card.id}"
       style="--vb-accent:${card.accent||'#6B8F71'}"
       draggable="true"
       ondragstart="_vbDragId='${card.id}'"
@@ -6574,6 +6725,7 @@ function openVBAddForm(editId){
     _vbSelColor = existing.color  || '#2C2C2A';
     _vbSelAccent= existing.accent || VB_ACCENTS[0];
     _vbSelSize  = existing.size   || '16px';
+    _vbSelStyle = existing.style  || 'card';
   }
 
   wrap.innerHTML = `<div class="vb-add-form">
@@ -6592,7 +6744,7 @@ function openVBAddForm(editId){
     <!-- Text area -->
     <div id="vb-text-section">
       <textarea class="input" id="vb-text-in" placeholder="Write your dream, goal, or affirmation..."
-        rows="3" style="resize:vertical;font-family:'${_vbSelFont}',cursive;font-size:${_vbSelSize};color:${_vbSelColor};margin-bottom:8px;line-height:1.5"
+        rows="3" oninput="_vbUpdatePreview()" style="resize:vertical;font-family:'${_vbSelFont}',cursive;font-size:${_vbSelSize};color:${_vbSelColor};margin-bottom:8px;line-height:1.5"
       >${isEdit&&existing?existing.text||'':''}</textarea>
     </div>
 
@@ -6608,6 +6760,18 @@ function openVBAddForm(editId){
       >${existing.text||''}</textarea>`:''}
     </div>
 
+    <!-- Card style picker -->
+    <div style="font-size:10px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;margin:8px 0 6px">Card Style</div>
+    <div class="vb-style-chips">
+      ${VB_CARD_STYLES.map(s=>`<button class="vb-style-chip ${_vbSelStyle===s.id?'sel':''}"
+        onclick="vbSelectStyle('${s.id}',this)" title="${s.desc}">${s.label}</button>`).join('')}
+    </div>
+    <div style="font-size:10px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px">Preview</div>
+    <div id="vb-preview-wrap" style="margin-bottom:10px;min-height:80px;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,#F5EFE6,#EDE4D6);border-radius:10px;padding:14px">
+      <div class="vb-card" id="vb-live-preview" style="max-width:180px;width:100%;pointer-events:none">
+        <div class="vb-card-text" style="font-family:var(--pf,'Caveat'),cursive;font-size:16px">Your text here...</div>
+      </div>
+    </div>
     <!-- Font picker -->
     <div style="font-size:10px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;margin:8px 0 6px">Font</div>
     <div class="vb-font-chips">
@@ -6648,6 +6812,30 @@ function vbSetType(type, editId){
   document.getElementById('vb-image-section').style.display = type==='image'?'block':'none';
 }
 
+function vbSelectStyle(style, btn){
+  _vbSelStyle = style;
+  document.querySelectorAll('.vb-style-chip').forEach(b=>b.classList.remove('sel'));
+  btn?.classList.add('sel');
+  const p=document.getElementById('vb-live-preview');
+  if(p){ p.className='vb-card style-'+style; }
+  _vbUpdatePreview();
+}
+
+function _vbUpdatePreview(){
+  const p=document.getElementById('vb-live-preview');
+  if(!p) return;
+  p.className='vb-card style-'+_vbSelStyle;
+  p.style.setProperty('--vb-accent',_vbSelAccent);
+  const te=p.querySelector('.vb-card-text');
+  if(te){
+    const ta=document.getElementById('vb-text-in');
+    te.textContent=(ta?.value?.trim()||'Your text here...').slice(0,80);
+    te.style.fontFamily="'"+_vbSelFont+"',cursive";
+    te.style.fontSize=_vbSelSize;
+    te.style.color=_vbSelColor;
+  }
+}
+
 function vbSelectFont(font, btn){
   _vbSelFont = font;
   document.querySelectorAll('.vb-font-chip').forEach(b=>b.classList.remove('sel'));
@@ -6665,6 +6853,7 @@ function vbSelectSize(size, btn){
   if(btn){ btn.classList.add('sel'); btn.style.borderColor='var(--sage)'; btn.style.background='var(--sage-light)'; }
   const ta = document.getElementById('vb-text-in');
   if(ta) ta.style.fontSize = size;
+  _vbUpdatePreview();
 }
 
 function vbSelectAccent(accent, btn){
@@ -6707,7 +6896,7 @@ function addVBCard(){
     id:String(uid()), type: textType?'text':'image',
     text, imageData:imgData,
     font:_vbSelFont, color:_vbSelColor,
-    accent:_vbSelAccent, size:_vbSelSize
+    accent:_vbSelAccent, size:_vbSelSize, style:_vbSelStyle
   });
   _saveVB();
   document.getElementById('vb-add-form-wrap').innerHTML='';
@@ -6726,7 +6915,7 @@ function saveVBCard(cardId){
   const text = document.getElementById('vb-text-in')?.value.trim() || card.text;
   const imgData = document.getElementById('vb-image-section')?.dataset?.imgData || card.imageData;
   card.text=text; card.type=textType?'text':'image'; card.imageData=imgData;
-  card.font=_vbSelFont; card.color=_vbSelColor; card.accent=_vbSelAccent; card.size=_vbSelSize;
+  card.font=_vbSelFont; card.color=_vbSelColor; card.accent=_vbSelAccent; card.size=_vbSelSize; card.style=_vbSelStyle;
   _saveVB();
   document.getElementById('vb-add-form-wrap').innerHTML='';
   renderVisionBoard();
@@ -6753,6 +6942,97 @@ function _saveVB(){
   // Sync to Firestore
   if(window._saveToFirestore) window._saveToFirestore();
 }
+
+
+// ══════════════════════════════════════════════════════════════════════════
+// DRAGGABLE HOME DASHBOARD
+// ══════════════════════════════════════════════════════════════════════════
+let _dashOrder = load('lf3_dash_order', ['dw-vision','dw-habits','dw-todos','dw-goals','dw-spend']);
+let _dashDragEl = null;
+let _dashDragOver = null;
+let _vbBoardSize = load('lf3_vb_size', 'compact');
+
+const VB_SIZE_MAP = {compact:'120px', medium:'260px', tall:'420px', full:'620px'};
+
+function setVBSize(size){
+  _vbBoardSize = size;
+  localStorage.setItem('lf3_vb_size', size);
+  const board = document.getElementById('vision-board');
+  if(board) board.style.minHeight = VB_SIZE_MAP[size] || '120px';
+  ['compact','medium','tall','full'].forEach(s=>{
+    const btn = document.getElementById('vbsz-'+s);
+    if(btn) btn.classList.toggle('active', s===size);
+  });
+}
+
+function applyDashOrder(){
+  const grid = document.getElementById('dash-grid');
+  if(!grid) return;
+  // Re-order children to match _dashOrder
+  _dashOrder.forEach(id=>{
+    const el = document.getElementById(id);
+    if(el) grid.appendChild(el);
+  });
+  // Apply saved size
+  setVBSize(_vbBoardSize);
+}
+
+function dashDragStart(e, widgetId){
+  e.stopPropagation();
+  _dashDragEl = widgetId;
+  const el = document.getElementById(widgetId);
+  if(el) el.classList.add('dragging');
+
+  const onMove = (ev) => {
+    ev.preventDefault();
+    const clientX = ev.touches ? ev.touches[0].clientX : ev.clientX;
+    const clientY = ev.touches ? ev.touches[0].clientY : ev.clientY;
+    const target = document.elementFromPoint(clientX, clientY)?.closest('.dash-widget');
+    if(target && target.id !== widgetId && target.id !== _dashDragOver){
+      if(_dashDragOver) document.getElementById(_dashDragOver)?.classList.remove('drag-over');
+      _dashDragOver = target.id;
+      target.classList.add('drag-over');
+    }
+  };
+  const onEnd = () => {
+    const dragEl = document.getElementById(_dashDragEl);
+    if(dragEl) dragEl.classList.remove('dragging');
+    if(_dashDragOver){
+      const overEl = document.getElementById(_dashDragOver);
+      if(overEl) overEl.classList.remove('drag-over');
+      // Swap positions in order array
+      const si = _dashOrder.indexOf(_dashDragEl);
+      const ti = _dashOrder.indexOf(_dashDragOver);
+      if(si>=0 && ti>=0){
+        const tmp = _dashOrder[si];
+        _dashOrder[si] = _dashOrder[ti];
+        _dashOrder[ti] = tmp;
+        localStorage.setItem('lf3_dash_order', JSON.stringify(_dashOrder));
+        applyDashOrder();
+      }
+    }
+    _dashDragEl = null; _dashDragOver = null;
+    document.removeEventListener('mousemove', onMove);
+    document.removeEventListener('mouseup',   onEnd);
+    document.removeEventListener('touchmove', onMove);
+    document.removeEventListener('touchend',  onEnd);
+  };
+  document.addEventListener('mousemove', onMove, {passive:false});
+  document.addEventListener('mouseup',   onEnd);
+  document.addEventListener('touchmove', onMove, {passive:false});
+  document.addEventListener('touchend',  onEnd);
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+// VB CARD STYLE SYSTEM
+// ══════════════════════════════════════════════════════════════════════════
+const VB_CARD_STYLES = [
+  {id:'card',   label:'🗂 Card',       desc:'Clean card with coloured top strip'},
+  {id:'sticky', label:'🟡 Sticky',     desc:'Yellow sticky note with side accent'},
+  {id:'pinned', label:'📌 Pinned',     desc:'Paper note with push pin on top'},
+  {id:'tape',   label:'📎 Taped',      desc:'White paper held by tape at the top'},
+];
+let _vbSelStyle = 'card';
 
 function showToast(msg){
   const t=document.createElement('div');
