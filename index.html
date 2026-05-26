@@ -46,7 +46,7 @@
 <!-- ═══════════════════════════════════════════════════════════════════════ -->
 
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;1,300;1,400&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;1,300;1,400&family=DM+Sans:wght@300;400;500&family=Caveat:wght@400;600;700&family=Dancing+Script:wght@400;600;700&family=Pacifico&family=Sacramento&family=Architects+Daughter&display=swap" rel="stylesheet">
 <!-- Firebase SDKs -->
 <script type="module">
 import { initializeApp }      from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
@@ -260,6 +260,7 @@ window._saveToFirestore = async function() {
       todoCategories:     (typeof todoCategories     !== 'undefined') ? todoCategories     : [],
       sharedTodoLists:    (typeof sharedTodoLists    !== 'undefined') ? sharedTodoLists    : [],
       sharedExpenseLists: (typeof sharedExpenseLists !== 'undefined') ? sharedExpenseLists : [],
+      visionCards:        (typeof visionCards        !== 'undefined') ? visionCards        : [],
       reminders:          (typeof reminders          !== 'undefined') ? reminders          : [],
       schedules:          (typeof schedules          !== 'undefined') ? schedules          : [],
       notifications:      (typeof notifications      !== 'undefined') ? notifications.slice(0,50) : [],
@@ -1194,6 +1195,86 @@ onAuthStateChanged(auth, async (user) => {
     border-radius:14px;padding:10px 36px;font-size:15px;font-weight:700;
     cursor:pointer;font-family:'DM Sans',sans-serif;width:100%;}
   .habit-popup-ok:active{opacity:.85;}
+
+  /* ══════════════════════════════════════════
+     VISION BOARD
+  ══════════════════════════════════════════ */
+  .vision-board-section{margin-bottom:20px;}
+  .vision-board-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;}
+  .vision-board-title{font-family:'Cormorant Garamond',serif;font-size:22px;font-style:italic;color:var(--sage-dark);}
+  .vision-board-subtitle{font-size:11px;color:var(--text3);margin-top:2px;}
+  .vision-board{
+    display:grid;
+    grid-template-columns:repeat(auto-fill,minmax(160px,1fr));
+    gap:10px;
+    padding:14px;
+    background:linear-gradient(135deg,#F5EFE6 0%,#EDE4D6 50%,#F2EAE0 100%);
+    border-radius:16px;
+    border:1px solid #D6C8B6;
+    min-height:120px;
+    position:relative;
+  }
+  .vision-board:empty::after{
+    content:'Tap + to add your first vision card';
+    position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+    font-size:13px;color:#B0A090;font-style:italic;pointer-events:none;
+  }
+  .vb-card{
+    background:white;
+    border-radius:10px;
+    padding:14px 12px 12px;
+    position:relative;
+    box-shadow:2px 3px 10px rgba(0,0,0,.10),0 1px 3px rgba(0,0,0,.06);
+    cursor:grab;
+    min-height:90px;
+    display:flex;flex-direction:column;
+    transition:transform .15s,box-shadow .15s;
+    overflow:hidden;
+  }
+  .vb-card::before{
+    content:'';position:absolute;top:0;left:0;right:0;height:4px;
+    background:var(--vb-accent,#6B8F71);border-radius:10px 10px 0 0;
+  }
+  .vb-card:hover{transform:translateY(-2px) rotate(.4deg);box-shadow:4px 6px 18px rgba(0,0,0,.15);}
+  .vb-card:active{cursor:grabbing;}
+  .vb-card-text{
+    font-size:var(--vb-size,15px);
+    font-family:var(--vb-font,'Caveat',cursive);
+    color:var(--vb-color,#2C2C2A);
+    line-height:1.45;
+    flex:1;
+    word-break:break-word;
+    white-space:pre-wrap;
+  }
+  .vb-card-img{width:100%;border-radius:6px;display:block;object-fit:cover;
+    max-height:140px;margin-bottom:6px;}
+  .vb-card-label{font-size:9px;color:#B0A090;margin-top:6px;font-family:'DM Sans',sans-serif;text-transform:uppercase;letter-spacing:.08em;}
+  .vb-card-del{position:absolute;top:8px;right:8px;background:rgba(0,0,0,.06);
+    border:none;border-radius:50%;width:20px;height:20px;font-size:12px;cursor:pointer;
+    display:none;align-items:center;justify-content:center;color:#888;line-height:1;}
+  .vb-card:hover .vb-card-del{display:flex;}
+  /* Add card button */
+  .vb-add-card{
+    border:2px dashed #C4B8A8;border-radius:10px;min-height:90px;
+    display:flex;flex-direction:column;align-items:center;justify-content:center;
+    cursor:pointer;color:#B0A090;font-size:13px;gap:4px;
+    background:rgba(255,255,255,.5);transition:all .2s;
+  }
+  .vb-add-card:hover{border-color:#8A7A6A;background:rgba(255,255,255,.8);color:#6A5A4A;}
+  .vb-add-card-icon{font-size:22px;}
+  /* Font picker */
+  .vb-font-chips{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;}
+  .vb-font-chip{padding:5px 12px;border-radius:10px;border:1.5px solid var(--warm3);
+    background:var(--warm2);cursor:pointer;transition:all .15s;font-size:14px;}
+  .vb-font-chip.sel{border-color:var(--sage);background:var(--sage-light);}
+  .vb-font-chip[data-font="Caveat"]{font-family:'Caveat',cursive;}
+  .vb-font-chip[data-font="Dancing Script"]{font-family:'Dancing Script',cursive;}
+  .vb-font-chip[data-font="Pacifico"]{font-family:'Pacifico',cursive;}
+  .vb-font-chip[data-font="Sacramento"]{font-family:'Sacramento',cursive;font-size:16px;}
+  .vb-font-chip[data-font="Architects Daughter"]{font-family:'Architects Daughter',cursive;}
+  /* Add form */
+  .vb-add-form{background:var(--warm);border:1.5px solid var(--warm3);
+    border-radius:var(--r);padding:14px;margin-bottom:10px;}
 </style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 </head>
@@ -1306,6 +1387,18 @@ onAuthStateChanged(auth, async (user) => {
       <!-- HOME -->
       <div class="page active" id="page-home">
         <div class="grid-3" id="home-stats"></div>
+        <!-- Vision Board -->
+        <div class="vision-board-section" id="vision-board-section">
+          <div class="vision-board-header">
+            <div>
+              <div class="vision-board-title">✨ My Vision Board</div>
+              <div class="vision-board-subtitle">Visualise your dreams — tap cards to edit</div>
+            </div>
+            <button class="btn btn-primary btn-sm" onclick="openVBAddForm()">+ Add</button>
+          </div>
+          <div id="vb-add-form-wrap"></div>
+          <div class="vision-board" id="vision-board"></div>
+        </div>
         <div class="grid-2">
           <div>
             <div class="card" id="home-habits-card"></div>
@@ -1978,6 +2071,7 @@ function renderHome(){
   const pend=todos.filter(t=>!t.done).length;
   const daySpend=spends.filter(s=>s.date===today).reduce((a,b)=>a+b.amount,0);
   const monthSpend=spends.reduce((a,b)=>a+b.amount,0);
+  renderVisionBoard();
   document.getElementById('home-stats').innerHTML=`
     <div class="stat-card"><div class="stat-label">Habits today</div><div class="stat-value">${doneH}<span style="font-size:18px;color:var(--text3)">/${habits.length}</span></div><div class="stat-sub">${doneH===habits.length?'🌿 All done!':`${habits.length-doneH} remaining`}</div></div>
     <div class="stat-card"><div class="stat-label">Tasks pending</div><div class="stat-value">${pend}</div><div class="stat-sub">${todos.filter(t=>t.done).length} completed</div></div>
@@ -6288,9 +6382,22 @@ const HABIT_MOTIVATIONS = [
   {emoji:'💎', msg:'Diamond mind', sub:'Pressure creates diamonds. Keep pushing.'},
 ];
 
+// Creative dismiss actions — user must do something fun to close the popup
+const POPUP_DISMISS_ACTIONS = [
+  { label:"I'm on fire! 🔥",       style:"background:linear-gradient(135deg,#FF6B35,#F7C59F);color:#7A2100;" },
+  { label:"Let's go! ⚡",           style:"background:linear-gradient(135deg,#3D5C42,#6B8F71);color:white;" },
+  { label:"Champion mode 🏆",       style:"background:linear-gradient(135deg,#B8845A,#E8C99A);color:#4A2000;" },
+  { label:"Locked in 🎯",           style:"background:linear-gradient(135deg,#5A78B8,#A8C0F0);color:#1A2A6A;" },
+  { label:"Nothing can stop me 💎", style:"background:linear-gradient(135deg,#8A6BC4,#C4A8F0);color:white;" },
+  { label:"Small win, big life 🌱", style:"background:linear-gradient(135deg,#3D8C6A,#A8D8B8);color:#0A3020;" },
+  { label:"This is my year 🌟",     style:"background:linear-gradient(135deg,#C4944A,#F0D098);color:#4A2A00;" },
+  { label:"I showed up 💪",         style:"background:linear-gradient(135deg,#B85A4A,#F0A898);color:white;" },
+];
+
 function showHabitPopup(isMarking){
   if(!isMarking) return;
-  const m = HABIT_MOTIVATIONS[Math.floor(Math.random()*HABIT_MOTIVATIONS.length)];
+  const m  = HABIT_MOTIVATIONS[Math.floor(Math.random()*HABIT_MOTIVATIONS.length)];
+  const da = POPUP_DISMISS_ACTIONS[Math.floor(Math.random()*POPUP_DISMISS_ACTIONS.length)];
   let overlay = document.getElementById('habit-popup-overlay');
   if(!overlay){
     overlay = document.createElement('div');
@@ -6303,7 +6410,8 @@ function showHabitPopup(isMarking){
     `<div class="habit-popup-emoji">${m.emoji}</div>
      <div class="habit-popup-msg">${m.msg}</div>
      <div class="habit-popup-sub">${m.sub}</div>
-     <button class="habit-popup-ok" onclick="document.getElementById('habit-popup-overlay').classList.remove('show')">OK 🙌</button>`;
+     <button class="habit-popup-ok" style="${da.style}border:none;border-radius:16px;padding:12px 28px;font-size:15px;font-weight:700;cursor:pointer;font-family:'DM Sans',sans-serif;width:100%;margin-top:4px;letter-spacing:.02em"
+       onclick="document.getElementById('habit-popup-overlay').classList.remove('show')">${da.label}</button>`;
   overlay.classList.add('show');
 }
 
@@ -6403,6 +6511,247 @@ function saveHabitEditModal(id){
   document.getElementById('habit-edit-modal')?.remove();
   renderHabits();
   showToast('Habit updated!');
+}
+
+
+// ══════════════════════════════════════════════════════════════════════════
+// VISION BOARD
+// ══════════════════════════════════════════════════════════════════════════
+let visionCards = load('lf3_vision_board', []);
+// card: {id, type:'text'|'image', text, imageData, font, color, accent, size}
+
+const VB_FONTS = [
+  { name:'Caveat',             label:'Casual ✏️'  },
+  { name:'Dancing Script',     label:'Elegant 🌸' },
+  { name:'Pacifico',           label:'Bold 🌊'    },
+  { name:'Sacramento',         label:'Script 🪶'  },
+  { name:'Architects Daughter',label:'Playful 🏠' },
+];
+const VB_ACCENTS = ['#6B8F71','#B8845A','#5A78B8','#B85A4A','#8A6BC4','#C4944A','#3D8C6A','#884444'];
+const VB_SIZES  = [{label:'S',val:'13px'},{label:'M',val:'16px'},{label:'L',val:'20px'},{label:'XL',val:'26px'}];
+
+let _vbDragId   = null;
+let _vbSelFont  = VB_FONTS[0].name;
+let _vbSelColor = '#2C2C2A';
+let _vbSelAccent= VB_ACCENTS[0];
+let _vbSelSize  = '16px';
+
+function renderVisionBoard(){
+  const board = document.getElementById('vision-board');
+  if(!board) return;
+  if(visionCards.length === 0){
+    board.innerHTML = '';
+    return;
+  }
+  board.innerHTML = visionCards.map(card => {
+    const fontStyle = `font-family:'${card.font}',cursive;`;
+    const sizeStyle = `font-size:${card.size||'16px'};`;
+    const colorStyle= `color:${card.color||'#2C2C2A'};`;
+    return `<div class="vb-card" id="vb-card-${card.id}"
+      style="--vb-accent:${card.accent||'#6B8F71'}"
+      draggable="true"
+      ondragstart="_vbDragId='${card.id}'"
+      ondragover="event.preventDefault()"
+      ondrop="_vbDropOn('${card.id}')"
+      ondblclick="openVBEditCard('${card.id}')">
+      <button class="vb-card-del" onclick="event.stopPropagation();deleteVBCard('${card.id}')">×</button>
+      ${card.type==='image' && card.imageData
+        ? `<img class="vb-card-img" src="${card.imageData}" alt="${card.text||'Vision'}">
+           ${card.text?`<div class="vb-card-text" style="${fontStyle+sizeStyle+colorStyle}">${card.text}</div>`:''}` 
+        : `<div class="vb-card-text" style="${fontStyle+sizeStyle+colorStyle}">${card.text||''}</div>`}
+      <div class="vb-card-label">double-tap to edit</div>
+    </div>`;
+  }).join('');
+}
+
+function openVBAddForm(editId){
+  const wrap = document.getElementById('vb-add-form-wrap');
+  if(!wrap) return;
+  const isEdit = !!editId;
+  const existing = isEdit ? visionCards.find(c=>c.id===editId) : null;
+  if(isEdit && existing){
+    _vbSelFont  = existing.font   || VB_FONTS[0].name;
+    _vbSelColor = existing.color  || '#2C2C2A';
+    _vbSelAccent= existing.accent || VB_ACCENTS[0];
+    _vbSelSize  = existing.size   || '16px';
+  }
+
+  wrap.innerHTML = `<div class="vb-add-form">
+    <div style="font-size:13px;font-weight:600;color:var(--sage-dark);margin-bottom:10px">
+      ${isEdit?'Edit Card':'New Vision Card'}
+    </div>
+
+    <!-- Type toggle -->
+    <div style="display:flex;gap:6px;margin-bottom:10px">
+      <button id="vb-type-text" class="habit-freq-tab ${!existing?.imageData?'active':''}"
+        onclick="vbSetType('text','${editId||''}')">✍️ Text</button>
+      <button id="vb-type-image" class="habit-freq-tab ${existing?.imageData?'active':''}"
+        onclick="vbSetType('image','${editId||''}')">🖼 Image</button>
+    </div>
+
+    <!-- Text area -->
+    <div id="vb-text-section">
+      <textarea class="input" id="vb-text-in" placeholder="Write your dream, goal, or affirmation..."
+        rows="3" style="resize:vertical;font-family:'${_vbSelFont}',cursive;font-size:${_vbSelSize};color:${_vbSelColor};margin-bottom:8px;line-height:1.5"
+      >${isEdit&&existing?existing.text||'':''}</textarea>
+    </div>
+
+    <!-- Image upload (hidden by default) -->
+    <div id="vb-image-section" style="display:${existing?.imageData?'block':'none'}">
+      ${existing?.imageData?`<img src="${existing.imageData}" style="width:100%;max-height:120px;object-fit:cover;border-radius:8px;margin-bottom:8px">`:''}
+      <input type="file" id="vb-img-input" accept="image/*" style="display:none" onchange="vbImageSelected(event,'${editId||''}')">
+      <button class="btn btn-ghost btn-sm" onclick="document.getElementById('vb-img-input').click()">
+        📷 ${existing?.imageData?'Change image':'Upload image'}
+      </button>
+      ${existing?.imageData?`<br><textarea class="input" id="vb-text-in" placeholder="Optional caption..." rows="2"
+        style="resize:none;font-family:'${_vbSelFont}',cursive;font-size:${_vbSelSize};margin-top:6px"
+      >${existing.text||''}</textarea>`:''}
+    </div>
+
+    <!-- Font picker -->
+    <div style="font-size:10px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;margin:8px 0 6px">Font</div>
+    <div class="vb-font-chips">
+      ${VB_FONTS.map(f=>`<button class="vb-font-chip ${_vbSelFont===f.name?'sel':''}"
+        data-font="${f.name}"
+        onclick="vbSelectFont('${f.name}',this)"
+        style="font-family:'${f.name}',cursive">${f.label}</button>`).join('')}
+    </div>
+
+    <!-- Size picker -->
+    <div style="font-size:10px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px">Size</div>
+    <div style="display:flex;gap:5px;margin-bottom:10px">
+      ${VB_SIZES.map(s=>`<button onclick="vbSelectSize('${s.val}',this)"
+        style="padding:4px 12px;border-radius:8px;border:1.5px solid ${_vbSelSize===s.val?'var(--sage)':'var(--warm3)'};background:${_vbSelSize===s.val?'var(--sage-light)':'var(--warm2)'};cursor:pointer;font-size:${s.val};font-family:'DM Sans',sans-serif"
+        class="vb-size-btn ${_vbSelSize===s.val?'sel':''}">${s.label}</button>`).join('')}
+    </div>
+
+    <!-- Accent colour -->
+    <div style="font-size:10px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px">Accent colour</div>
+    <div style="display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap">
+      ${VB_ACCENTS.map(acc=>`<button onclick="vbSelectAccent('${acc}',this)"
+        style="width:26px;height:26px;border-radius:50%;background:${acc};border:3px solid ${_vbSelAccent===acc?'var(--text)':'transparent'};cursor:pointer;transition:transform .1s"
+        class="vb-accent-btn"></button>`).join('')}
+    </div>
+
+    <div style="display:flex;gap:8px">
+      <button class="btn btn-primary" style="flex:1"
+        onclick="vbSubmit('${editId||''}')">${isEdit?'Update Card':'Add to Board'}</button>
+      <button class="btn btn-ghost" onclick="document.getElementById('vb-add-form-wrap').innerHTML=''">Cancel</button>
+    </div>
+  </div>`;
+}
+
+function vbSetType(type, editId){
+  document.getElementById('vb-type-text')?.classList.toggle('active', type==='text');
+  document.getElementById('vb-type-image')?.classList.toggle('active', type==='image');
+  document.getElementById('vb-text-section').style.display = type==='text'?'block':'none';
+  document.getElementById('vb-image-section').style.display = type==='image'?'block':'none';
+}
+
+function vbSelectFont(font, btn){
+  _vbSelFont = font;
+  document.querySelectorAll('.vb-font-chip').forEach(b=>b.classList.remove('sel'));
+  btn?.classList.add('sel');
+  const ta = document.getElementById('vb-text-in');
+  if(ta) ta.style.fontFamily = `'${font}',cursive`;
+}
+
+function vbSelectSize(size, btn){
+  _vbSelSize = size;
+  document.querySelectorAll('.vb-size-btn').forEach(b=>{
+    b.classList.remove('sel');
+    b.style.borderColor='var(--warm3)'; b.style.background='var(--warm2)';
+  });
+  if(btn){ btn.classList.add('sel'); btn.style.borderColor='var(--sage)'; btn.style.background='var(--sage-light)'; }
+  const ta = document.getElementById('vb-text-in');
+  if(ta) ta.style.fontSize = size;
+}
+
+function vbSelectAccent(accent, btn){
+  _vbSelAccent = accent;
+  document.querySelectorAll('.vb-accent-btn').forEach(b=>b.style.borderColor='transparent');
+  if(btn) btn.style.borderColor='var(--text)';
+}
+
+function vbImageSelected(event, editId){
+  const file = event.target.files[0];
+  if(!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    const imgData = e.target.result;
+    const imgSec = document.getElementById('vb-image-section');
+    if(imgSec){
+      imgSec.innerHTML = `<img src="${imgData}" style="width:100%;max-height:120px;object-fit:cover;border-radius:8px;margin-bottom:8px">
+        <input type="file" id="vb-img-input" accept="image/*" style="display:none" onchange="vbImageSelected(event,'${editId||''}')">
+        <button class="btn btn-ghost btn-sm" onclick="document.getElementById('vb-img-input').click()">📷 Change image</button>
+        <textarea class="input" id="vb-text-in" placeholder="Optional caption..." rows="2"
+          style="resize:none;font-family:'${_vbSelFont}',cursive;font-size:${_vbSelSize};margin-top:6px"></textarea>`;
+      imgSec.dataset.imgData = imgData;
+    }
+  };
+  reader.readAsDataURL(file);
+}
+
+function vbSubmit(editId){
+  if(editId && editId !== '') saveVBCard(editId);
+  else addVBCard();
+}
+
+function addVBCard(){
+  const textType = document.getElementById('vb-type-text')?.classList.contains('active');
+  const text = document.getElementById('vb-text-in')?.value.trim() || '';
+  const imgData = document.getElementById('vb-image-section')?.dataset?.imgData || '';
+  if(textType && !text){ showToast('Please write something for your vision card.'); return; }
+  if(!textType && !imgData){ showToast('Please upload an image.'); return; }
+  visionCards.push({
+    id:String(uid()), type: textType?'text':'image',
+    text, imageData:imgData,
+    font:_vbSelFont, color:_vbSelColor,
+    accent:_vbSelAccent, size:_vbSelSize
+  });
+  _saveVB();
+  document.getElementById('vb-add-form-wrap').innerHTML='';
+  renderVisionBoard();
+  showToast('Vision card added! 🌟');
+}
+
+function openVBEditCard(cardId){
+  openVBAddForm(cardId);
+  document.getElementById('vb-add-form-wrap')?.scrollIntoView({behavior:'smooth',block:'nearest'});
+}
+
+function saveVBCard(cardId){
+  const card = visionCards.find(c=>c.id===cardId); if(!card) return;
+  const textType = document.getElementById('vb-type-text')?.classList.contains('active');
+  const text = document.getElementById('vb-text-in')?.value.trim() || card.text;
+  const imgData = document.getElementById('vb-image-section')?.dataset?.imgData || card.imageData;
+  card.text=text; card.type=textType?'text':'image'; card.imageData=imgData;
+  card.font=_vbSelFont; card.color=_vbSelColor; card.accent=_vbSelAccent; card.size=_vbSelSize;
+  _saveVB();
+  document.getElementById('vb-add-form-wrap').innerHTML='';
+  renderVisionBoard();
+  showToast('Vision card updated!');
+}
+
+function deleteVBCard(cardId){
+  visionCards = visionCards.filter(c=>c.id!==cardId);
+  _saveVB(); renderVisionBoard();
+}
+
+function _vbDropOn(targetId){
+  if(!_vbDragId || _vbDragId===targetId) return;
+  const si=visionCards.findIndex(c=>c.id===_vbDragId);
+  const ti=visionCards.findIndex(c=>c.id===targetId);
+  if(si<0||ti<0) return;
+  const [moved]=visionCards.splice(si,1);
+  visionCards.splice(ti,0,moved);
+  _vbDragId=null; _saveVB(); renderVisionBoard();
+}
+
+function _saveVB(){
+  localStorage.setItem('lf3_vision_board', JSON.stringify(visionCards));
+  // Sync to Firestore
+  if(window._saveToFirestore) window._saveToFirestore();
 }
 
 function showToast(msg){
@@ -8229,6 +8578,7 @@ window._applySync = function(data) {
   if(data.friendUpiIds    !== undefined){friendUpiIds=data.friendUpiIds; save('lf3_friend_upi_ids',friendUpiIds);}
   if(data.todoCategories  !== undefined){todoCategories=data.todoCategories; save('lf3_todo_cats',todoCategories);}
   if(data.sharedTodoLists    !== undefined){sharedTodoLists=data.sharedTodoLists; save('lf3_shared_todo_lists',sharedTodoLists);}
+  if(data.visionCards    !== undefined){visionCards=data.visionCards; localStorage.setItem('lf3_vision_board',JSON.stringify(visionCards)); changed=true;}
   if(data.reminders     !== undefined){reminders=data.reminders;   localStorage.setItem('lf3_reminders',JSON.stringify(reminders));   changed=true;}
   if(data.schedules     !== undefined){schedules=data.schedules;   localStorage.setItem('lf3_schedules',JSON.stringify(schedules));   changed=true;}
   if(data.notifications !== undefined && data.notifications.length > (notifications||[]).length){
