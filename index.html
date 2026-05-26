@@ -1204,33 +1204,61 @@ onAuthStateChanged(auth, async (user) => {
   .vision-board-title{font-family:'Cormorant Garamond',serif;font-size:22px;font-style:italic;color:var(--sage-dark);}
   .vision-board-subtitle{font-size:11px;color:var(--text3);margin-top:2px;}
   .vision-board{
-    display:grid;
-    grid-template-columns:repeat(auto-fill,minmax(160px,1fr));
-    gap:10px;
-    padding:14px;
     background:linear-gradient(135deg,#F5EFE6 0%,#EDE4D6 50%,#F2EAE0 100%);
     border-radius:16px;
     border:1px solid #D6C8B6;
-    min-height:120px;
     position:relative;
+    overflow:hidden;
+    /* width+height set via JS and stored per-user */
+    min-height:160px;
+    width:100%;
+    box-sizing:border-box;
   }
-  .vision-board:empty::after{
-    content:'Tap + to add your first vision card';
-    position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
-    font-size:13px;color:#B0A090;font-style:italic;pointer-events:none;
-  }
+  /* Resize handles on all 4 edges + corners of the board */
+  .vb-board-resizer{position:absolute;z-index:10;}
+  .vb-board-resizer.e {right:0;top:4px;bottom:4px;width:7px;cursor:ew-resize;}
+  .vb-board-resizer.w {left:0; top:4px;bottom:4px;width:7px;cursor:ew-resize;}
+  .vb-board-resizer.s {bottom:0;left:4px;right:4px;height:7px;cursor:ns-resize;}
+  .vb-board-resizer.n {top:0;  left:4px;right:4px;height:7px;cursor:ns-resize;}
+  .vb-board-resizer.se{right:0;bottom:0;width:14px;height:14px;cursor:se-resize;}
+  .vb-board-resizer.sw{left:0; bottom:0;width:14px;height:14px;cursor:sw-resize;}
+  .vb-board-resizer.ne{right:0;top:0;   width:14px;height:14px;cursor:ne-resize;}
+  .vb-board-resizer.nw{left:0; top:0;   width:14px;height:14px;cursor:nw-resize;}
+  /* SE corner indicator */
+  .vb-board-resizer.se::after{content:'⠿';position:absolute;right:2px;bottom:1px;
+    font-size:10px;color:#B0A090;line-height:1;}
+
   .vb-card{
     background:white;
     border-radius:10px;
-    padding:14px 12px 12px;
-    position:relative;
+    padding:14px 12px 28px;  /* extra bottom for resize handle */
+    position:absolute;       /* freely positioned on the board */
     box-shadow:2px 3px 10px rgba(0,0,0,.10),0 1px 3px rgba(0,0,0,.06);
     cursor:grab;
-    min-height:90px;
     display:flex;flex-direction:column;
-    transition:transform .15s,box-shadow .15s;
-    overflow:hidden;
+    transition:box-shadow .15s;
+    overflow:visible;
+    box-sizing:border-box;
+    min-width:120px; min-height:80px;
   }
+  .vb-card:hover{box-shadow:4px 6px 18px rgba(0,0,0,.18);}
+  .vb-card.vb-dragging{opacity:.8;z-index:50;cursor:grabbing;transition:none;}
+  /* Per-card resize handles */
+  .vb-card-resizer{position:absolute;z-index:5;background:transparent;}
+  .vb-card-resizer.e {right:-4px; top:8px;bottom:8px;width:8px;cursor:ew-resize;}
+  .vb-card-resizer.w {left:-4px;  top:8px;bottom:8px;width:8px;cursor:ew-resize;}
+  .vb-card-resizer.s {bottom:-4px;left:8px;right:8px;height:8px;cursor:ns-resize;}
+  .vb-card-resizer.n {top:-4px;   left:8px;right:8px;height:8px;cursor:ns-resize;}
+  .vb-card-resizer.se{right:-5px;bottom:-5px;width:14px;height:14px;cursor:se-resize;}
+  .vb-card-resizer.sw{left:-5px; bottom:-5px;width:14px;height:14px;cursor:sw-resize;}
+  .vb-card-resizer.ne{right:-5px;top:-5px;   width:14px;height:14px;cursor:ne-resize;}
+  .vb-card-resizer.nw{left:-5px; top:-5px;   width:14px;height:14px;cursor:nw-resize;}
+  /* SE dot indicator on each card */
+  .vb-card-resizer.se::after{content:'◢';position:absolute;right:1px;bottom:0;
+    font-size:9px;color:#C8B8A8;line-height:1;}
+  /* Board empty hint */
+  .vb-empty-hint{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+    font-size:13px;color:#B0A090;font-style:italic;pointer-events:none;}
   .vb-card::before{
     content:'';position:absolute;top:0;left:0;right:0;height:4px;
     background:var(--vb-accent,#6B8F71);border-radius:10px 10px 0 0;
@@ -1509,7 +1537,7 @@ onAuthStateChanged(auth, async (user) => {
             </div>
             <div class="dash-widget-body" style="padding:10px">
               <div id="vb-add-form-wrap"></div>
-              <div class="vision-board" id="vision-board" style="min-height:var(--vb-min-h,120px);resize:vertical;overflow:auto"></div>
+              <div class="vision-board" id="vision-board"></div>
               <div class="vb-resize-bar" title="Drag to resize">
                 ⠿ resize
               </div>
@@ -6690,29 +6718,56 @@ let _vbSelSize  = '16px';
 function renderVisionBoard(){
   const board = document.getElementById('vision-board');
   if(!board) return;
+
+  // Apply saved board dimensions
+  const bw = _vbBoardW || board.parentElement?.offsetWidth || 600;
+  const bh = _vbBoardH || 200;
+  board.style.width  = bw + 'px';
+  board.style.height = bh + 'px';
+
   if(visionCards.length === 0){
-    board.innerHTML = '';
+    board.innerHTML = '<div class="vb-empty-hint">Tap + to add your first vision card</div>';
+    _attachBoardResizers(board);
     return;
   }
+
+  // Auto-layout: place cards that have no position yet
+  let nextX = 14, nextY = 14, rowH = 0;
+  visionCards.forEach(card => {
+    if(card.x === undefined){
+      card.x = nextX; card.y = nextY;
+      card.w = card.w || 180; card.h = card.h || 120;
+      nextX += card.w + 12;
+      rowH = Math.max(rowH, card.h);
+      if(nextX + card.w > bw - 14){ nextX = 14; nextY += rowH + 12; rowH = 0; }
+    }
+  });
+
   board.innerHTML = visionCards.map(card => {
-    const fontStyle = `font-family:'${card.font}',cursive;`;
-    const sizeStyle = `font-size:${card.size||'16px'};`;
-    const colorStyle= `color:${card.color||'#2C2C2A'};`;
+    const fs = `font-family:'${card.font||'Caveat'}',cursive;font-size:${card.size||'16px'};color:${card.color||'#2C2C2A'};`;
+    const pos = `left:${card.x||14}px;top:${card.y||14}px;width:${card.w||180}px;height:${card.h||120}px;`;
     return `<div class="vb-card style-${card.style||'card'}" id="vb-card-${card.id}"
-      style="--vb-accent:${card.accent||'#6B8F71'}"
-      draggable="true"
-      ondragstart="_vbDragId='${card.id}'"
-      ondragover="event.preventDefault()"
-      ondrop="_vbDropOn('${card.id}')"
+      style="--vb-accent:${card.accent||'#6B8F71'};${pos}"
       ondblclick="openVBEditCard('${card.id}')">
       <button class="vb-card-del" onclick="event.stopPropagation();deleteVBCard('${card.id}')">×</button>
-      ${card.type==='image' && card.imageData
-        ? `<img class="vb-card-img" src="${card.imageData}" alt="${card.text||'Vision'}">
-           ${card.text?`<div class="vb-card-text" style="${fontStyle+sizeStyle+colorStyle}">${card.text}</div>`:''}` 
-        : `<div class="vb-card-text" style="${fontStyle+sizeStyle+colorStyle}">${card.text||''}</div>`}
+      ${card.type==='image'&&card.imageData
+        ?`<img class="vb-card-img" src="${card.imageData}" alt="${card.text||''}">
+          ${card.text?`<div class="vb-card-text" style="${fs}">${card.text}</div>`:''}`
+        :`<div class="vb-card-text" style="${fs}">${card.text||''}</div>`}
       <div class="vb-card-label">double-tap to edit</div>
+      <div class="vb-card-resizer n"  onmousedown="vbCardResize(event,'${card.id}','n')"  ontouchstart="vbCardResize(event,'${card.id}','n')"></div>
+      <div class="vb-card-resizer s"  onmousedown="vbCardResize(event,'${card.id}','s')"  ontouchstart="vbCardResize(event,'${card.id}','s')"></div>
+      <div class="vb-card-resizer e"  onmousedown="vbCardResize(event,'${card.id}','e')"  ontouchstart="vbCardResize(event,'${card.id}','e')"></div>
+      <div class="vb-card-resizer w"  onmousedown="vbCardResize(event,'${card.id}','w')"  ontouchstart="vbCardResize(event,'${card.id}','w')"></div>
+      <div class="vb-card-resizer se" onmousedown="vbCardResize(event,'${card.id}','se')" ontouchstart="vbCardResize(event,'${card.id}','se')"></div>
+      <div class="vb-card-resizer sw" onmousedown="vbCardResize(event,'${card.id}','sw')" ontouchstart="vbCardResize(event,'${card.id}','sw')"></div>
+      <div class="vb-card-resizer ne" onmousedown="vbCardResize(event,'${card.id}','ne')" ontouchstart="vbCardResize(event,'${card.id}','ne')"></div>
+      <div class="vb-card-resizer nw" onmousedown="vbCardResize(event,'${card.id}','nw')" ontouchstart="vbCardResize(event,'${card.id}','nw')"></div>
+      <div style="position:absolute;inset:0;cursor:grab" onmousedown="vbCardDrag(event,'${card.id}')" ontouchstart="vbCardDrag(event,'${card.id}')"></div>
     </div>`;
   }).join('');
+
+  _attachBoardResizers(board);
 }
 
 function openVBAddForm(editId){
@@ -6927,21 +6982,163 @@ function deleteVBCard(cardId){
   _saveVB(); renderVisionBoard();
 }
 
-function _vbDropOn(targetId){
-  if(!_vbDragId || _vbDragId===targetId) return;
-  const si=visionCards.findIndex(c=>c.id===_vbDragId);
-  const ti=visionCards.findIndex(c=>c.id===targetId);
-  if(si<0||ti<0) return;
-  const [moved]=visionCards.splice(si,1);
-  visionCards.splice(ti,0,moved);
-  _vbDragId=null; _saveVB(); renderVisionBoard();
-}
 
-function _saveVB(){
+// ══════════════════════════════════════════════════════════════════════════
+// VISION BOARD — card drag, card resize, board resize (all 4 edges)
+// ══════════════════════════════════════════════════════════════════════════
+let _vbBoardW = parseInt(localStorage.getItem('lf3_vb_bw')||'0')||null;
+let _vbBoardH = parseInt(localStorage.getItem('lf3_vb_bh')||'0')||200;
+
+function _saveVBLayout(){
   localStorage.setItem('lf3_vision_board', JSON.stringify(visionCards));
-  // Sync to Firestore
+  if(_vbBoardW) localStorage.setItem('lf3_vb_bw', String(_vbBoardW));
+  if(_vbBoardH) localStorage.setItem('lf3_vb_bh', String(_vbBoardH));
   if(window._saveToFirestore) window._saveToFirestore();
 }
+
+// ── Card: drag to move ─────────────────────────────────────────────────────
+function vbCardDrag(e, cardId){
+  e.stopPropagation(); e.preventDefault();
+  const card = visionCards.find(c=>c.id===cardId); if(!card) return;
+  const el = document.getElementById('vb-card-'+cardId); if(!el) return;
+  const board = document.getElementById('vision-board');
+  const br = board.getBoundingClientRect();
+  const startX = e.touches ? e.touches[0].clientX : e.clientX;
+  const startY = e.touches ? e.touches[0].clientY : e.clientY;
+  const origX = card.x || 0, origY = card.y || 0;
+  el.classList.add('vb-dragging');
+  el.style.zIndex = 99;
+
+  const onMove = ev => {
+    ev.preventDefault();
+    const cx = ev.touches ? ev.touches[0].clientX : ev.clientX;
+    const cy = ev.touches ? ev.touches[0].clientY : ev.clientY;
+    const nx = Math.max(0, origX + cx - startX);
+    const ny = Math.max(0, origY + cy - startY);
+    card.x = nx; card.y = ny;
+    el.style.left = nx+'px'; el.style.top = ny+'px';
+    // Grow board if needed
+    const board2 = document.getElementById('vision-board');
+    const neededH = ny + (card.h||120) + 20;
+    if(neededH > board2.offsetHeight){
+      _vbBoardH = neededH;
+      board2.style.height = neededH+'px';
+    }
+  };
+  const onEnd = () => {
+    el.classList.remove('vb-dragging');
+    el.style.zIndex = '';
+    _saveVBLayout();
+    document.removeEventListener('mousemove', onMove);
+    document.removeEventListener('mouseup',   onEnd);
+    document.removeEventListener('touchmove', onMove);
+    document.removeEventListener('touchend',  onEnd);
+  };
+  document.addEventListener('mousemove', onMove, {passive:false});
+  document.addEventListener('mouseup',   onEnd);
+  document.addEventListener('touchmove', onMove, {passive:false});
+  document.addEventListener('touchend',  onEnd);
+}
+
+// ── Card: resize from any edge/corner ─────────────────────────────────────
+function vbCardResize(e, cardId, dir){
+  e.stopPropagation(); e.preventDefault();
+  const card = visionCards.find(c=>c.id===cardId); if(!card) return;
+  const el = document.getElementById('vb-card-'+cardId); if(!el) return;
+  const startX = e.touches ? e.touches[0].clientX : e.clientX;
+  const startY = e.touches ? e.touches[0].clientY : e.clientY;
+  const origX = card.x||0, origY = card.y||0;
+  const origW = card.w||180, origH = card.h||120;
+  const MIN_W = 100, MIN_H = 60;
+
+  const onMove = ev => {
+    ev.preventDefault();
+    const cx = ev.touches ? ev.touches[0].clientX : ev.clientX;
+    const cy = ev.touches ? ev.touches[0].clientY : ev.clientY;
+    const dx = cx - startX, dy = cy - startY;
+    let nx=origX, ny=origY, nw=origW, nh=origH;
+    // East: widen right
+    if(dir.includes('e')) nw = Math.max(MIN_W, origW + dx);
+    // West: widen left (move x, shrink/grow w)
+    if(dir.includes('w')){ nw = Math.max(MIN_W, origW - dx); nx = origX + origW - nw; }
+    // South: heighten down
+    if(dir.includes('s')) nh = Math.max(MIN_H, origH + dy);
+    // North: heighten up (move y, shrink/grow h)
+    if(dir.includes('n')){ nh = Math.max(MIN_H, origH - dy); ny = origY + origH - nh; }
+    card.x=nx; card.y=ny; card.w=nw; card.h=nh;
+    el.style.left=nx+'px'; el.style.top=ny+'px';
+    el.style.width=nw+'px'; el.style.height=nh+'px';
+    // Grow board if needed
+    const board = document.getElementById('vision-board');
+    const neededH = ny+nh+20;
+    if(neededH > board.offsetHeight){ _vbBoardH=neededH; board.style.height=neededH+'px'; }
+  };
+  const onEnd = () => {
+    _saveVBLayout();
+    document.removeEventListener('mousemove', onMove);
+    document.removeEventListener('mouseup',   onEnd);
+    document.removeEventListener('touchmove', onMove);
+    document.removeEventListener('touchend',  onEnd);
+  };
+  document.addEventListener('mousemove', onMove, {passive:false});
+  document.addEventListener('mouseup',   onEnd);
+  document.addEventListener('touchmove', onMove, {passive:false});
+  document.addEventListener('touchend',  onEnd);
+}
+
+// ── Board: resize from any edge/corner ────────────────────────────────────
+function _attachBoardResizers(board){
+  // Remove existing
+  board.querySelectorAll('.vb-board-resizer').forEach(r=>r.remove());
+  ['n','s','e','w','ne','nw','se','sw'].forEach(dir=>{
+    const r = document.createElement('div');
+    r.className = 'vb-board-resizer '+dir;
+    r.addEventListener('mousedown',  ev=>_boardResize(ev,dir));
+    r.addEventListener('touchstart', ev=>_boardResize(ev,dir), {passive:false});
+    board.appendChild(r);
+  });
+}
+
+function _boardResize(e, dir){
+  e.stopPropagation(); e.preventDefault();
+  const board = document.getElementById('vision-board'); if(!board) return;
+  const startX = e.touches ? e.touches[0].clientX : e.clientX;
+  const startY = e.touches ? e.touches[0].clientY : e.clientY;
+  const origW  = board.offsetWidth;
+  const origH  = board.offsetHeight;
+  const origLeft = board.getBoundingClientRect().left;
+  const MIN_W = 240, MIN_H = 120;
+
+  const onMove = ev => {
+    ev.preventDefault();
+    const cx = ev.touches ? ev.touches[0].clientX : ev.clientX;
+    const cy = ev.touches ? ev.touches[0].clientY : ev.clientY;
+    const dx = cx - startX, dy = cy - startY;
+    let nw = origW, nh = origH;
+    if(dir.includes('e')) nw = Math.max(MIN_W, origW + dx);
+    if(dir.includes('s')) nh = Math.max(MIN_H, origH + dy);
+    if(dir.includes('w')) nw = Math.max(MIN_W, origW - dx);
+    if(dir.includes('n')) nh = Math.max(MIN_H, origH - dy);
+    _vbBoardW = nw; _vbBoardH = nh;
+    board.style.width  = nw+'px';
+    board.style.height = nh+'px';
+  };
+  const onEnd = () => {
+    _saveVBLayout();
+    document.removeEventListener('mousemove', onMove);
+    document.removeEventListener('mouseup',   onEnd);
+    document.removeEventListener('touchmove', onMove);
+    document.removeEventListener('touchend',  onEnd);
+  };
+  document.addEventListener('mousemove', onMove, {passive:false});
+  document.addEventListener('mouseup',   onEnd);
+  document.addEventListener('touchmove', onMove, {passive:false});
+  document.addEventListener('touchend',  onEnd);
+}
+
+// _vbDropOn no longer used (cards are freely positioned)
+
+function _saveVB(){ _saveVBLayout(); }
 
 
 // ══════════════════════════════════════════════════════════════════════════
@@ -6952,29 +7149,44 @@ let _dashDragEl = null;
 let _dashDragOver = null;
 let _vbBoardSize = load('lf3_vb_size', 'compact');
 
-const VB_SIZE_MAP = {compact:'120px', medium:'260px', tall:'420px', full:'620px'};
+const VB_SIZE_MAP = {compact:160, medium:280, tall:440, full:640};
 
 function setVBSize(size){
   _vbBoardSize = size;
   localStorage.setItem('lf3_vb_size', size);
+  _vbBoardH = parseInt(VB_SIZE_MAP[size]) || 200;
+  localStorage.setItem('lf3_vb_bh', String(_vbBoardH));
   const board = document.getElementById('vision-board');
-  if(board) board.style.minHeight = VB_SIZE_MAP[size] || '120px';
+  if(board) board.style.height = _vbBoardH + 'px';
   ['compact','medium','tall','full'].forEach(s=>{
     const btn = document.getElementById('vbsz-'+s);
     if(btn) btn.classList.toggle('active', s===size);
   });
+  _attachBoardResizers(board);
 }
 
 function applyDashOrder(){
   const grid = document.getElementById('dash-grid');
   if(!grid) return;
-  // Re-order children to match _dashOrder
   _dashOrder.forEach(id=>{
     const el = document.getElementById(id);
     if(el) grid.appendChild(el);
   });
-  // Apply saved size
-  setVBSize(_vbBoardSize);
+  // Restore board dimensions
+  const board = document.getElementById('vision-board');
+  if(board){
+    const savedH = parseInt(localStorage.getItem('lf3_vb_bh')||'200');
+    _vbBoardH = savedH;
+    board.style.height = savedH+'px';
+    // Restore width if saved
+    const savedW = parseInt(localStorage.getItem('lf3_vb_bw')||'0');
+    if(savedW > 0){ _vbBoardW = savedW; board.style.width = savedW+'px'; }
+    else { board.style.width = '100%'; }
+    ['compact','medium','tall','full'].forEach(s=>{
+      const btn = document.getElementById('vbsz-'+s);
+      if(btn) btn.classList.toggle('active', VB_SIZE_MAP[s]===savedH);
+    });
+  }
 }
 
 function dashDragStart(e, widgetId){
