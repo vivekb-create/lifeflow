@@ -1278,9 +1278,17 @@ onAuthStateChanged(auth, async (user) => {
     max-height:140px;margin-bottom:6px;}
   .vb-card-label{font-size:9px;color:#B0A090;margin-top:6px;font-family:'DM Sans',sans-serif;text-transform:uppercase;letter-spacing:.08em;}
   .vb-card-del{position:absolute;top:8px;right:8px;background:rgba(0,0,0,.06);
-    border:none;border-radius:50%;width:20px;height:20px;font-size:12px;cursor:pointer;
-    display:none;align-items:center;justify-content:center;color:#888;line-height:1;}
+    border:none;border-radius:50%;width:22px;height:22px;font-size:13px;cursor:pointer;
+    display:none;align-items:center;justify-content:center;color:#888;line-height:1;
+    z-index:10;}  /* above drag overlay */
   .vb-card:hover .vb-card-del{display:flex;}
+  .vb-drag-overlay{position:absolute;inset:0;cursor:grab;z-index:1;}
+  .vb-drag-overlay:active{cursor:grabbing;}
+  /* card label sits above drag overlay */
+  .vb-card-label{position:relative;z-index:2;font-size:9px;color:#B0A090;
+    margin-top:6px;font-family:'DM Sans',sans-serif;text-transform:uppercase;letter-spacing:.08em;}
+  .vb-card-text{position:relative;z-index:2;}
+  .vb-card-img{position:relative;z-index:2;}
   /* Add card button */
   .vb-add-card{
     border:2px dashed #C4B8A8;border-radius:10px;min-height:90px;
@@ -1310,6 +1318,7 @@ onAuthStateChanged(auth, async (user) => {
     grid-template-columns:repeat(2,1fr);
     gap:12px;
     position:relative;
+    align-items:start;  /* each widget grows to its own content height */
   }
   @media(min-width:700px){.dash-grid{grid-template-columns:repeat(3,1fr);}}
   @media(min-width:1000px){.dash-grid{grid-template-columns:repeat(4,1fr);}}
@@ -1318,9 +1327,9 @@ onAuthStateChanged(auth, async (user) => {
     background:var(--card);border:1px solid var(--warm2);
     border-radius:var(--r);padding:0;
     cursor:default;
-    transition:box-shadow .2s, transform .2s;
+    transition:box-shadow .2s;
     position:relative;
-    min-height:120px;
+    /* NO min-height — let content define height */
   }
   .dash-widget.dragging{
     opacity:.5;transform:scale(.97);
@@ -1366,43 +1375,66 @@ onAuthStateChanged(auth, async (user) => {
     background:var(--warm2);cursor:pointer;color:var(--text2);transition:all .15s;}
   .vb-size-btn2.active{background:var(--sage);color:white;border-color:var(--sage);}
 
-  /* ══ VB CARD STYLE VARIANTS ══ */
-  /* Sticky note */
+  /* ══ VB CARD STYLE VARIANTS — Modern Trendy Designs ══ */
+
+  /* GLASS — frosted glass morphism */
+  .vb-card.style-glass{
+    background:linear-gradient(135deg,rgba(255,255,255,.85),rgba(255,255,255,.6));
+    backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);
+    border:1.5px solid rgba(255,255,255,.9);
+    box-shadow:0 8px 32px rgba(0,0,0,.12),inset 0 1px 0 rgba(255,255,255,.8);
+    border-radius:16px;
+  }
+  .vb-card.style-glass::before{
+    height:3px;background:linear-gradient(90deg,var(--vb-accent),transparent);border-radius:16px 16px 0 0;
+  }
+
+  /* STICKY — neon sticky note with shadow cast */
   .vb-card.style-sticky{
-    background:linear-gradient(145deg,#FFFDE7,#FFF9C4);
-    box-shadow:3px 3px 8px rgba(0,0,0,.15),0 1px 2px rgba(0,0,0,.08);
-    border-radius:2px 12px 12px 2px;
-    border-left:5px solid var(--vb-accent,#F9A825);
+    background:linear-gradient(160deg,#FFFACD 0%,#FFF176 100%);
+    border-radius:2px 16px 16px 16px;
+    box-shadow:4px 6px 20px rgba(0,0,0,.18),-1px -1px 0 rgba(200,170,0,.3);
+    border:none;transform-origin:top left;
+    position:absolute;  /* inherits from .vb-card */
   }
   .vb-card.style-sticky::before{display:none;}
-  /* Pinned note */
+  .vb-card.style-sticky::after{
+    content:'';position:absolute;top:0;left:0;
+    width:0;height:0;
+    border-style:solid;border-width:16px 16px 0 0;
+    border-color:rgba(180,150,0,.25) transparent transparent transparent;
+  }
+
+  /* PINNED — realistic push-pin with paper texture */
   .vb-card.style-pinned{
-    background:linear-gradient(160deg,#FAFAFA 0%,#F5F0E8 100%);
-    box-shadow:2px 4px 14px rgba(0,0,0,.12),0 1px 3px rgba(0,0,0,.06);
-    border-radius:3px;
-    border:none;
-    padding-top:22px;
+    background:linear-gradient(175deg,#FEFCF8 0%,#F8F4EC 100%);
+    border-radius:3px;border:none;padding-top:28px;
+    box-shadow:3px 4px 16px rgba(0,0,0,.14),0 1px 0 rgba(0,0,0,.05),
+               inset 0 0 0 1px rgba(0,0,0,.04);
   }
   .vb-card.style-pinned::before{display:none;}
   .vb-card.style-pinned::after{
-    content:'';position:absolute;top:-8px;left:50%;transform:translateX(-50%);
-    width:18px;height:18px;border-radius:50%;
-    background:radial-gradient(circle at 35% 35%, #FF6B6B, #C0392B);
-    box-shadow:0 2px 6px rgba(192,57,43,.5);
-    z-index:2;
+    content:'📌';position:absolute;top:-6px;left:50%;transform:translateX(-50%);
+    font-size:22px;line-height:1;filter:drop-shadow(0 2px 4px rgba(0,0,0,.3));
+    z-index:3;
   }
-  /* Card style (default) — already styled */
-  .vb-card.style-card{/* default styles apply */}
-  /* Fancy: tape effect */
+
+  /* POLAROID — photo-booth style with caption area */
   .vb-card.style-tape{
-    background:white;border-radius:2px;border:none;
-    box-shadow:2px 3px 10px rgba(0,0,0,.12);
+    background:white;border-radius:4px;border:none;
+    padding:14px 14px 32px;
+    box-shadow:0 2px 8px rgba(0,0,0,.12),0 8px 24px rgba(0,0,0,.08),
+               inset 0 0 0 1px rgba(0,0,0,.05);
   }
-  .vb-card.style-tape::before{
-    content:'';position:absolute;top:-10px;left:50%;transform:translateX(-50%);
-    width:50px;height:20px;background:rgba(180,220,255,.7);
-    z-index:2;border-radius:2px;
+  .vb-card.style-tape::before{display:none;}
+  .vb-card.style-tape::after{
+    content:'';position:absolute;bottom:0;left:0;right:0;height:28px;
+    background:linear-gradient(180deg,transparent 0%,rgba(0,0,0,.03) 100%);
+    border-top:1px solid rgba(0,0,0,.06);border-radius:0 0 4px 4px;
   }
+
+  /* Default card style */
+  .vb-card.style-card{/* default .vb-card styles apply */}
   /* Style picker chips */
   .vb-style-chips{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;}
   .vb-style-chip{padding:5px 10px;border-radius:10px;border:1.5px solid var(--warm3);
@@ -1577,14 +1609,7 @@ onAuthStateChanged(auth, async (user) => {
             <div class="dash-widget-body" id="home-goals-card"></div>
           </div>
 
-          <!-- Spending widget -->
-          <div class="dash-widget" id="dw-spend" data-widget="spend">
-            <div class="dash-widget-handle" onmousedown="dashDragStart(event,'dw-spend')" ontouchstart="dashDragStart(event,'dw-spend')">
-              <span class="dash-widget-label">₹ Spending</span>
-              <span class="dash-widget-drag-icon">⠿</span>
-            </div>
-            <div class="dash-widget-body" id="home-spend-card"></div>
-          </div>
+
 
         </div>
       </div>
@@ -2250,14 +2275,13 @@ function renderHome(){
     qEl.style.display='block';
   }
   const pend=todos.filter(t=>!t.done).length;
-  const daySpend=spends.filter(s=>s.date===today).reduce((a,b)=>a+b.amount,0);
-  const monthSpend=spends.reduce((a,b)=>a+b.amount,0);
   renderVisionBoard();
   applyDashOrder();
+  const todayGoals=goals.filter(g=>Math.min(100,Math.round(g.current/g.target*100))>0).length;
   document.getElementById('home-stats').innerHTML=`
-    <div class="stat-card"><div class="stat-label">Habits today</div><div class="stat-value">${doneH}<span style="font-size:18px;color:var(--text3)">/${habits.length}</span></div><div class="stat-sub">${doneH===habits.length?'🌿 All done!':`${habits.length-doneH} remaining`}</div></div>
+    <div class="stat-card"><div class="stat-label">Habits today</div><div class="stat-value">${doneH}<span style="font-size:18px;color:var(--text3)">/${habits.length}</span></div><div class="stat-sub">${doneH===habits.length&&habits.length>0?'🌿 All done!':`${habits.length-doneH} remaining`}</div></div>
     <div class="stat-card"><div class="stat-label">Tasks pending</div><div class="stat-value">${pend}</div><div class="stat-sub">${todos.filter(t=>t.done).length} completed</div></div>
-    <div class="stat-card"><div class="stat-label">Spent today</div><div class="stat-value" style="font-size:24px">₹${fmt(daySpend)}</div><div class="stat-sub">₹${fmt(monthSpend)} this month</div></div>`;
+    <div class="stat-card"><div class="stat-label">Goals active</div><div class="stat-value">${goals.length}</div><div class="stat-sub">${todayGoals} in progress</div></div>`;
 
   document.getElementById('home-habits-card').innerHTML=`
     <div class="card-title">Today's habits</div>
@@ -2275,12 +2299,6 @@ function renderHome(){
     ${goals.length===0?'<div class="empty"><div class="empty-icon">🎯</div>No goals yet</div>':''}
     ${goals.slice(0,3).map((g,i)=>{const pct=Math.min(100,Math.round(g.current/g.target*100));return `<div style="margin-bottom:${i<goals.length-1?'14px':'0'}"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px"><span style="font-size:14px;font-weight:${i===0?'500':'400'}">${g.emoji} ${g.name}</span><span style="font-size:13px;font-weight:600;color:var(--sage)">${pct}%</span></div><div class="progress-wrap"><div class="progress-fill ${pct<30?'amber':''}" style="width:${pct}%"></div></div><div style="font-size:11px;color:var(--text3);margin-top:2px">${g.unit==='₹'?`₹${fmt(g.current)} of ₹${fmt(g.target)}`:`${g.current} of ${g.target} ${g.unit}`}</div></div>`;}).join('')}`;
 
-  const catTotals={};
-  rangeSpends.forEach(s=>{catTotals[s.cat]=(catTotals[s.cat]||0)+s.amount;});
-  document.getElementById('home-spend-card').innerHTML=`
-    <div class="card-title">Today's spending</div>
-    ${Object.keys(catTotals).length===0?'<div class="empty"><div class="empty-icon">₹</div>No spends today</div>':''}
-    ${Object.entries(catTotals).sort((a,b)=>b[1]-a[1]).map(([cat,amt])=>`<div class="cat-bar"><div style="width:28px;height:28px;border-radius:7px;background:${CAT_BG[cat]||'#F0F0F0'};display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0">${CAT_EMJ[cat]||'📦'}</div><span style="font-size:13px;flex:1">${cat}</span><span style="font-size:14px;font-weight:600">₹${fmt(amt)}</span></div>`).join('')}`;
 }
 
 // ─────────────────────────────────────────────
@@ -2397,8 +2415,15 @@ function renderHabits() {
       <div class="form-box">
         ${buildItemReminderHTML('habit_new', null)}
         <div style="margin-top:10px">
+          <!-- Icon picker -->
+          <div style="font-size:11px;color:var(--text3);font-weight:600;margin-bottom:6px">Choose an icon</div>
+          <div style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:10px">
+            ${CAT_ICON_PRESETS.map(ic=>`<button onclick="selectHabitAddIcon('${ic}',this)"
+              style="width:34px;height:34px;font-size:18px;border:2px solid var(--warm3);border-radius:8px;background:var(--warm);cursor:pointer;transition:all .1s"
+              class="habit-add-icon-btn">${ic}</button>`).join('')}
+          </div>
+          <input type="hidden" id="habit-emoji-in" value="⭐">
           <div class="input-row" style="margin-bottom:8px">
-            <input class="input" id="habit-emoji-in" value="⭐" style="width:64px;text-align:center;flex-shrink:0">
             <input class="input" id="habit-name-in" placeholder="Habit name...">
           </div>
 
@@ -2525,6 +2550,7 @@ function toggleHabit(id) {
   const h = habits.find(x=>String(x.id)===String(id)); if(!h) return;
   const today = todayKey();
   const wasMarked = h.history.includes(today);
+  const shouldPopup = !wasMarked; // show popup only when marking done
   if(wasMarked){
     h.history = h.history.filter(d=>d!==today);
     if(h.freq==='weekly') h.weekStreak=Math.max(0,(h.weekStreak||0)-1);
@@ -2533,13 +2559,14 @@ function toggleHabit(id) {
     h.history.push(today);
     if(h.freq==='weekly') h.weekStreak=(h.weekStreak||0)+1;
     else h.streak++;
-    showHabitPopup(true);
   }
-  persist(); renderHabits();
+  persist();
+  renderHabits(); // render FIRST so check state is visible immediately
+  if(shouldPopup) showHabitPopup(true); // popup appears AFTER render
 }
 function addHabit() {
   const name  = document.getElementById('habit-name-in').value.trim();
-  const emoji = document.getElementById('habit-emoji-in').value.trim() || '⭐';
+  const emoji = (document.getElementById('habit-emoji-in')?.value||'').trim() || '⭐';
   if(!name){ showToast('Please enter a habit name.'); return; }
   // Read frequency
   const freqWeekly = document.getElementById('habit-freq-weekly')?.checked;
@@ -3135,7 +3162,18 @@ function setSpendTab(tab,btn){
   // Sync sidebar sub-items
   document.querySelectorAll('.nav-sub-item').forEach(x=>x.classList.remove('active'));
   document.getElementById('nav-sub-'+tab)?.classList.add('active');
-  if(tab==='categories') renderCategoriesPage(); else renderSpending();
+  if(tab==='categories'){
+    renderCategoriesPage();
+    // Retry chart after DOM transition completes
+    setTimeout(()=>{
+      const canvas=document.getElementById('cat-page-pie');
+      const labels=[], amounts=[];
+      if(canvas && typeof Chart!=='undefined'){
+        const ch=Chart.getChart('cat-page-pie');
+        if(!ch) renderCategoriesPage(); // re-render if chart didn't mount
+      }
+    }, 400);
+  } else renderSpending();
   updateFab();
 }
 
@@ -6347,21 +6385,34 @@ function renderCategoriesPage(){
       <div id="cat-page-add-form" style="margin-top:8px"></div>
     </div>`;
 
-  // Render pie chart — use requestAnimationFrame to ensure DOM is painted
+  // Render pie chart with retry until container is visible
   if(catSorted.length > 0){
     const labels  = catSorted.map(([cat]) => catEmoji(cat)+' '+cat);
     const amounts = catSorted.map(([,amt]) => Math.round(amt));
+    let _pieAttempts = 0;
     const _doPie = () => {
-      const wrap = document.getElementById('cat-pie-wrap');
+      _pieAttempts++;
+      const wrap   = document.getElementById('cat-pie-wrap');
       const canvas = document.getElementById('cat-page-pie');
-      if(!canvas || !wrap || typeof Chart==='undefined') return;
-      // Force dimensions if not set
-      if(wrap.offsetWidth === 0) { setTimeout(_doPie, 100); return; }
-      canvas.width  = wrap.offsetWidth;
+      if(!canvas || !wrap || typeof Chart === 'undefined'){
+        if(_pieAttempts < 20) setTimeout(_doPie, 100); return;
+      }
+      // Force explicit pixel dimensions — never rely on CSS for canvas sizing
+      const parentW = wrap.closest('.card')?.offsetWidth || wrap.parentElement?.offsetWidth || 360;
+      const w = Math.max(parentW - 32, 200);
+      wrap.style.width  = w + 'px';
+      wrap.style.height = '260px';
+      canvas.width  = w;
       canvas.height = 260;
+      // Destroy old chart instance if any
+      const existing = Chart.getChart('cat-page-pie');
+      if(existing) existing.destroy();
       renderDonutChart('cat-page-pie', labels, amounts);
     };
-    requestAnimationFrame(()=>setTimeout(_doPie, 50));
+    // Try immediately, then after paint, then retry
+    _doPie();
+    setTimeout(_doPie, 80);
+    setTimeout(_doPie, 300);
   }
 }
 
@@ -6615,8 +6666,13 @@ function showHabitPopup(isMarking){
      <div class="habit-popup-msg">${m.msg}</div>
      <div class="habit-popup-sub">${m.sub}</div>
      <button class="habit-popup-ok" style="${da.style}border:none;border-radius:16px;padding:12px 28px;font-size:15px;font-weight:700;cursor:pointer;font-family:'DM Sans',sans-serif;width:100%;margin-top:4px;letter-spacing:.02em"
-       onclick="document.getElementById('habit-popup-overlay').classList.remove('show')">${da.label}</button>`;
-  overlay.classList.add('show');
+       onclick="document.getElementById('habit-popup-overlay').classList.remove('show');renderHabits();if(typeof renderHome==='function')renderHome();">${da.label}</button>`;
+  // Show popup after a short delay so renderHabits() can paint first
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      overlay.classList.add('show');
+    });
+  });
 }
 
 // ── Drag and drop ──────────────────────────────────────────────────────────
@@ -6680,6 +6736,16 @@ function openHabitEditModal(id){
     </div>
   </div>`;
   document.body.appendChild(modal);
+}
+
+function selectHabitAddIcon(icon, btn){
+  // For the inline add form (not modal)
+  document.querySelectorAll('.habit-add-icon-btn').forEach(b=>{
+    b.style.borderColor='var(--warm3)'; b.style.background='var(--warm)'; b.style.transform='';
+  });
+  if(btn){ btn.style.borderColor='var(--sage)'; btn.style.background='var(--sage-light)'; btn.style.transform='scale(1.15)'; }
+  const inp = document.getElementById('habit-emoji-in');
+  if(inp) inp.value = icon;
 }
 
 function selectHabitIcon(icon, btn){
@@ -6788,7 +6854,7 @@ function renderVisionBoard(){
       <div class="vb-card-resizer sw" onmousedown="vbCardResize(event,'${card.id}','sw')" ontouchstart="vbCardResize(event,'${card.id}','sw')"></div>
       <div class="vb-card-resizer ne" onmousedown="vbCardResize(event,'${card.id}','ne')" ontouchstart="vbCardResize(event,'${card.id}','ne')"></div>
       <div class="vb-card-resizer nw" onmousedown="vbCardResize(event,'${card.id}','nw')" ontouchstart="vbCardResize(event,'${card.id}','nw')"></div>
-      <div style="position:absolute;inset:0;cursor:grab" onmousedown="vbCardDrag(event,'${card.id}')" ontouchstart="vbCardDrag(event,'${card.id}')"></div>
+      <div class="vb-drag-overlay" onmousedown="vbCardDrag(event,'${card.id}')" ontouchstart="vbCardDrag(event,'${card.id}')"></div>
     </div>`;
   }).join('');
 
@@ -7169,7 +7235,7 @@ function _saveVB(){ _saveVBLayout(); }
 // ══════════════════════════════════════════════════════════════════════════
 // DRAGGABLE HOME DASHBOARD
 // ══════════════════════════════════════════════════════════════════════════
-let _dashOrder = load('lf3_dash_order', ['dw-vision','dw-habits','dw-todos','dw-goals','dw-spend']);
+let _dashOrder = load('lf3_dash_order', ['dw-vision','dw-habits','dw-todos','dw-goals']);
 let _dashDragEl = null;
 let _dashDragOver = null;
 let _vbBoardSize = load('lf3_vb_size', 'compact');
@@ -7264,10 +7330,11 @@ function dashDragStart(e, widgetId){
 // VB CARD STYLE SYSTEM
 // ══════════════════════════════════════════════════════════════════════════
 const VB_CARD_STYLES = [
-  {id:'card',   label:'🗂 Card',       desc:'Clean card with coloured top strip'},
-  {id:'sticky', label:'🟡 Sticky',     desc:'Yellow sticky note with side accent'},
-  {id:'pinned', label:'📌 Pinned',     desc:'Paper note with push pin on top'},
-  {id:'tape',   label:'📎 Taped',      desc:'White paper held by tape at the top'},
+  {id:'card',   label:'✦ Clean',      desc:'Minimalist card with accent strip'},
+  {id:'glass',  label:'🪟 Glass',      desc:'Frosted glass morphism effect'},
+  {id:'sticky', label:'📝 Sticky',    desc:'Neon yellow sticky note with folded corner'},
+  {id:'pinned', label:'📌 Pinned',    desc:'Textured paper with push-pin emoji'},
+  {id:'tape',   label:'📷 Polaroid',  desc:'Photo-frame style with caption space'},
 ];
 let _vbSelStyle = 'card';
 
