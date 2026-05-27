@@ -2279,9 +2279,21 @@ function renderHome(){
   applyDashOrder();
   const todayGoals=goals.filter(g=>Math.min(100,Math.round(g.current/g.target*100))>0).length;
   document.getElementById('home-stats').innerHTML=`
-    <div class="stat-card"><div class="stat-label">Habits today</div><div class="stat-value">${doneH}<span style="font-size:18px;color:var(--text3)">/${habits.length}</span></div><div class="stat-sub">${doneH===habits.length&&habits.length>0?'🌿 All done!':`${habits.length-doneH} remaining`}</div></div>
-    <div class="stat-card"><div class="stat-label">Tasks pending</div><div class="stat-value">${pend}</div><div class="stat-sub">${todos.filter(t=>t.done).length} completed</div></div>
-    <div class="stat-card"><div class="stat-label">Goals active</div><div class="stat-value">${goals.length}</div><div class="stat-sub">${todayGoals} in progress</div></div>`;
+    <div class="stat-card" onclick="navigate('habits',document.getElementById('nav-habits'))" style="cursor:pointer;transition:transform .15s,box-shadow .15s" onmouseover="this.style.transform='translateY(-2px)';this.style.boxShadow='var(--shadow-lg,0 4px 20px rgba(0,0,0,.12))'" onmouseout="this.style.transform='';this.style.boxShadow=''">
+      <div class="stat-label">Habits today 🔁</div>
+      <div class="stat-value">${doneH}<span style="font-size:18px;color:var(--text3)">/${habits.length}</span></div>
+      <div class="stat-sub">${doneH===habits.length&&habits.length>0?'🌿 All done!':`${habits.length-doneH} remaining`}</div>
+    </div>
+    <div class="stat-card" onclick="navigate('todos',document.getElementById('nav-todos'))" style="cursor:pointer;transition:transform .15s,box-shadow .15s" onmouseover="this.style.transform='translateY(-2px)';this.style.boxShadow='var(--shadow-lg,0 4px 20px rgba(0,0,0,.12))'" onmouseout="this.style.transform='';this.style.boxShadow=''">
+      <div class="stat-label">Tasks pending ✅</div>
+      <div class="stat-value">${pend}</div>
+      <div class="stat-sub">${todos.filter(t=>t.done).length} completed</div>
+    </div>
+    <div class="stat-card" onclick="navigate('goals',document.getElementById('nav-goals'))" style="cursor:pointer;transition:transform .15s,box-shadow .15s" onmouseover="this.style.transform='translateY(-2px)';this.style.boxShadow='var(--shadow-lg,0 4px 20px rgba(0,0,0,.12))'" onmouseout="this.style.transform='';this.style.boxShadow=''">
+      <div class="stat-label">Goals active 🎯</div>
+      <div class="stat-value">${goals.length}</div>
+      <div class="stat-sub">${todayGoals} in progress</div>
+    </div>`;
 
   document.getElementById('home-habits-card').innerHTML=`
     <div class="card-title">Today's habits</div>
