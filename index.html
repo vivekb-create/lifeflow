@@ -1878,7 +1878,10 @@ onAuthStateChanged(auth, async (user) => {
     <div class="notif-drawer-head">
       <span style="font-size:20px">🔔</span>
       <div class="notif-drawer-title">Notifications</div>
-      <button class="notif-mark-all" onclick="markAllNotifsRead()">Mark all read</button>
+      <div style="display:flex;gap:10px;align-items:center">
+        <button class="notif-mark-all" onclick="markAllNotifsRead()">Mark all read</button>
+        <button class="notif-mark-all" style="color:var(--red,#C0392B)" onclick="clearAllNotifs()">Clear all</button>
+      </div>
       <button class="btn btn-ghost btn-sm" onclick="closeNotifDrawer()">✕</button>
     </div>
     <div class="notif-tabs">
@@ -4249,8 +4252,8 @@ function openQuickAdd(){
   sheet.dataset.qaListId   = qaListId   || '';
 
   // Populate category chips
-  const cats = Object.keys(allCats()).slice(0,8);
-  quickAddCat = cats[0];
+  const cats = Object.keys(allCats());
+  quickAddCat = quickAddCat && allCats()[quickAddCat] ? quickAddCat : cats[0];
   const catsEl = document.getElementById('qa-cats');
   if(catsEl) catsEl.innerHTML = cats.map(cat=>
     `<button class="quick-cat-chip ${cat===quickAddCat?'sel':''}"
@@ -4355,7 +4358,8 @@ async function submitQuickAdd(){
     const members = grp.members || ['me'];
     const share   = Math.round((amount/members.length)*100)/100;
     const splitMembers = members.map(m=>({friendId:m, share, paid:m===paidBy}));
-    const newSplit = {id:uid(), groupId, desc, totalAmount:amount,
+    const spFabCat = document.getElementById('qa-paidby') ? (quickAddCat||'Other') : 'Other';
+    const newSplit = {id:uid(), groupId, cat:spFabCat, desc, totalAmount:amount,
                       paidBy, date:dateKey, members:splitMembers, splitType:'equal'};
     splits.push(newSplit);
     persist();
@@ -4992,7 +4996,7 @@ function closeSharedListDetail(){
 function openAddSharedExpenseForm(listId){
   const el = document.getElementById('shared-expense-form-'+listId);
   if(!el) return;
-  const catNames = Object.keys(allCats()).slice(0,8);
+  const catNames = Object.keys(allCats()); // all including custom // all categories including custom
   const todayVal = (()=>{const d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');})();
   el.innerHTML = `<div class="form-box">
     <select class="input" id="sl-cat-${listId}">
@@ -5225,7 +5229,7 @@ function editSharedCsvRow(listId, idx){
   const r = rows[idx];
   const rowEl = document.getElementById('shared-csv-row-'+listId+'-'+idx);
   if(!rowEl) return;
-  const catNames = Object.keys(allCats());
+  const catNames = Object.keys(allCats()); // all including custom
   const todayVal = (()=>{const d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');})();
   // Convert dateKey to YYYY-MM-DD for the date input
   const dateInput = r.dateKey ? r.dateKey.split('-').map((p,i)=>p.padStart(i===0?4:2,'0')).join('-') : todayVal;
@@ -5363,7 +5367,7 @@ function editSharedExpenseRow(listId, expId){
   const lst = sharedExpenseLists.find(l=>l.id===listId); if(!lst) return;
   const exp = (lst.expenses||[]).find(e=>e.id===expId); if(!exp) return;
   const rowEl = document.getElementById('sl-exp-row-'+listId+'-'+expId); if(!rowEl) return;
-  const catNames = Object.keys(allCats());
+  const catNames = Object.keys(allCats()); // all including custom
   // Convert dateKey to YYYY-MM-DD
   const dp = (exp.date||todayKey()).split('-');
   const dateVal = `${dp[0].padStart(4,'0')}-${(dp[1]||1).toString().padStart(2,'0')}-${(dp[2]||1).toString().padStart(2,'0')}`;
@@ -5506,6 +5510,23 @@ function markAllNotifsRead(){
   saveNotifs(); updateNotifBadge(); renderNotifList();
 }
 
+function clearAllNotifs(){
+  if(!confirm('Clear all notifications? This cannot be undone.')) return;
+  notifications = [];
+  localStorage.setItem('lf3_notifs', '[]');
+  // Delete from Firestore too
+  if(window._saveToFirestore) window._saveToFirestore();
+  updateNotifBadge(); renderNotifList();
+  showToast('Notifications cleared.');
+}
+
+function deleteNotif(id){
+  notifications = notifications.filter(n=>n.id!==id);
+  localStorage.setItem('lf3_notifs', JSON.stringify(notifications));
+  if(window._saveToFirestore) window._saveToFirestore();
+  updateNotifBadge(); renderNotifList();
+}
+
 // ── Render notification list ─────────────────────────────────────────────────
 function renderNotifList(){
   const el = document.getElementById('notif-list');
@@ -5537,7 +5558,11 @@ function renderNotifList(){
         <div class="notif-body-text">${n.body}</div>
         <div class="notif-time">${time}</div>
       </div>
-      ${!n.read?'<div class="notif-unread-dot"></div>':''}
+      <div style="display:flex;flex-direction:column;align-items:center;gap:6px;flex-shrink:0;margin-left:4px">
+        ${!n.read?'<div class="notif-unread-dot"></div>':''}
+        <button onclick="event.stopPropagation();deleteNotif('${n.id}')"
+          style="background:none;border:none;cursor:pointer;font-size:14px;color:#C0C0BC;padding:2px 4px;line-height:1" title="Delete">×</button>
+      </div>
     </div>`;
   }).join('');
 }
@@ -7473,7 +7498,7 @@ function openGroup(id){openGroupId=id;renderGroupDetail(id);}
 function editGroupSplitRow(splitId, gid){
   const sp = splits.find(s=>s.id===splitId); if(!sp) return;
   const rowEl = document.getElementById('grp-split-row-'+splitId); if(!rowEl) return;
-  const catNames = Object.keys(allCats());
+  const catNames = Object.keys(allCats()); // all including custom
   const dp = (sp.date||todayKey()).split('-');
   const dateVal = `${(dp[0]||new Date().getFullYear()).toString().padStart(4,'0')}-${(dp[1]||1).toString().padStart(2,'0')}-${(dp[2]||1).toString().padStart(2,'0')}`;
   const grp = groups.find(g=>g.id===gid);
@@ -7865,6 +7890,9 @@ function openSplitModal(gid){
     <button class="modal-close" onclick="closeSplitModal()">×</button>
     <div class="modal-title">Add Expense</div>
     <input class="input" id="sp-desc" placeholder="What was this for?">
+    <select class="input" id="sp-cat">
+      ${Object.keys(allCats()).map(cat=>`<option value="${cat}">${catEmoji(cat)} ${cat}</option>`).join('')}
+    </select>
     <input class="input" id="sp-amount" type="number" placeholder="Total amount (₹)" min="0" oninput="renderSplitRows(${gid})">
     <div style="margin-bottom:8px"><label style="font-size:12px;color:var(--text3);display:block;margin-bottom:4px">Paid by</label>
       <select class="input" id="sp-paidby" style="margin-bottom:0">${g.members.map(mid=>`<option value="${mid}">${mName(mid)}</option>`).join('')}</select></div>
@@ -7923,7 +7951,8 @@ async function addSplit(gid){
       members.push({friendId:fid,share:Math.round(total*pct/100*100)/100,paid:String(fid)===String(paidBy)});
     });
   }
-  const newSplit={id:uid(),groupId:gid,desc,totalAmount:total,paidBy,date:todayKey(),members,splitType:type};
+  const spCat2 = document.getElementById('sp-cat')?.value || 'Other';
+  const newSplit={id:uid(),groupId:gid,cat:spCat2,desc,totalAmount:total,paidBy,date:todayKey(),members,splitType:type};
   splits.push(newSplit);
   persist(); closeSplitModal(); renderGroupDetail(gid);
   const grpName = groups.find(x=>x.id===gid)?.name || 'Group';
