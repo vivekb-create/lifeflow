@@ -261,6 +261,8 @@ window._saveToFirestore = async function() {
       sharedTodoLists:    (typeof sharedTodoLists    !== 'undefined') ? sharedTodoLists    : [],
       sharedExpenseLists: (typeof sharedExpenseLists !== 'undefined') ? sharedExpenseLists : [],
       visionCards:        (typeof visionCards        !== 'undefined') ? visionCards        : [],
+      plannerPersons:     (typeof plannerPersons     !== 'undefined') ? plannerPersons     : [],
+      plannerBlocks:      (typeof plannerBlocks      !== 'undefined') ? plannerBlocks      : [],
       reminders:          (typeof reminders          !== 'undefined') ? reminders          : [],
       schedules:          (typeof schedules          !== 'undefined') ? schedules          : [],
       notifications:      (typeof notifications      !== 'undefined') ? notifications.slice(0,50) : [],
@@ -1441,6 +1443,56 @@ onAuthStateChanged(auth, async (user) => {
     background:var(--warm2);cursor:pointer;font-size:12px;transition:all .15s;white-space:nowrap;}
   .vb-style-chip.sel{border-color:var(--sage);background:var(--sage-light);}
 
+  /* ══════════════════════════════════════════════════════
+     DAY PLANNER
+  ══════════════════════════════════════════════════════ */
+  .planner-person-tabs{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;align-items:center;}
+  .planner-person-tab{display:flex;align-items:center;gap:7px;padding:7px 14px;border-radius:20px;
+    border:2px solid var(--warm3);background:var(--warm2);cursor:pointer;
+    font-size:13px;font-weight:500;color:var(--text2);transition:all .15s;white-space:nowrap;}
+  .planner-person-tab.active{color:white;border-color:transparent;}
+  .planner-person-tab .person-init{width:24px;height:24px;border-radius:50%;display:flex;
+    align-items:center;justify-content:center;font-size:11px;font-weight:700;color:white;flex-shrink:0;}
+  .planner-day-nav{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;}
+  .planner-day-label{font-size:16px;font-weight:600;color:var(--text);font-family:'Cormorant Garamond',serif;}
+  .planner-day-sub{font-size:11px;color:var(--text3);text-align:center;}
+  .planner-timeline{position:relative;padding-left:52px;min-height:400px;}
+  .planner-hour-row{position:relative;height:56px;border-top:1px solid var(--warm2);}
+  .planner-hour-label{position:absolute;left:-52px;top:-8px;font-size:10px;color:var(--text3);
+    width:44px;text-align:right;font-weight:500;}
+  .planner-hour-row.now-row::before{
+    content:'';position:absolute;left:-8px;right:0;top:var(--now-pct);
+    height:2px;background:var(--sage);z-index:3;
+  }
+  .planner-hour-row.now-row::after{
+    content:'●';position:absolute;left:-12px;color:var(--sage);font-size:10px;
+    top:calc(var(--now-pct) - 6px);z-index:3;
+  }
+  .planner-block{position:absolute;left:4px;right:4px;border-radius:8px;
+    padding:5px 8px;cursor:pointer;overflow:hidden;z-index:2;
+    box-shadow:0 2px 6px rgba(0,0,0,.10);transition:transform .1s,box-shadow .1s;}
+  .planner-block:hover{transform:translateY(-1px);box-shadow:0 4px 12px rgba(0,0,0,.15);}
+  .planner-block-title{font-size:12px;font-weight:600;color:white;
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .planner-block-time{font-size:10px;color:rgba(255,255,255,.8);margin-top:1px;}
+  .planner-block-rem{position:absolute;right:5px;top:5px;font-size:11px;opacity:.8;}
+  .planner-add-btn{
+    position:absolute;left:4px;right:4px;border-radius:8px;
+    border:1.5px dashed var(--warm3);background:transparent;
+    cursor:pointer;color:var(--text3);font-size:11px;
+    transition:all .15s;display:flex;align-items:center;justify-content:center;gap:4px;
+    z-index:1;
+  }
+  .planner-add-btn:hover{background:var(--warm2);border-color:var(--sage);color:var(--sage);}
+  .planner-week-strip{display:flex;gap:4px;margin-bottom:14px;overflow-x:auto;padding-bottom:4px;}
+  .planner-day-chip{min-width:44px;padding:6px 8px;border-radius:10px;text-align:center;
+    border:1.5px solid var(--warm3);background:var(--warm2);cursor:pointer;
+    font-size:11px;font-weight:500;color:var(--text2);transition:all .15s;flex-shrink:0;}
+  .planner-day-chip.today{border-color:var(--sage-mid);background:var(--sage-light);}
+  .planner-day-chip.active{background:var(--sage);color:white;border-color:var(--sage);}
+  .planner-empty{display:flex;flex-direction:column;align-items:center;justify-content:center;
+    padding:40px 20px;color:var(--text3);font-size:13px;text-align:center;gap:8px;}
+
 </style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 </head>
@@ -1486,6 +1538,7 @@ onAuthStateChanged(auth, async (user) => {
       <button class="nav-item" id="nav-habits" onclick="navigate('habits',this)"><span class="nav-icon">🔁</span> Habits</button>
       <button class="nav-item" id="nav-goals" onclick="navigate('goals',this)"><span class="nav-icon">🎯</span> Goals</button>
       <button class="nav-item" id="nav-todos" onclick="navigate('todos',this)"><span class="nav-icon">✅</span> To-Do</button>
+      <button class="nav-item" id="nav-planner" onclick="navigate('planner',this)"><span class="nav-icon">📅</span> Day Planner</button>
       <!-- Spending collapsible tree -->
       <button class="nav-tree-parent" id="nav-spending-parent" onclick="toggleSpendingTree(this)">
         <span class="nav-icon">₹</span>
@@ -1633,6 +1686,18 @@ onAuthStateChanged(auth, async (user) => {
           <div id="goals-list"></div>
           <div id="goals-form"></div>
         </div>
+      </div>
+
+      <!-- DAY PLANNER -->
+      <div class="page" id="page-planner">
+        <div class="section-head">
+          <div>
+            <div class="section-title">📅 Day Planner</div>
+            <div style="font-size:12px;color:var(--text3);margin-top:2px">Daily schedules for you and your family</div>
+          </div>
+          <button class="btn btn-primary btn-sm" onclick="openPlannerPersonForm()">+ Add</button>
+        </div>
+        <div id="planner-content"></div>
       </div>
 
       <!-- TODOS -->
@@ -2243,6 +2308,7 @@ function renderPage(p){
   if(p==='spending')renderSpending();
   if(p==='journal')renderJournalPage();
   if(p==='reminders')renderRemindersPage();
+  if(p==='planner')  renderPlannerPage();
 }
 function renderAll(){renderPage(currentPage);}
 
@@ -3121,7 +3187,12 @@ function unshareList(shareId){
 const XKEYS={customCats:'lf3_custom_cats',friends:'lf3_friends',friendReqs:'lf3_friend_reqs',groups:'lf3_groups',splits:'lf3_splits'};
 const BUILTIN_CATS={Food:{emoji:'🍽️',color:'#6B8F71',bg:'#EAF0EB'},Travel:{emoji:'🚗',color:'#B8845A',bg:'#F5EAE0'},Shopping:{emoji:'🛍️',color:'#5A78B8',bg:'#E5EAF5'},Health:{emoji:'💊',color:'#B85A4A',bg:'#F5E8E5'},Bills:{emoji:'📄',color:'#8A6BC4',bg:'#EDE5F5'},Entertainment:{emoji:'🎬',color:'#5A9898',bg:'#E5F0F0'},Other:{emoji:'📦',color:'#9C9C98',bg:'#F0F0F0'}};
 let _customCats=load(XKEYS.customCats,[]);
-let sharedExpenseLists = load('lf3_shared_expense_lists', []); // [{id,name,emoji,memberIds,memberUids,expenses:[]}]
+let sharedExpenseLists = load('lf3_shared_expense_lists', []);
+// Day Planner: persons + schedule blocks
+// person: {id, name, avatar, color, isMe}
+// block:  {id, personId, day, startH, startM, endH, endM, title, icon, reminder}
+let plannerPersons = load('lf3_planner_persons', []);
+let plannerBlocks  = load('lf3_planner_blocks',  []); // [{id,name,emoji,memberIds,memberUids,expenses:[]}]
 const _slDateMode = {};   // listId → 'all'|'month'|'last_month'|'week'|'custom'
 const _slDateFrom = {};   // listId → YYYY-MM-DD string
 const _slDateTo   = {};   // listId → YYYY-MM-DD string
@@ -7516,6 +7587,370 @@ function _copyReminderDetails(reminderId){
   }
 }
 
+
+// ══════════════════════════════════════════════════════════════════════════
+// DAY PLANNER
+// ══════════════════════════════════════════════════════════════════════════
+const PERSON_COLORS = ['#3D5C42','#B8845A','#5A78B8','#8A6BC4','#B85A4A','#3D8C6A','#C4944A'];
+const BLOCK_ICONS   = ['🏋️','📚','🍳','💻','🧘','🚗','🎮','😴','🍽️','📞','✍️','🎵','🏃','🛒','💊','🧹'];
+let _plannerPersonId = null;   // currently selected person
+let _plannerDate     = null;   // currently viewed date (YYYY-MM-DD)
+let _plannerEditBlockId = null;
+
+function _plannerToday(){
+  const d=new Date();
+  return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+}
+function _plannerDateLabel(dateStr){
+  const d=new Date(dateStr+'T00:00:00');
+  const today=_plannerToday();
+  const tom=new Date(); tom.setDate(tom.getDate()+1);
+  const tomStr=tom.getFullYear()+'-'+String(tom.getMonth()+1).padStart(2,'0')+'-'+String(tom.getDate()).padStart(2,'0');
+  if(dateStr===today) return {main:'Today',sub:d.toLocaleDateString('en-IN',{weekday:'long',month:'long',day:'numeric'})};
+  if(dateStr===tomStr) return {main:'Tomorrow',sub:d.toLocaleDateString('en-IN',{weekday:'long',month:'long',day:'numeric'})};
+  return {main:d.toLocaleDateString('en-IN',{weekday:'long'}),sub:d.toLocaleDateString('en-IN',{day:'numeric',month:'long'})};
+}
+function _plannerSave(){
+  localStorage.setItem('lf3_planner_persons', JSON.stringify(plannerPersons));
+  localStorage.setItem('lf3_planner_blocks',  JSON.stringify(plannerBlocks));
+  if(window._saveToFirestore) window._saveToFirestore();
+}
+
+// ── RENDER ─────────────────────────────────────────────────────────────────
+function renderPlannerPage(){
+  if(!_plannerDate) _plannerDate = _plannerToday();
+
+  // Ensure "Me" person exists
+  const u = window.currentUser||currentUser;
+  if(plannerPersons.length===0 && u){
+    plannerPersons.push({id:'me',name:u.firstName||u.name||'Me',color:PERSON_COLORS[0],isMe:true});
+    _plannerSave();
+  }
+  if(!_plannerPersonId) _plannerPersonId = plannerPersons[0]?.id || 'me';
+
+  const el = document.getElementById('planner-content');
+  if(!el) return;
+
+  // Build 7-day strip centred on today
+  const today = _plannerToday();
+  const days=[];
+  for(let i=-1;i<=5;i++){
+    const d=new Date(today+'T00:00:00'); d.setDate(d.getDate()+i);
+    const ds=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+    days.push({ds, label:d.toLocaleDateString('en-IN',{weekday:'short'}), day:d.getDate()});
+  }
+
+  const person = plannerPersons.find(p=>p.id===_plannerPersonId)||plannerPersons[0];
+  const dateInfo = _plannerDateLabel(_plannerDate);
+
+  el.innerHTML = `
+    <!-- Person tabs -->
+    <div class="planner-person-tabs">
+      ${plannerPersons.map(p=>`
+        <button class="planner-person-tab ${_plannerPersonId===p.id?'active':''}"
+          onclick="_plannerPersonId='${p.id}';renderPlannerPage()"
+          style="${_plannerPersonId===p.id?'background:'+p.color+';border-color:'+p.color:''}" >
+          <div class="person-init" style="background:${p.color}">${p.name[0].toUpperCase()}</div>
+          ${p.name}
+        </button>`).join('')}
+      <button class="planner-person-tab" onclick="openAddPlannerPerson()"
+        style="border-style:dashed;font-size:12px;padding:6px 10px">+ Person</button>
+    </div>
+
+    <!-- 7-day strip -->
+    <div class="planner-week-strip">
+      ${days.map(d=>`<button class="planner-day-chip ${d.ds===today?'today':''} ${d.ds===_plannerDate?'active':''}"
+        onclick="_plannerDate='${d.ds}';renderPlannerPage()">
+        <div style="font-size:9px;text-transform:uppercase;letter-spacing:.04em">${d.label}</div>
+        <div style="font-size:16px;font-weight:600;margin-top:1px">${d.day}</div>
+      </button>`).join('')}
+    </div>
+
+    <!-- Day heading -->
+    <div class="planner-day-nav">
+      <button class="btn btn-ghost btn-sm" onclick="_plannerNavDay(-1)">← Prev</button>
+      <div style="text-align:center">
+        <div class="planner-day-label">${dateInfo.main}</div>
+        <div class="planner-day-sub">${dateInfo.sub}</div>
+      </div>
+      <button class="btn btn-ghost btn-sm" onclick="_plannerNavDay(1)">Next →</button>
+    </div>
+
+    <!-- Timeline -->
+    <div class="card" style="padding:14px 14px 14px 60px;overflow:visible">
+      <div class="planner-timeline" id="planner-timeline-inner"></div>
+    </div>
+    <div id="planner-block-form"></div>
+  `;
+  _renderTimeline();
+}
+
+function _plannerNavDay(delta){
+  const d=new Date(_plannerDate+'T00:00:00');
+  d.setDate(d.getDate()+delta);
+  _plannerDate=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+  renderPlannerPage();
+}
+
+function _renderTimeline(){
+  const tl = document.getElementById('planner-timeline-inner');
+  if(!tl) return;
+  const blocks = plannerBlocks.filter(b=>b.personId===_plannerPersonId && b.date===_plannerDate);
+  const now = new Date();
+  const nowMins = now.getHours()*60+now.getMinutes();
+  const isToday = _plannerDate===_plannerToday();
+  const person  = plannerPersons.find(p=>p.id===_plannerPersonId)||{color:'#3D5C42'};
+  const HOUR_H  = 56; // px per hour
+
+  let html = '';
+  for(let h=5; h<=23; h++){
+    const rowBlocks = blocks.filter(b=>b.startH===h);
+    const isNowRow  = isToday && now.getHours()===h;
+    const nowPct    = isNowRow ? Math.round((now.getMinutes()/60)*100)+'%' : '0%';
+    html += `<div class="planner-hour-row ${isNowRow?'now-row':''}" style="--now-pct:${nowPct}"
+      id="planner-row-${h}">
+      <div class="planner-hour-label">${h===12?'12 PM':h<12?h+' AM':(h-12)+' PM'}</div>
+      ${rowBlocks.map(b=>{
+        const top    = Math.round((b.startM/60)*HOUR_H);
+        const durMin = (b.endH*60+b.endM)-(b.startH*60+b.startM);
+        const height = Math.max(24, Math.round((durMin/60)*HOUR_H)-2);
+        return `<div class="planner-block" id="pb-${b.id}"
+          style="top:${top}px;height:${height}px;background:${person.color}"
+          onclick="openEditPlannerBlock('${b.id}')">
+          <div class="planner-block-title">${b.icon||''} ${b.title}</div>
+          ${height>30?`<div class="planner-block-time">${_fmtT(b.startH,b.startM)}–${_fmtT(b.endH,b.endM)}</div>`:''}
+          ${b.reminder?'<div class="planner-block-rem">⏰</div>':''}
+        </div>`;
+      }).join('')}
+      <!-- tap empty space to add -->
+      ${rowBlocks.length===0?`<div class="planner-add-btn" style="height:46px;margin-top:5px"
+        onclick="openAddPlannerBlock(${h})">+ Add ${h<12?h+' AM':h===12?'12 PM':(h-12)+' PM'}</div>`:''}
+    </div>`;
+  }
+  tl.innerHTML = html;
+
+  // Scroll to current hour or 7 AM
+  const scrollTo = isToday ? Math.max(0,(now.getHours()-1)*HOUR_H) : 2*HOUR_H;
+  tl.closest('.card')?.scrollTo?.(0, scrollTo);
+}
+
+function _fmtT(h,m){
+  const ampm=h<12?'AM':'PM'; const hh=h===0?12:h>12?h-12:h;
+  return hh+':'+(m<10?'0'+m:m)+' '+ampm;
+}
+
+// ── ADD / EDIT BLOCK ────────────────────────────────────────────────────────
+function openAddPlannerBlock(startHour){
+  _plannerEditBlockId = null;
+  _showBlockForm({startH:startHour||8, startM:0, endH:(startHour||8)+1, endM:0, title:'', icon:'', reminder:false});
+}
+function openEditPlannerBlock(id){
+  _plannerEditBlockId = id;
+  const b = plannerBlocks.find(x=>x.id===id);
+  if(b) _showBlockForm(b);
+}
+
+function _showBlockForm(data){
+  const formEl = document.getElementById('planner-block-form');
+  if(!formEl) return;
+  const isEdit = !!_plannerEditBlockId;
+  formEl.innerHTML = `<div class="card" style="margin-top:12px">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+      <div class="card-title" style="margin-bottom:0">${isEdit?'Edit':'Add'} Block</div>
+      ${isEdit?`<button class="btn btn-ghost btn-sm" style="color:var(--red)" onclick="deletePlannerBlock('${_plannerEditBlockId}')">Delete</button>`:''}
+    </div>
+
+    <!-- Icon row -->
+    <div style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:10px">
+      ${BLOCK_ICONS.map(ic=>`<button onclick="selectPlannerIcon('${ic}',this)"
+        style="width:34px;height:34px;font-size:18px;border:2px solid ${data.icon===ic?'var(--sage)':'var(--warm3)'};
+        border-radius:8px;background:${data.icon===ic?'var(--sage-light)':'var(--warm)'};cursor:pointer"
+        class="planner-icon-btn">${ic}</button>`).join('')}
+    </div>
+    <input type="hidden" id="pb-icon" value="${data.icon||''}">
+
+    <!-- Title -->
+    <input class="input" id="pb-title" placeholder="e.g. Go to gym, Study, Breakfast..." value="${data.title}">
+
+    <!-- Time row -->
+    <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px;flex-wrap:wrap">
+      <div style="flex:1;min-width:0">
+        <label style="font-size:11px;color:var(--text3);display:block;margin-bottom:4px">Start time</label>
+        <input class="input" type="time" id="pb-start"
+          value="${String(data.startH).padStart(2,'0')}:${String(data.startM).padStart(2,'0')}"
+          style="margin-bottom:0" onchange="pbAutoEndTime()">
+      </div>
+      <div style="font-size:18px;color:var(--text3);margin-top:18px">→</div>
+      <div style="flex:1;min-width:0">
+        <label style="font-size:11px;color:var(--text3);display:block;margin-bottom:4px">End time</label>
+        <input class="input" type="time" id="pb-end"
+          value="${String(data.endH).padStart(2,'0')}:${String(data.endM).padStart(2,'0')}"
+          style="margin-bottom:0">
+      </div>
+    </div>
+
+    <!-- Reminder toggle -->
+    <label style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:var(--warm);
+      border-radius:var(--r2);cursor:pointer;margin-bottom:12px">
+      <input type="checkbox" id="pb-reminder" ${data.reminder?'checked':''} style="accent-color:var(--sage);width:16px;height:16px">
+      <div>
+        <div style="font-size:13px;font-weight:500">⏰ Set reminder</div>
+        <div style="font-size:11px;color:var(--text3);margin-top:1px">Remind me at the start time</div>
+      </div>
+    </label>
+
+    <!-- Apple Reminders hint -->
+    ${isAppleDevice()?`<div style="background:linear-gradient(135deg,rgba(28,28,30,.06),rgba(28,28,30,.02));border:1px solid rgba(0,0,0,.08);border-radius:var(--r2);padding:8px 12px;margin-bottom:12px;font-size:11px;color:var(--text3)">
+      🍎 On save, you can add this to Apple Reminders</div>`:''}
+
+    <div style="display:flex;gap:8px">
+      <button class="btn btn-primary" style="flex:1" onclick="savePlannerBlock()">
+        ${isEdit?'Update':'Add to Schedule'}</button>
+      <button class="btn btn-ghost" onclick="document.getElementById('planner-block-form').innerHTML=''">Cancel</button>
+    </div>
+  </div>`;
+  // Scroll to form
+  setTimeout(()=>formEl.scrollIntoView({behavior:'smooth',block:'nearest'}), 50);
+}
+
+function selectPlannerIcon(icon, btn){
+  document.querySelectorAll('.planner-icon-btn').forEach(b=>{
+    b.style.borderColor='var(--warm3)'; b.style.background='var(--warm)';
+  });
+  if(btn){ btn.style.borderColor='var(--sage)'; btn.style.background='var(--sage-light)'; }
+  const inp=document.getElementById('pb-icon'); if(inp) inp.value=icon;
+}
+
+function pbAutoEndTime(){
+  const s=document.getElementById('pb-start')?.value;
+  if(!s) return;
+  const [sh,sm]=s.split(':').map(Number);
+  const endH = sh+1; const endM = sm;
+  if(endH<24){ const eEl=document.getElementById('pb-end');
+    if(eEl) eEl.value=String(endH).padStart(2,'0')+':'+String(sm).padStart(2,'0'); }
+}
+
+function savePlannerBlock(){
+  const title = document.getElementById('pb-title')?.value.trim();
+  if(!title){ showToast('Please enter a title for this block.'); return; }
+  const startVal = document.getElementById('pb-start')?.value || '08:00';
+  const endVal   = document.getElementById('pb-end')?.value   || '09:00';
+  const [startH,startM] = startVal.split(':').map(Number);
+  const [endH,  endM]   = endVal.split(':').map(Number);
+  if(startH*60+startM >= endH*60+endM){ showToast('End time must be after start time.'); return; }
+  const icon     = document.getElementById('pb-icon')?.value || '';
+  const reminder = document.getElementById('pb-reminder')?.checked || false;
+
+  if(_plannerEditBlockId){
+    const b=plannerBlocks.find(x=>x.id===_plannerEditBlockId);
+    if(b){ b.title=title;b.startH=startH;b.startM=startM;b.endH=endH;b.endM=endM;b.icon=icon;b.reminder=reminder; }
+  } else {
+    plannerBlocks.push({id:String(uid()), personId:_plannerPersonId, date:_plannerDate,
+      title, startH, startM, endH, endM, icon, reminder});
+  }
+
+  _plannerSave();
+  // Schedule reminder if requested
+  if(reminder){ _schedulePlannerReminder(plannerBlocks.find(b=>b.title===title&&b.date===_plannerDate)); }
+  document.getElementById('planner-block-form').innerHTML='';
+  renderPlannerPage();
+  showToast(icon+' '+title+' saved!');
+
+  // Offer Apple Reminders if on Apple device and reminder is on
+  if(reminder && isAppleDevice()){
+    const saved=plannerBlocks.find(b=>b.personId===_plannerPersonId&&b.date===_plannerDate&&b.title===title);
+    if(saved) setTimeout(()=>_offerApplePlannerReminder(saved), 400);
+  }
+}
+
+function _schedulePlannerReminder(block){
+  if(!block||!block.reminder) return;
+  const dueDate = new Date(block.date+'T'+String(block.startH).padStart(2,'0')+':'+String(block.startM).padStart(2,'0')+':00');
+  if(dueDate <= new Date()) return; // already past
+  const person = plannerPersons.find(p=>p.id===block.personId);
+  const remObj = {
+    id: 'planner_'+block.id, title: (person?person.name+': ':'')+block.icon+' '+block.title,
+    nextAt: dueDate.getTime(), repeat:'once', icon:'📅', at:Date.now()
+  };
+  // Remove old entry for this block if any
+  reminders = reminders.filter(r=>r.id!=='planner_'+block.id);
+  reminders.push(remObj);
+  saveReminders();
+  scheduleReminderTimers();
+}
+
+function _offerApplePlannerReminder(block){
+  const person  = plannerPersons.find(p=>p.id===block.personId);
+  const dueDate = new Date(block.date+'T'+String(block.startH).padStart(2,'0')+':'+String(block.startM).padStart(2,'0')+':00');
+  const fakeReminder = {
+    id:'planner_'+block.id, title:(person?person.name+': ':'')+block.icon+' '+block.title,
+    nextAt:dueDate.getTime(), repeat:'once', repeatLabel:'One-time', icon:'📅'
+  };
+  _showAppleReminderModal(fakeReminder, dueDate,
+    'shortcuts://x-callback-url/run-shortcut?name=LifeFlow%20Reminder&input=text&text='+
+    encodeURIComponent(fakeReminder.title));
+}
+
+function deletePlannerBlock(id){
+  plannerBlocks = plannerBlocks.filter(b=>b.id!==id);
+  reminders     = reminders.filter(r=>r.id!=='planner_'+id);
+  _plannerSave(); saveReminders();
+  document.getElementById('planner-block-form').innerHTML='';
+  renderPlannerPage();
+}
+
+// ── ADD PERSON ──────────────────────────────────────────────────────────────
+function openAddPlannerPerson(){
+  document.getElementById('add-planner-person-modal')?.remove();
+  const modal=document.createElement('div');
+  modal.className='modal-overlay'; modal.id='add-planner-person-modal';
+  modal.innerHTML=`<div class="modal" style="max-width:360px">
+    <button class="modal-close" onclick="document.getElementById('add-planner-person-modal').remove()">x</button>
+    <div class="modal-title">Add Person</div>
+    <div style="font-size:12px;color:var(--text3);margin-bottom:12px">Add a family member whose schedule you want to plan</div>
+    <input class="input" id="pp-name" placeholder="Name (e.g. Aditi, Rahul, Mom)">
+    <div style="font-size:11px;color:var(--text3);margin-bottom:6px;font-weight:600">Choose colour</div>
+    <div style="display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap">
+      ${PERSON_COLORS.map((col,i)=>`<button onclick="selectPlannerColor('${col}',this)"
+        style="width:28px;height:28px;border-radius:50%;background:${col};
+        border:3px solid ${i===0?'var(--text)':'transparent'};cursor:pointer;transition:transform .1s"
+        class="pp-color-btn"></button>`).join('')}
+    </div>
+    <input type="hidden" id="pp-color" value="${PERSON_COLORS[0]}">
+    <div style="display:flex;gap:8px">
+      <button class="btn btn-primary" style="flex:1" onclick="savePlannerPerson()">Add Person</button>
+      <button class="btn btn-ghost" onclick="document.getElementById('add-planner-person-modal').remove()">Cancel</button>
+    </div>
+  </div>`;
+  document.body.appendChild(modal);
+  setTimeout(()=>document.getElementById('pp-name')?.focus(),100);
+}
+
+function selectPlannerColor(color, btn){
+  document.querySelectorAll('.pp-color-btn').forEach(b=>b.style.borderColor='transparent');
+  if(btn) btn.style.borderColor='var(--text)';
+  const inp=document.getElementById('pp-color'); if(inp) inp.value=color;
+}
+
+function savePlannerPerson(){
+  const name=(document.getElementById('pp-name')?.value||'').trim();
+  if(!name){ showToast('Please enter a name.'); return; }
+  const color=document.getElementById('pp-color')?.value||PERSON_COLORS[0];
+  plannerBlocks.push; // just to reference
+  plannerPersons.push({id:String(uid()), name, color, isMe:false});
+  _plannerSave();
+  document.getElementById('add-planner-person-modal')?.remove();
+  renderPlannerPage();
+  showToast('👤 '+name+' added!');
+}
+
+// ── PERSON FORM (from + Add button on page header) ──────────────────────────
+function openPlannerPersonForm(){
+  // If no blocks added yet, show "add block" prompt
+  if(plannerPersons.length===0){ renderPlannerPage(); return; }
+  openAddPlannerBlock(8);
+}
+
 function showToast(msg){
   const t=document.createElement('div');
   t.style.cssText='position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#3D5C42;color:white;padding:10px 20px;border-radius:10px;font-size:13px;z-index:9999;box-shadow:0 4px 16px rgba(0,0,0,.2);transition:opacity .4s';
@@ -9345,6 +9780,8 @@ window._applySync = function(data) {
   if(data.todoCategories  !== undefined){todoCategories=data.todoCategories; save('lf3_todo_cats',todoCategories);}
   if(data.sharedTodoLists    !== undefined){sharedTodoLists=data.sharedTodoLists; save('lf3_shared_todo_lists',sharedTodoLists);}
   if(data.visionCards    !== undefined){visionCards=data.visionCards; localStorage.setItem('lf3_vision_board',JSON.stringify(visionCards)); changed=true;}
+  if(data.plannerPersons  !== undefined){plannerPersons=data.plannerPersons; localStorage.setItem('lf3_planner_persons',JSON.stringify(plannerPersons)); changed=true;}
+  if(data.plannerBlocks   !== undefined){plannerBlocks=data.plannerBlocks;   localStorage.setItem('lf3_planner_blocks', JSON.stringify(plannerBlocks));  changed=true;}
   if(data.reminders     !== undefined){reminders=data.reminders;   localStorage.setItem('lf3_reminders',JSON.stringify(reminders));   changed=true;}
   if(data.schedules     !== undefined){schedules=data.schedules;   localStorage.setItem('lf3_schedules',JSON.stringify(schedules));   changed=true;}
   if(data.notifications !== undefined && data.notifications.length > (notifications||[]).length){
