@@ -1883,6 +1883,14 @@ onAuthStateChanged(auth, async (user) => {
           <div class="section-title">Reminders</div>
           <button class="btn btn-primary btn-sm" onclick="openReminderForm()">+ Add Reminder</button>
         </div>
+        <div id="apple-rem-banner" style="display:none;background:linear-gradient(135deg,#1C1C1E,#3A3A3C);color:white;border-radius:var(--r2);padding:10px 14px;margin-bottom:12px;flex-direction:row;align-items:center;gap:10px">
+          <span style="font-size:20px">🍎</span>
+          <div style="flex:1">
+            <div style="font-size:13px;font-weight:600">Apple device detected</div>
+            <div style="font-size:11px;opacity:.7;margin-top:1px">Tap 🍎 Apple on any reminder to add it to Apple Reminders or ask Siri</div>
+          </div>
+          <button onclick="document.getElementById('apple-rem-banner').style.display='none'" style="background:none;border:none;color:rgba(255,255,255,.6);font-size:18px;cursor:pointer;line-height:1">×</button>
+        </div>
         <div class="card" id="reminders-list-card">
           <div id="reminders-list"></div>
         </div>
@@ -5715,6 +5723,9 @@ function notifySharedListExpense(listName, amount, addedBy){
 function renderRemindersPage(){
   const el = document.getElementById('reminders-list');
   if(!el) return;
+  // Show Apple device banner if on iPhone/iPad/Mac
+  const banner = document.getElementById('apple-rem-banner');
+  if(banner) banner.style.display = isAppleDevice() ? 'flex' : 'none';
   if(reminders.length===0){
     el.innerHTML=`<div class="empty"><div class="empty-icon">⏰</div>
       <div>No reminders yet.</div><div style="font-size:12px;color:var(--text3);margin-top:4px">Add one to get notified at the right time.</div></div>`;
@@ -5733,6 +5744,8 @@ function renderRemindersPage(){
       <div style="display:flex;flex-direction:column;gap:4px">
         <button class="btn btn-ghost btn-sm" onclick="editReminder('${r.id}')">✏️</button>
         <button class="btn btn-ghost btn-sm" onclick="deleteReminder('${r.id}')" style="color:var(--red)">✕</button>
+        ${isAppleDevice()?`<button class="btn btn-ghost btn-sm" onclick="addToAppleReminders('${r.id}')"
+          title="Add to Apple Reminders" style="font-size:11px;padding:3px 6px;white-space:nowrap">🍎 Apple</button>`:''}
       </div>
     </div>`;
   }).join('');
@@ -7349,6 +7362,159 @@ const VB_CARD_STYLES = [
   {id:'tape',   label:'📷 Polaroid',  desc:'Photo-frame style with caption space'},
 ];
 let _vbSelStyle = 'card';
+
+
+// ══════════════════════════════════════════════════════════════════════════
+// APPLE REMINDERS INTEGRATION via Shortcuts deep link
+// ══════════════════════════════════════════════════════════════════════════
+
+// Detect Apple device (iPhone / iPad / Mac with Safari)
+function isAppleDevice(){
+  const ua = navigator.userAgent || '';
+  return /iPhone|iPad|iPod|Macintosh/.test(ua) && /Safari/.test(ua);
+}
+
+// Build a shortcuts:// URL that opens Shortcuts and pre-runs an Add Reminder action
+// Uses the documented x-callback-url scheme for Shortcuts
+function addToAppleReminders(reminderId){
+  const r = reminders.find(x=>x.id===reminderId);
+  if(!r){ showToast('Reminder not found.'); return; }
+
+  // Build the due date string in ISO 8601 (Shortcuts needs this format)
+  const dueDate = r.nextAt ? new Date(r.nextAt) : new Date(Date.now() + 3600000);
+  const iso = dueDate.toISOString().slice(0,16); // "2025-05-24T08:00"
+
+  // Method 1: shortcuts://run-shortcut - runs a saved shortcut by name
+  // Method 2: shortcuts://create - opens Shortcuts to create a new one (less smooth)
+  // Method 3: x-apple-reminderkit - private undocumented, unreliable
+  //
+  // BEST APPROACH: Use the "Add New Reminder" shortcut URL
+  // The Shortcuts app accepts a URL scheme that pre-fills a new reminder action.
+  // We encode the action as a base64 plist and pass it as a parameter.
+  //
+  // Simpler reliable approach: open the Shortcuts app with pre-filled name/date
+  // via a URL-encoded shortcuts://run-shortcut?name=... approach, but this
+  // requires the user to have a specific shortcut installed.
+  //
+  // MOST RELIABLE: Use the documented "shortcuts://x-callback-url/run-shortcut"
+  // with a shortcut that takes input. We provide a fallback UI with instructions
+  // for users who don't have the shortcut installed.
+
+  // First, try the deep link. If Shortcuts isn't available, fall back to modal.
+  const title  = encodeURIComponent(r.title);
+  const notes  = encodeURIComponent('Created by LifeFlow');
+  const repeat = r.repeat !== 'once';
+
+  // Build x-success callback back to our app
+  const appUrl = encodeURIComponent(window.location.href);
+
+  // The Shortcuts URL scheme: open Shortcuts with a "Add Reminder" action preset
+  // We use the "shortcuts://x-callback-url/run-shortcut" with a known shortcut
+  // OR we show a fallback modal with a "Copy to Siri" instruction
+  const shortcutUrl = `shortcuts://x-callback-url/run-shortcut?name=LifeFlow%20Reminder&input=text&text=${title}&x-success=${appUrl}`;
+
+  // Show a modal that works even without a pre-installed shortcut
+  _showAppleReminderModal(r, dueDate, shortcutUrl);
+}
+
+function _showAppleReminderModal(r, dueDate, shortcutUrl){
+  document.getElementById('apple-rem-modal')?.remove();
+  const modal = document.createElement('div');
+  modal.className = 'modal-overlay';
+  modal.id = 'apple-rem-modal';
+
+  const dateStr = dueDate.toLocaleString('en-IN', {
+    weekday:'long', day:'numeric', month:'long',
+    hour:'2-digit', minute:'2-digit'
+  });
+
+  // Format repeat description
+  const repeatDesc = r.repeat === 'once' ? 'One-time reminder'
+    : r.repeat === 'daily'    ? 'Repeats every day'
+    : r.repeat === 'weekdays' ? 'Repeats on weekdays'
+    : r.repeat === 'weekly'   ? 'Repeats every week'
+    : r.repeat === 'hourly'   ? 'Repeats every hour'
+    : 'Repeating';
+
+  modal.innerHTML = `<div class="modal" style="max-width:380px">
+    <button class="modal-close" onclick="document.getElementById('apple-rem-modal').remove()">x</button>
+    <div style="text-align:center;margin-bottom:16px">
+      <div style="font-size:36px;margin-bottom:8px">🍎</div>
+      <div class="modal-title" style="margin-bottom:4px">Add to Apple Reminders</div>
+      <div style="font-size:12px;color:var(--text3)">Choose your preferred method</div>
+    </div>
+
+    <!-- Reminder summary -->
+    <div style="background:var(--warm);border-radius:var(--r2);padding:12px;margin-bottom:16px">
+      <div style="font-size:15px;font-weight:600;margin-bottom:4px">${r.icon||'⏰'} ${r.title}</div>
+      <div style="font-size:12px;color:var(--sage-dark);margin-bottom:2px">📅 ${dateStr}</div>
+      <div style="font-size:11px;color:var(--text3)">${repeatDesc}</div>
+    </div>
+
+    <!-- Option 1: One-tap via Shortcuts URL -->
+    <div style="margin-bottom:10px">
+      <div style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px">Option 1 — One tap (requires Shortcuts)</div>
+      <a href="${shortcutUrl}"
+        style="display:flex;align-items:center;gap:10px;padding:12px 14px;background:linear-gradient(135deg,#1C1C1E,#2C2C2E);color:white;border-radius:12px;text-decoration:none;font-size:13px;font-weight:500"
+        onclick="setTimeout(()=>document.getElementById('apple-rem-modal')?.remove(),500)">
+        <span style="font-size:22px">🔗</span>
+        <div>
+          <div>Open Shortcuts → Add Reminder</div>
+          <div style="font-size:11px;opacity:.6;margin-top:1px">Taps into the Shortcuts app</div>
+        </div>
+      </a>
+    </div>
+
+    <!-- Option 2: Siri voice command -->
+    <div style="margin-bottom:10px">
+      <div style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px">Option 2 — Ask Siri</div>
+      <div style="background:var(--warm);border-radius:12px;padding:12px 14px">
+        <div style="font-size:12px;color:var(--text2);margin-bottom:8px">Say this to Siri:</div>
+        <div style="background:white;border-radius:8px;padding:8px 12px;font-size:13px;font-style:italic;color:var(--text);border:1px solid var(--warm3)">
+          "Hey Siri, remind me to ${r.title.replace(/"/g,"'")} on ${dueDate.toLocaleDateString('en-IN',{month:'long',day:'numeric'})} at ${dueDate.toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'})}"
+        </div>
+        <button onclick="navigator.clipboard?.writeText('Hey Siri, remind me to ${r.title.replace(/"/g,"'")} on ${dueDate.toLocaleDateString('en-IN',{month:'long',day:'numeric'})} at ${dueDate.toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'})}')"
+          style="margin-top:8px;background:none;border:1px solid var(--warm3);border-radius:8px;padding:5px 12px;font-size:11px;cursor:pointer;color:var(--text3);font-family:'DM Sans',sans-serif">
+          📋 Copy Siri command
+        </button>
+      </div>
+    </div>
+
+    <!-- Option 3: Manual — copy details -->
+    <div>
+      <div style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px">Option 3 — Copy & paste manually</div>
+      <button onclick="_copyReminderDetails('${r.id}')"
+        style="width:100%;padding:10px;background:var(--warm2);border:1.5px solid var(--warm3);border-radius:12px;font-size:13px;cursor:pointer;font-family:'DM Sans',sans-serif;color:var(--text2)">
+        📋 Copy reminder details
+      </button>
+    </div>
+  </div>`;
+
+  document.body.appendChild(modal);
+}
+
+function _copyReminderDetails(reminderId){
+  const r = reminders.find(x=>x.id===reminderId);
+  if(!r) return;
+  const due = new Date(r.nextAt||r.at);
+  const text = [
+    'Reminder: ' + r.title,
+    'Date: ' + due.toLocaleDateString('en-IN',{weekday:'long',day:'numeric',month:'long',year:'numeric'}),
+    'Time: ' + due.toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'}),
+    r.repeat!=='once' ? 'Repeats: '+r.repeatLabel : ''
+  ].filter(Boolean).join('\n');
+
+  if(navigator.clipboard?.writeText){
+    navigator.clipboard.writeText(text).then(()=>showToast('📋 Reminder details copied!'));
+  } else {
+    // Fallback for older Safari
+    const ta = document.createElement('textarea');
+    ta.value = text; document.body.appendChild(ta);
+    ta.select(); document.execCommand('copy');
+    document.body.removeChild(ta);
+    showToast('📋 Reminder details copied!');
+  }
+}
 
 function showToast(msg){
   const t=document.createElement('div');
