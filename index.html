@@ -151,9 +151,15 @@ window._registerUserEmail = async function(user) {
   if (!user?.uid || !user?.email) return;
   try {
     const friendCode = user.uid.slice(-6).toUpperCase();
+    // Write to users_by_email (for email-based lookup)
     await setDoc(doc(db,'users_by_email', user.email.split('.').join('_')), {
       uid: user.uid, email: user.email, name: user.name||'',
-      friendCode: friendCode,   // stored for fast lookup
+      friendCode: friendCode, updatedAt: Date.now()
+    });
+    // Write to friend_codes/{code} — direct lookup by code, no query/list needed
+    // Firestore rule: match /friend_codes/{code} { allow read,write: if request.auth != null; }
+    await setDoc(doc(db,'friend_codes', friendCode), {
+      uid: user.uid, email: user.email, name: user.name||'',
       updatedAt: Date.now()
     });
   } catch(e) { console.warn('registerEmail error:', e); }
@@ -3758,56 +3764,81 @@ async function connectByCode(){
   const code=(document.getElementById('enter-code-in')?.value||'').trim().toUpperCase();
   if(code.length!==6){showToast('Please enter a 6-character code.');return;}
   const u=window.currentUser||currentUser;
-  if(!u||u.isGuest){showToast('Please sign in with Google first.');return;}
-  if(!window._fb){showToast('Not connected to cloud. Try again.');return;}
-  const {db,doc,getDoc,setDoc,collection,query,where,getDocs}=window._fb;
+  if(!u||u.isGuest){showToast('Please sign in to connect with friends.');return;}
+  if(!window._fb){showToast('Not connected. Please wait and try again.');return;}
+  const {db,doc,getDoc,setDoc}=window._fb;
+  if(code===u.uid.slice(-6).toUpperCase()){showToast("That's your own code! Share it with your friend.");return;}
   showToast('Looking up friend...');
   try{
-    // Query users_by_email by friendCode field (set on login)
-    const q=query(collection(db,'users_by_email'),where('friendCode','==',code));
-    const snap=await getDocs(q);
-    let found=null;
-    snap.forEach(d=>{const data=d.data();if(data.uid!==u.uid)found=data;});
-
-    // Fallback: also try matching last 6 chars of UID (for users registered before friendCode field)
-    if(!found){
-      const q2=query(collection(db,'users_by_email'),where('uid','>=',''),where('uid','<=',''));
-      const snap2=await getDocs(q2);
-      snap2.forEach(d=>{
-        const data=d.data();
-        if(data.uid&&data.uid.slice(-6).toUpperCase()===code&&data.uid!==u.uid&&!found)found=data;
-      });
+    // Direct document lookup — no query, no list permission needed
+    // Requires Firestore rule: match /friend_codes/{code} { allow read,write: if request.auth != null; }
+    const codeSnap=await getDoc(doc(db,'friend_codes',code));
+    if(!codeSnap.exists()){
+      showToast('Code not found. Ask your friend to open LifeFlow — their code updates when they sign in.');
+      return;
     }
-
-    if(!found){showToast('Code not found. Ask your friend to open LifeFlow and share their code.');return;}
+    const found=codeSnap.data();
+    if(found.uid===u.uid){showToast("That's your own code!");return;}
     const already=friends.some(f=>f.contact===found.email||String(f.fromUid)===String(found.uid));
-    if(already){showToast('Already connected with this person!');return;}
+    if(already){showToast('Already connected with '+found.name+'!');return;}
 
     // Add locally as pending_sent
-    friends.push({id:uid(),name:found.name||'Friend',contact:found.email||'',
+    friends.push({id:String(uid()),name:found.name||'Friend',contact:found.email||'',
                   status:'pending_sent',fromUid:found.uid,sentAt:Date.now()});
     persist(); renderFriends();
 
-    // Write request into friend's main Firestore doc (triggers their real-time listener)
+    // Write request into friend's main Firestore doc → triggers their real-time listener
     const recipientSnap=await getDoc(doc(db,'users',found.uid));
     const recipientData=recipientSnap.exists()?recipientSnap.data():{};
     const currentReqs=recipientData.pendingFriendReqs||[];
     if(!currentReqs.some(r=>r.fromUid===u.uid)){
       currentReqs.push({
-        id:u.uid+'_req', fromUid:u.uid, fromName:u.name||'',
-        fromEmail:u.email||'', fromPicture:u.picture||'',
-        sentAt:Date.now(), status:'pending'
+        id:u.uid+'_req',fromUid:u.uid,fromName:u.name||'',
+        fromEmail:u.email||'',fromPicture:u.picture||'',
+        sentAt:Date.now(),status:'pending'
       });
       await setDoc(doc(db,'users',found.uid),{pendingFriendReqs:currentReqs},{merge:true});
     }
     document.getElementById('invite-modal')?.remove();
     showToast('✅ Friend request sent to '+(found.name||'your friend')+'! Waiting for them to accept.');
   }catch(e){
-    console.error('connectByCode error:',e);
-    showToast('Error: '+( e.code==='permission-denied'
-      ? 'Permission denied. Make sure both accounts are signed in with Google.'
-      : e.message||'Could not look up code. Try again.'));
+    console.error('connectByCode:',e);
+    if(e.code==='permission-denied'){
+      showToast('⚠️ Firestore rule missing. Add this rule in Firebase Console — see instructions.');
+      _showFirestoreRuleHint();
+    } else {
+      showToast('Could not look up code: '+(e.message||'Unknown error')+'. Try again.');
+    }
   }
+}
+
+function _showFirestoreRuleHint(){
+  document.getElementById('firestore-rule-modal')?.remove();
+  const m=document.createElement('div');
+  m.className='modal-overlay'; m.id='firestore-rule-modal';
+  m.innerHTML=`<div class="modal" style="max-width:440px">
+    <button class="modal-close" onclick="document.getElementById('firestore-rule-modal').remove()">x</button>
+    <div class="modal-title" style="color:var(--red)">⚠️ Firestore Rule Needed</div>
+    <div style="font-size:13px;color:var(--text2);margin-bottom:12px;line-height:1.6">
+      One more Firestore rule is needed to allow friend code lookup. Add this to your Firebase Console:
+    </div>
+    <div style="background:#1E1E1E;color:#D4D4D4;border-radius:8px;padding:14px;font-family:monospace;font-size:12px;margin-bottom:12px;line-height:1.8;overflow-x:auto">
+      <span style="color:#569CD6">match</span> /friend_codes/{code} {<br>
+      &nbsp;&nbsp;<span style="color:#569CD6">allow</span> read, write: <span style="color:#569CD6">if</span> request.auth != <span style="color:#569CD6">null</span>;<br>
+      }
+    </div>
+    <div style="font-size:12px;color:var(--text3);margin-bottom:14px;line-height:1.6">
+      <strong>Steps:</strong><br>
+      1. Go to <a href="https://console.firebase.google.com" target="_blank" style="color:var(--sage)">console.firebase.google.com</a><br>
+      2. Select your project → Firestore Database → Rules<br>
+      3. Add the rule above inside your <code>match /databases/{database}/documents</code> block<br>
+      4. Click <strong>Publish</strong>
+    </div>
+    <button class="btn btn-primary" style="width:100%" onclick="navigator.clipboard?.writeText(\`match /friend_codes/{code} {\n  allow read, write: if request.auth != null;\n}\`).then(()=>showToast('Rule copied!')); document.getElementById('firestore-rule-modal').remove()">
+      📋 Copy Rule to Clipboard
+    </button>
+  </div>`;
+  document.body.appendChild(m);
 }
 
 async function handleInviteToken(){
