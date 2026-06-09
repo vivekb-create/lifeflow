@@ -150,8 +150,11 @@ window._writeFriendRequestToRecipient = async function(toEmail, fromUser) {
 window._registerUserEmail = async function(user) {
   if (!user?.uid || !user?.email) return;
   try {
+    const friendCode = user.uid.slice(-6).toUpperCase();
     await setDoc(doc(db,'users_by_email', user.email.split('.').join('_')), {
-      uid: user.uid, email: user.email, name: user.name, updatedAt: Date.now()
+      uid: user.uid, email: user.email, name: user.name||'',
+      friendCode: friendCode,   // stored for fast lookup
+      updatedAt: Date.now()
     });
   } catch(e) { console.warn('registerEmail error:', e); }
 };
@@ -3757,36 +3760,54 @@ async function connectByCode(){
   const u=window.currentUser||currentUser;
   if(!u||u.isGuest){showToast('Please sign in with Google first.');return;}
   if(!window._fb){showToast('Not connected to cloud. Try again.');return;}
-  const {db,collection,getDocs,addDoc}=window._fb;
-  showToast('Looking up code...');
+  const {db,doc,getDoc,setDoc,collection,query,where,getDocs}=window._fb;
+  showToast('Looking up friend...');
   try{
-    const snap=await getDocs(collection(db,'users_by_email'));
+    // Query users_by_email by friendCode field (set on login)
+    const q=query(collection(db,'users_by_email'),where('friendCode','==',code));
+    const snap=await getDocs(q);
     let found=null;
-    snap.forEach(d=>{const data=d.data();if(data.uid&&data.uid.slice(-6).toUpperCase()===code&&data.uid!==u.uid)found=data;});
-    if(!found){showToast('Code not found. Ask your friend to share their code from the app.');return;}
-    const already=friends.some(f=>f.contact===found.email||f.fromUid===found.uid);
+    snap.forEach(d=>{const data=d.data();if(data.uid!==u.uid)found=data;});
+
+    // Fallback: also try matching last 6 chars of UID (for users registered before friendCode field)
+    if(!found){
+      const q2=query(collection(db,'users_by_email'),where('uid','>=',''),where('uid','<=',''));
+      const snap2=await getDocs(q2);
+      snap2.forEach(d=>{
+        const data=d.data();
+        if(data.uid&&data.uid.slice(-6).toUpperCase()===code&&data.uid!==u.uid&&!found)found=data;
+      });
+    }
+
+    if(!found){showToast('Code not found. Ask your friend to open LifeFlow and share their code.');return;}
+    const already=friends.some(f=>f.contact===found.email||String(f.fromUid)===String(found.uid));
     if(already){showToast('Already connected with this person!');return;}
-    // Add as pending_sent — stays pending until friend accepts
+
+    // Add locally as pending_sent
     friends.push({id:uid(),name:found.name||'Friend',contact:found.email||'',
                   status:'pending_sent',fromUid:found.uid,sentAt:Date.now()});
     persist(); renderFriends();
-    // Write request to friend's Firestore sub-collection so they see it
-    // Write request directly into friend's main Firestore doc (triggers their listener)
-    const {doc:fbDoc, getDoc:fbGetDoc, setDoc:fbSetDoc} = window._fb;
-    const recipientSnap = await fbGetDoc(fbDoc(db,'users',found.uid));
-    const recipientData = recipientSnap.exists() ? recipientSnap.data() : {};
-    const currentReqs   = recipientData.pendingFriendReqs || [];
-    if (!currentReqs.some(r => r.fromUid === u.uid)) {
+
+    // Write request into friend's main Firestore doc (triggers their real-time listener)
+    const recipientSnap=await getDoc(doc(db,'users',found.uid));
+    const recipientData=recipientSnap.exists()?recipientSnap.data():{};
+    const currentReqs=recipientData.pendingFriendReqs||[];
+    if(!currentReqs.some(r=>r.fromUid===u.uid)){
       currentReqs.push({
-        id: u.uid+'_req', fromUid:u.uid, fromName:u.name||'',
+        id:u.uid+'_req', fromUid:u.uid, fromName:u.name||'',
         fromEmail:u.email||'', fromPicture:u.picture||'',
         sentAt:Date.now(), status:'pending'
       });
-      await fbSetDoc(fbDoc(db,'users',found.uid), {pendingFriendReqs: currentReqs}, {merge:true});
+      await setDoc(doc(db,'users',found.uid),{pendingFriendReqs:currentReqs},{merge:true});
     }
     document.getElementById('invite-modal')?.remove();
-    showToast('Friend request sent to '+(found.name||'your friend')+'! Waiting for them to accept.');
-  }catch(e){console.warn('connectByCode error:',e);showToast('Error looking up code. Please try again.');}
+    showToast('✅ Friend request sent to '+(found.name||'your friend')+'! Waiting for them to accept.');
+  }catch(e){
+    console.error('connectByCode error:',e);
+    showToast('Error: '+( e.code==='permission-denied'
+      ? 'Permission denied. Make sure both accounts are signed in with Google.'
+      : e.message||'Could not look up code. Try again.'));
+  }
 }
 
 async function handleInviteToken(){
@@ -4799,23 +4820,33 @@ async function saveEditSharedList(listId){
     const f=friends.find(x=>x.id===fid);
     if(f?.fromUid) newMemberUids.push(f.fromUid);
   });
+
+  // Track which members are NEW (not previously in the list)
+  const prevUids = lst.memberUids || [];
+  const newlyAdded = newMemberUids.filter(uid => !prevUids.includes(uid) && uid !== u?.uid);
+
   lst.name=name; lst.emoji=emoji;
   lst.memberIds=newMemberIds; lst.memberUids=newMemberUids;
   persist();
   document.getElementById('edit-shared-list-modal')?.remove();
   renderSharedExpenseLists();
   showToast('Shared list updated!');
-  // Push to all members
+
   if(window._fb){
     const {db,doc,getDoc,setDoc}=window._fb;
+    // Push FULL list (with all historical expenses) to ALL current members
     for(const mUid of newMemberUids){
       if(mUid===u?.uid) continue;
       try{
         const snap=await getDoc(doc(db,'users',mUid));
         const data=snap.exists()?snap.data():{};
+        // Replace the list entry entirely — new members get full history this way
         const theirLists=(data.sharedExpenseLists||[]).filter(l=>String(l.id)!==String(listId));
-        theirLists.push(lst);
+        theirLists.push(lst);  // lst already has all expenses[]
         await setDoc(doc(db,'users',mUid),{sharedExpenseLists:theirLists},{merge:true});
+        if(newlyAdded.includes(mUid)){
+          console.log('Pushed full history to new member:', mUid, '(',lst.expenses?.length,'expenses)');
+        }
       }catch(e){console.warn('saveEditSharedList push:',e);}
     }
   }
@@ -7972,6 +8003,8 @@ async function acceptFriendReq(id){
   renderFriends();
   showToast('✅ ' + r.from + ' added as a friend!');
   pushNotif(r.from + ' is now your friend', 'Friend request accepted!', 'friend', '👥');
+  // Re-register email so friendCode is stored (needed for code-based lookup)
+  if(window._registerUserEmail && u) window._registerUserEmail(u).catch(()=>{});
 
   if(!u?.uid || !window._fb) return;
   try {
