@@ -270,7 +270,8 @@ window._saveToFirestore = async function() {
       friendUpiIds:       (typeof friendUpiIds       !== 'undefined') ? friendUpiIds       : {},
       todoCategories:     (typeof todoCategories     !== 'undefined') ? todoCategories     : [],
       sharedTodoLists:    (typeof sharedTodoLists    !== 'undefined') ? sharedTodoLists    : [],
-      sharedExpenseLists: (typeof sharedExpenseLists !== 'undefined') ? sharedExpenseLists : [],
+      // sharedExpenseLists intentionally excluded from bulk save —
+      // each shared list is pushed individually to member docs to prevent overwrite
       visionCards:        (typeof visionCards        !== 'undefined') ? visionCards        : [],
       plannerPersons:     (typeof plannerPersons     !== 'undefined') ? plannerPersons     : [],
       plannerBlocks:      (typeof plannerBlocks      !== 'undefined') ? plannerBlocks      : [],
@@ -288,7 +289,12 @@ window._saveToFirestore = async function() {
     if(typeof setSyncStatus === 'function') setSyncStatus('synced', 'Saved ✓');
   } catch(e) {
     console.warn('Firestore save error:', e);
-    if(typeof setSyncStatus === 'function') setSyncStatus('error', 'Save failed');
+    const errCode = e.code || '';
+    const errMsg  = errCode === 'permission-denied' ? 'Permission error'
+                  : errCode === 'unavailable'        ? 'Offline'
+                  : errCode === 'resource-exhausted' ? 'Quota hit'
+                  : 'Save failed';
+    if(typeof setSyncStatus === 'function') setSyncStatus('error', errMsg);
   }
 };
 
@@ -5249,9 +5255,14 @@ async function addSharedExpense(listId){
   if(!lst.expenses) lst.expenses = [];
   lst.expenses.push(newExp);
   persist();
+  // Save sharedExpenseLists explicitly to own Firestore doc (triggers own listener)
+  if(window._fb){
+    const {db:_db2,doc:_doc2,setDoc:_setDoc2}=window._fb;
+    const _u2=window.currentUser||currentUser;
+    if(_u2?.uid) _setDoc2(_doc2(_db2,'users',_u2.uid),{sharedExpenseLists},{...{merge:true}}).catch(()=>{});
+  }
   openSharedListDetail(listId);
   showToast('Expense added!');
-  // Notify locally (the member who added it; others get it via _applySync)
   if(typeof notifySharedListExpense === 'function') notifySharedListExpense(lst.name, amt, 'You');
 
   // Push updated list to all member docs
@@ -5552,8 +5563,14 @@ async function confirmSharedCsvImport(listId){
   });
 
   persist();
-  syncAllCategoriesToCustom();  // register any new categories from import
+  syncAllCategoriesToCustom();
   delete _sharedCsvCache[listId];
+  // Write sharedExpenseLists to own Firestore doc
+  if(window._fb){
+    const {db:_db4,doc:_doc4,setDoc:_setDoc4}=window._fb;
+    const _u4=window.currentUser||currentUser;
+    if(_u4?.uid) _setDoc4(_doc4(_db4,'users',_u4.uid),{sharedExpenseLists},{...{merge:true}}).catch(()=>{});
+  }
 
   const previewEl = document.getElementById('shared-csv-preview-'+listId);
   if(previewEl) previewEl.innerHTML='';
@@ -5641,6 +5658,11 @@ async function deleteSharedExpense(listId, expId){
   if(!lst) return;
   lst.expenses = (lst.expenses||[]).filter(e => e.id !== expId);
   persist();
+  if(window._fb){
+    const {db:_db3,doc:_doc3,setDoc:_setDoc3}=window._fb;
+    const _u3=window.currentUser||currentUser;
+    if(_u3?.uid) _setDoc3(_doc3(_db3,'users',_u3.uid),{sharedExpenseLists},{...{merge:true}}).catch(()=>{});
+  }
   openSharedListDetail(listId);
 }
 
@@ -8063,12 +8085,54 @@ function setSyncStatus(state, text){
 async function forceSyncNow(){
   const u = window.currentUser || currentUser;
   if(!u || !u.uid){ showToast('Please sign in first.'); return; }
-  if(!window._saveToFirestore){ showToast('Firebase not ready yet. Wait a moment.'); return; }
-  setSyncStatus('syncing', 'Pushing…');
+  if(!window._fb){ showToast('Firebase not ready yet. Wait a moment.'); return; }
+  setSyncStatus('syncing', 'Syncing…');
   try {
+    const {db, doc, getDoc, setDoc} = window._fb;
+
+    // Step 1: Fetch current Firestore state
+    const snap = await getDoc(doc(db, 'users', u.uid));
+    const remote = snap.exists() ? snap.data() : {};
+
+    // Step 2: Merge shared lists — keep whichever version has MORE expenses per list
+    // (protects against local empty list overwriting remote data)
+    const localSL  = sharedExpenseLists || [];
+    const remoteSL = remote.sharedExpenseLists || [];
+    const mergedSL = [];
+    const allIds   = new Set([...localSL.map(l=>String(l.id)), ...remoteSL.map(l=>String(l.id))]);
+    allIds.forEach(id => {
+      const local  = localSL.find(l=>String(l.id)===id);
+      const remote2= remoteSL.find(l=>String(l.id)===id);
+      if(!local)  { mergedSL.push(remote2); return; }
+      if(!remote2){ mergedSL.push(local);   return; }
+      // Keep the one with more expenses, or merge both expense arrays
+      const localExps  = local.expenses  || [];
+      const remoteExps = remote2.expenses || [];
+      const allExpIds  = new Set([...localExps.map(e=>String(e.id)), ...remoteExps.map(e=>String(e.id))]);
+      const mergedExps = [];
+      allExpIds.forEach(eid => {
+        const le = localExps.find(e=>String(e.id)===eid);
+        const re = remoteExps.find(e=>String(e.id)===eid);
+        mergedExps.push(le || re);
+      });
+      mergedSL.push({...remote2, ...local, expenses: mergedExps});
+    });
+
+    // Update local state with merged lists
+    sharedExpenseLists = mergedSL;
+    localStorage.setItem('lf3_shared_expense_lists', JSON.stringify(mergedSL));
+
+    // Step 3: Push all local data + merged shared lists
     await window._saveToFirestore();
-    setSyncStatus('synced', 'Push done ✓');
-    showToast('✅ All data pushed to cloud!');
+    // Also explicitly save merged shared lists (since _saveToFirestore excludes them)
+    await setDoc(doc(db, 'users', u.uid), {sharedExpenseLists: mergedSL}, {merge:true});
+
+    setSyncStatus('synced', 'Synced ✓');
+    showToast('✅ All data synced! Shared lists merged.');
+
+    // Re-render to show merged data
+    if(typeof renderPage === 'function') renderPage(currentPage);
+    if(typeof renderHome === 'function') renderHome();
   } catch(e) {
     setSyncStatus('error', 'Failed');
     showToast('Sync failed: ' + (e.message||'Unknown error'));
