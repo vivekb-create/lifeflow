@@ -247,6 +247,8 @@ window._loadSharedGroups = async function(userEmail) {
 window._saveToFirestore = async function() {
   const u = window.currentUser;
   if (!u || !u.uid) return;
+  // Update sync indicator
+  if(typeof setSyncStatus === 'function') setSyncStatus('syncing', 'Saving…');
   try {
     // Build state directly — never rely on window._getState timing
     // Access globals that are always defined by state.js (loads before module)
@@ -283,8 +285,10 @@ window._saveToFirestore = async function() {
       updatedAt: ts,
       updatedBy: DEVICE_ID
     });
+    if(typeof setSyncStatus === 'function') setSyncStatus('synced', 'Saved ✓');
   } catch(e) {
     console.warn('Firestore save error:', e);
+    if(typeof setSyncStatus === 'function') setSyncStatus('error', 'Save failed');
   }
 };
 
@@ -1502,6 +1506,24 @@ onAuthStateChanged(auth, async (user) => {
   .planner-empty{display:flex;flex-direction:column;align-items:center;justify-content:center;
     padding:40px 20px;color:var(--text3);font-size:13px;text-align:center;gap:8px;}
 
+
+  /* ── SYNC STATUS ── */
+  #sync-status{
+    display:flex;align-items:center;gap:5px;
+    font-size:11px;padding:3px 9px;
+    border-radius:8px;cursor:pointer;transition:all .2s;
+    border:1.5px solid transparent;white-space:nowrap;
+  }
+  #sync-status.synced  {color:var(--sage-dark);background:var(--sage-light);border-color:var(--sage-mid);}
+  #sync-status.syncing {color:var(--sage-dark);background:var(--sage-light);border-color:var(--sage-mid);animation:syncPulse 1s ease-in-out infinite;}
+  #sync-status.error   {color:#C0392B;background:#FDECEA;border-color:#E57373;}
+  #sync-status.pending {color:#B8845A;background:#FDF3E7;border-color:#D4A76A;}
+  @keyframes syncPulse{0%,100%{opacity:1}50%{opacity:.5}}
+  #sync-status .sync-dot{width:7px;height:7px;border-radius:50%;flex-shrink:0;}
+  #sync-status.synced  .sync-dot{background:var(--sage);}
+  #sync-status.syncing .sync-dot{background:var(--sage);}
+  #sync-status.error   .sync-dot{background:#C0392B;}
+  #sync-status.pending .sync-dot{background:#B8845A;}
 </style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 </head>
@@ -1596,12 +1618,16 @@ onAuthStateChanged(auth, async (user) => {
       <button class="hamburger" onclick="openSidebar()">☰</button>
       <div class="topbar-info">
         <div class="greeting" id="greeting">Good morning 🌿</div>
-        <div style="display:flex;align-items:center;gap:8px">
+        <div style="display:flex;align-items:center;gap:6px">
           <div class="topbar-date" id="topbar-date"></div>
-          <button id="refresh-btn" onclick="refreshAppData()" title="Refresh data"
-            style="background:none;border:1.5px solid var(--warm3);border-radius:8px;padding:4px 9px;font-size:14px;cursor:pointer;color:var(--text3);transition:all .2s;line-height:1"
-            onmouseover="this.style.background='var(--warm2)';this.style.color='var(--sage-dark)'"
-            onmouseout="this.style.background='none';this.style.color='var(--text3)'">↻</button>
+          <!-- Sync status pill — shows state, tap to force sync -->
+          <button id="sync-status" class="synced" onclick="forceSyncNow()" title="Tap to force sync to cloud">
+            <div class="sync-dot"></div>
+            <span id="sync-label">Synced</span>
+          </button>
+          <!-- Pull fresh data from cloud -->
+          <button id="refresh-btn" onclick="refreshAppData()" title="Pull latest data from cloud"
+            style="background:none;border:1.5px solid var(--warm3);border-radius:8px;padding:4px 9px;font-size:14px;cursor:pointer;color:var(--text3);transition:all .2s;line-height:1">↻</button>
           <button class="notif-btn" id="notif-btn" onclick="openNotifDrawer()" title="Notifications">
             🔔<span class="notif-badge" id="notif-badge" style="display:none">0</span>
           </button>
@@ -8011,6 +8037,43 @@ function openPlannerPersonForm(){
   // If no blocks added yet, show "add block" prompt
   if(plannerPersons.length===0){ renderPlannerPage(); return; }
   openAddPlannerBlock(8);
+}
+
+
+// ══════════════════════════════════════════════════════════════════════════
+// SYNC STATUS INDICATOR
+// ══════════════════════════════════════════════════════════════════════════
+let _syncStatusTimeout = null;
+
+function setSyncStatus(state, text){
+  const el = document.getElementById('sync-status');
+  const lbl = document.getElementById('sync-label');
+  if(!el || !lbl) return;
+  el.className = state;       // synced | syncing | error | pending
+  lbl.textContent = text || {synced:'Synced', syncing:'Syncing…', error:'Sync failed', pending:'Unsaved'}[state] || text;
+  // Auto-revert to "Synced" after 4s when done
+  if(state === 'synced'){
+    clearTimeout(_syncStatusTimeout);
+    _syncStatusTimeout = setTimeout(()=>{
+      lbl.textContent = 'Synced';
+    }, 4000);
+  }
+}
+
+async function forceSyncNow(){
+  const u = window.currentUser || currentUser;
+  if(!u || !u.uid){ showToast('Please sign in first.'); return; }
+  if(!window._saveToFirestore){ showToast('Firebase not ready yet. Wait a moment.'); return; }
+  setSyncStatus('syncing', 'Pushing…');
+  try {
+    await window._saveToFirestore();
+    setSyncStatus('synced', 'Push done ✓');
+    showToast('✅ All data pushed to cloud!');
+  } catch(e) {
+    setSyncStatus('error', 'Failed');
+    showToast('Sync failed: ' + (e.message||'Unknown error'));
+    console.error('forceSyncNow:', e);
+  }
 }
 
 function showToast(msg){
