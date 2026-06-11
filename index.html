@@ -8122,22 +8122,133 @@ async function forceSyncNow(){
     sharedExpenseLists = mergedSL;
     localStorage.setItem('lf3_shared_expense_lists', JSON.stringify(mergedSL));
 
-    // Step 3: Push all local data + merged shared lists
-    await window._saveToFirestore();
-    // Also explicitly save merged shared lists (since _saveToFirestore excludes them)
-    await setDoc(doc(db, 'users', u.uid), {sharedExpenseLists: mergedSL}, {merge:true});
+    // Step 3: Single write — all state + merged shared lists in one setDoc
+    // (avoids race condition between _saveToFirestore and second setDoc)
+    const ts = Date.now();
+    window._lastSaveTime = ts;
+    const DEVICE_ID_LOCAL = window.DEVICE_ID || 'device';
+    const baseState = {
+      habits:          (typeof habits          !=='undefined')?habits:[],
+      goals:           (typeof goals           !=='undefined')?goals:[],
+      todos:           (typeof todos           !=='undefined')?todos:[],
+      spends:          (typeof spends          !=='undefined')?spends:[],
+      customCats:      (typeof customCats      !=='undefined')?customCats:[],
+      friends:         (typeof friends         !=='undefined')?friends:[],
+      friendReqs:      (typeof friendReqs      !=='undefined')?friendReqs:[],
+      groups:          (typeof groups          !=='undefined')?groups:[],
+      splits:          (typeof splits          !=='undefined')?splits:[],
+      journalEntries:  (typeof journalEntries  !=='undefined')?journalEntries:[],
+      paymentReqs:     (typeof paymentReqs     !=='undefined')?paymentReqs:[],
+      myUpiId:         (typeof myUpiId         !=='undefined')?myUpiId:'',
+      friendUpiIds:    (typeof friendUpiIds    !=='undefined')?friendUpiIds:{},
+      todoCategories:  (typeof todoCategories  !=='undefined')?todoCategories:[],
+      sharedTodoLists: (typeof sharedTodoLists !=='undefined')?sharedTodoLists:[],
+      visionCards:     (typeof visionCards     !=='undefined')?visionCards:[],
+      plannerPersons:  (typeof plannerPersons  !=='undefined')?plannerPersons:[],
+      plannerBlocks:   (typeof plannerBlocks   !=='undefined')?plannerBlocks:[],
+      reminders:       (typeof reminders       !=='undefined')?reminders:[],
+      schedules:       (typeof schedules       !=='undefined')?schedules:[],
+      notifications:   (typeof notifications   !=='undefined')?notifications.slice(0,50):[],
+      sharedExpenseLists: mergedSL,
+      updatedAt: ts,
+      updatedBy: DEVICE_ID_LOCAL
+    };
+    // Write only to OWN user document — never touch other users' docs here
+    await setDoc(doc(db, 'users', u.uid), baseState);
 
     setSyncStatus('synced', 'Synced ✓');
-    showToast('✅ All data synced! Shared lists merged.');
+    showToast('✅ Data synced to cloud!');
 
     // Re-render to show merged data
     if(typeof renderPage === 'function') renderPage(currentPage);
     if(typeof renderHome === 'function') renderHome();
   } catch(e) {
-    setSyncStatus('error', 'Failed');
-    showToast('Sync failed: ' + (e.message||'Unknown error'));
     console.error('forceSyncNow:', e);
+    if(e.code === 'permission-denied'){
+      setSyncStatus('error', 'Rules needed');
+      _showFullFirestoreRules();
+    } else if(e.code === 'unavailable' || e.message?.includes('offline')){
+      setSyncStatus('error', 'Offline');
+      showToast('You appear to be offline. Check your internet connection.');
+    } else {
+      setSyncStatus('error', 'Failed');
+      showToast('Sync failed: ' + (e.message||'Unknown error'));
+    }
   }
+}
+
+
+function _showFullFirestoreRules(){
+  document.getElementById('firestore-rules-modal')?.remove();
+  const RULES = `rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Your own user data
+    match /users/{uid} {
+      allow read, write: if request.auth.uid == uid;
+    }
+
+    // Email → UID lookup (for invites)
+    match /users_by_email/{email} {
+      allow read, write: if request.auth != null;
+    }
+
+    // 6-char friend code lookup
+    match /friend_codes/{code} {
+      allow read, write: if request.auth != null;
+    }
+
+    // Invite links
+    match /invite_tokens/{token} {
+      allow read, write: if request.auth != null;
+    }
+
+    // Pending email invites
+    match /pending_invites/{email} {
+      allow read, write: if request.auth != null;
+    }
+
+    // UPI IDs
+    match /user_upi/{uid} {
+      allow read: if request.auth != null;
+      allow write: if request.auth.uid == uid;
+    }
+
+    // Payment requests
+    match /payment_requests/{r} {
+      allow read, write: if request.auth != null;
+    }
+  }
+}`;
+
+  const m = document.createElement('div');
+  m.className = 'modal-overlay'; m.id = 'firestore-rules-modal';
+  m.innerHTML = `<div class="modal" style="max-width:500px">
+    <button class="modal-close" onclick="document.getElementById('firestore-rules-modal').remove()">x</button>
+    <div class="modal-title" style="color:var(--red)">⚠️ Firestore Rules Need Updating</div>
+    <div style="font-size:13px;color:var(--text2);margin-bottom:12px;line-height:1.6">
+      Your app is getting "permission denied" because Firestore rules are incomplete.
+      Copy these complete rules and paste them in Firebase Console.
+    </div>
+    <div style="background:#1E1E1E;color:#D4D4D4;border-radius:8px;padding:14px;
+      font-family:monospace;font-size:11px;line-height:1.8;overflow-x:auto;
+      max-height:300px;overflow-y:auto;white-space:pre;margin-bottom:12px">${RULES.replace(/</g,'&lt;').replace(/>/g,'&gt;')}</div>
+    <div style="font-size:12px;color:var(--text3);margin-bottom:14px;line-height:1.7">
+      <strong>How to update:</strong><br>
+      1. Open <a href="https://console.firebase.google.com" target="_blank" style="color:var(--sage)">console.firebase.google.com</a><br>
+      2. Select project <strong>lifeflow-2f5eb</strong><br>
+      3. Firestore Database → <strong>Rules</strong> tab<br>
+      4. Replace everything with the rules above<br>
+      5. Click <strong>Publish</strong> — takes effect in ~30 seconds
+    </div>
+    <button class="btn btn-primary" style="width:100%" onclick="
+      navigator.clipboard?.writeText(${JSON.stringify(RULES)}).then(()=>showToast('✅ Rules copied! Paste in Firebase Console.'));
+      document.getElementById('firestore-rules-modal').remove()">
+      📋 Copy Complete Rules
+    </button>
+  </div>`;
+  document.body.appendChild(m);
 }
 
 function showToast(msg){
