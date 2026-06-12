@@ -1651,6 +1651,105 @@ onAuthStateChanged(auth, async (user) => {
   .feedback-stat-val{font-size:28px;font-weight:700;font-family:'Cormorant Garamond',serif;}
   .feedback-stat-lbl{font-size:11px;color:#6B7280;margin-top:2px;}
 
+
+  /* ══════════════════════════════════════════════════════
+     GUIDED TOUR
+  ══════════════════════════════════════════════════════ */
+  .tour-overlay{
+    position:fixed;inset:0;z-index:1000;pointer-events:none;
+    transition:opacity .3s;
+  }
+  .tour-overlay.active{pointer-events:all;}
+
+  /* SVG-based cutout spotlight */
+  .tour-spotlight-svg{
+    position:absolute;inset:0;width:100%;height:100%;
+    pointer-events:none;
+  }
+
+  /* Tooltip card */
+  .tour-card{
+    position:fixed;z-index:1001;
+    width:min(320px, 90vw);
+    background:white;border-radius:20px;
+    box-shadow:0 24px 64px rgba(0,0,0,.25),0 4px 16px rgba(0,0,0,.12);
+    overflow:hidden;pointer-events:all;
+    animation:tourCardIn .3s cubic-bezier(.34,1.56,.64,1);
+  }
+  @keyframes tourCardIn{from{opacity:0;transform:scale(.88) translateY(8px)}to{opacity:1;transform:none}}
+
+  /* Card header — gradient per step */
+  .tour-card-header{
+    padding:18px 20px 14px;
+    background:var(--tour-grad, linear-gradient(135deg,#3D5C42,#6B8F71));
+    color:white;
+  }
+  .tour-step-badge{
+    display:inline-flex;align-items:center;gap:5px;
+    background:rgba(255,255,255,.2);border-radius:20px;
+    padding:2px 10px;font-size:10px;font-weight:700;
+    letter-spacing:.06em;text-transform:uppercase;margin-bottom:8px;
+  }
+  .tour-card-title{font-size:19px;font-weight:700;font-family:'Cormorant Garamond',serif;
+    line-height:1.2;margin-bottom:4px;}
+  .tour-card-emoji{font-size:32px;margin-bottom:6px;}
+  .tour-card-body{padding:14px 20px 16px;font-size:13px;color:#374151;line-height:1.65;}
+  .tour-card-tip{
+    background:#F5F3FF;border-radius:10px;padding:8px 12px;
+    font-size:12px;color:#6C3CE1;margin-top:10px;
+    border-left:3px solid #A78BFA;
+  }
+
+  /* Footer nav */
+  .tour-card-footer{
+    display:flex;align-items:center;justify-content:space-between;
+    padding:10px 16px 14px;gap:8px;
+    border-top:1px solid #F3F4F6;
+  }
+  .tour-progress{display:flex;gap:4px;align-items:center;}
+  .tour-dot{width:6px;height:6px;border-radius:50%;background:#E5E7EB;transition:all .2s;}
+  .tour-dot.active{background:var(--tour-color,#3D5C42);width:18px;border-radius:3px;}
+  .tour-dot.done{background:#D1FAE5;}
+  .tour-btn{
+    padding:8px 18px;border-radius:12px;border:none;cursor:pointer;
+    font-size:13px;font-weight:600;font-family:'DM Sans',sans-serif;
+    transition:all .15s;
+  }
+  .tour-btn-next{
+    background:var(--tour-color,#3D5C42);color:white;
+    box-shadow:0 2px 8px rgba(0,0,0,.15);
+  }
+  .tour-btn-next:hover{filter:brightness(1.08);}
+  .tour-btn-skip{background:transparent;color:#9CA3AF;font-size:12px;padding:8px 10px;}
+  .tour-btn-skip:hover{color:#6B7280;}
+  .tour-btn-prev{background:#F3F4F6;color:#374151;}
+  .tour-btn-prev:hover{background:#E5E7EB;}
+
+  /* Highlight ring around target element */
+  .tour-highlight-ring{
+    position:fixed;border-radius:12px;
+    box-shadow:0 0 0 3px var(--tour-color,#3D5C42),
+               0 0 0 6px rgba(61,92,66,.2);
+    pointer-events:none;z-index:999;
+    transition:all .35s cubic-bezier(.4,0,.2,1);
+    animation:ringPulse 2s ease-in-out infinite;
+  }
+  @keyframes ringPulse{
+    0%,100%{box-shadow:0 0 0 3px var(--tour-color,#3D5C42),0 0 0 6px rgba(61,92,66,.2)}
+    50%{box-shadow:0 0 0 3px var(--tour-color,#3D5C42),0 0 0 10px rgba(61,92,66,.08)}
+  }
+
+  /* Tour launch button in sidebar footer */
+  .tour-launch-btn{
+    display:flex;align-items:center;gap:7px;
+    width:100%;margin-top:8px;padding:8px 12px;
+    border-radius:10px;border:none;background:transparent;
+    cursor:pointer;font-size:12px;font-weight:500;
+    color:var(--sidebar-text2);transition:all .15s;
+    font-family:'DM Sans',sans-serif;
+  }
+  .tour-launch-btn:hover{background:rgba(255,255,255,.08);color:white;}
+
 </style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 </head>
@@ -1737,6 +1836,9 @@ onAuthStateChanged(auth, async (user) => {
     <div class="sidebar-footer">
       <div class="date-chip" id="today-chip">Today</div>
       <div id="sidebar-date" style="font-size:12px;color:var(--sidebar-text3)"></div>
+      <button class="tour-launch-btn" onclick="startTour(true)">
+        <span style="font-size:14px">🗺️</span> Take a tour
+      </button>
     </div>
   </aside>
 
@@ -2270,7 +2372,9 @@ function launchApp() {
   setTimeout(handleInviteToken, 800);
   setTimeout(startPaymentReqListener, 1200);
   setTimeout(initNotifications, 1500);
-  setTimeout(_checkAdminNav, 500);   // show admin nav for admin account
+  setTimeout(_checkAdminNav, 500);
+  // Auto-start tour on first login
+  setTimeout(()=>startTour(false), 1200);
 }
 
 function renderSidebarUser() {
@@ -8772,6 +8876,319 @@ async function deleteFbItem(id){
       await deleteDoc(doc(db,'feedback',id));
     }catch(e){ console.warn('deleteFbItem:', e); }
   }
+}
+
+
+// ══════════════════════════════════════════════════════════════════════════
+// GUIDED TOUR
+// ══════════════════════════════════════════════════════════════════════════
+const TOUR_STEPS = [
+  {
+    id:       'welcome',
+    title:    'Welcome to LifeFlow 🌿',
+    emoji:    '✨',
+    body:     'Your personal sanctuary for habits, goals, spending, journaling and so much more. This quick tour shows you everything in under 2 minutes.',
+    tip:      'Tap <strong>Next</strong> to explore each section, or <strong>Skip Tour</strong> to dive straight in.',
+    target:   null,                      // null = centred full-screen welcome card
+    page:     'home',
+    grad:     'linear-gradient(135deg,#3D5C42,#6B8F71)',
+    color:    '#3D5C42',
+    navFn:    ()=>navigate('home',document.getElementById('nav-home')),
+  },
+  {
+    id:       'home',
+    title:    'Home Dashboard',
+    emoji:    '🏡',
+    body:     'Your command centre. Drag widgets to arrange them exactly how you like — Vision Board, Habits, Goals, and To-Dos side by side.',
+    tip:      'Tap any stat card (Habits today, Tasks) to jump straight to that section.',
+    target:   'nav-home',
+    page:     'home',
+    grad:     'linear-gradient(135deg,#3D5C42,#6B8F71)',
+    color:    '#3D5C42',
+    navFn:    ()=>navigate('home',document.getElementById('nav-home')),
+  },
+  {
+    id:       'habits',
+    title:    'Habits',
+    emoji:    '🔁',
+    body:     'Build daily and weekly habits. Toggle to mark done, track streaks, and get a motivational popup every time you complete one.',
+    tip:      'Try adding "Drink 8 glasses of water" as a Daily habit and set an 8 AM reminder.',
+    target:   'nav-habits',
+    page:     'habits',
+    grad:     'linear-gradient(135deg,#B8845A,#E8C99A)',
+    color:    '#B8845A',
+    navFn:    ()=>navigate('habits',document.getElementById('nav-habits')),
+  },
+  {
+    id:       'goals',
+    title:    'Goals',
+    emoji:    '🎯',
+    body:     'Set goals with a target value and track your progress with a visual bar. Read 12 books this year? Run 200 km? Set it here.',
+    tip:      'Goals support units like books, km, hours, or ₹ rupees.',
+    target:   'nav-goals',
+    page:     'goals',
+    grad:     'linear-gradient(135deg,#5A78B8,#A8C0F0)',
+    color:    '#5A78B8',
+    navFn:    ()=>navigate('goals',document.getElementById('nav-goals')),
+  },
+  {
+    id:       'todos',
+    title:    'To-Do',
+    emoji:    '✅',
+    body:     'Tasks with priorities, due dates, and categories. The "All" tab shows everything at once with counts per category.',
+    tip:      'Set a due date and the task turns red when overdue — a gentle nudge.',
+    target:   'nav-todos',
+    page:     'todos',
+    grad:     'linear-gradient(135deg,#8A6BC4,#C4A8F0)',
+    color:    '#8A6BC4',
+    navFn:    ()=>navigate('todos',document.getElementById('nav-todos')),
+  },
+  {
+    id:       'planner',
+    title:    'Day Planner',
+    emoji:    '📅',
+    body:     'Plan your day hour by hour on a timeline view. Add schedules for yourself and family members — each person gets their own colour and calendar.',
+    tip:      'On Apple devices, tap "🍎 Apple" on any block to send it to Apple Reminders with one tap.',
+    target:   'nav-planner',
+    page:     'planner',
+    grad:     'linear-gradient(135deg,#3D8C6A,#A8D8B8)',
+    color:    '#3D8C6A',
+    navFn:    ()=>navigate('planner',document.getElementById('nav-planner')),
+  },
+  {
+    id:       'spending',
+    title:    'Spending',
+    emoji:    '₹',
+    body:     'Track personal expenses, create shared lists with family (no splitting — just tracking), and split group expenses fairly. Charts show category-wise breakdown.',
+    tip:      'Import expenses from a CSV template — great for bulk entry from bank statements.',
+    target:   'nav-spending-parent',
+    page:     'spending',
+    grad:     'linear-gradient(135deg,#C4944A,#F0D098)',
+    color:    '#C4944A',
+    navFn:    ()=>{ navigate('spending',document.getElementById('nav-spending-parent')); },
+  },
+  {
+    id:       'journal',
+    title:    'Journal',
+    emoji:    '📔',
+    body:     'A private space to write freely. Choose from moods, tags, and templates. Protected by a PIN so only you can read it.',
+    tip:      'Use journal prompts if you\'re not sure what to write — tap the ✨ icon in the editor.',
+    target:   'nav-journal',
+    page:     'journal',
+    grad:     'linear-gradient(135deg,#B85A4A,#F0A898)',
+    color:    '#B85A4A',
+    navFn:    ()=>navigate('journal',document.getElementById('nav-journal')),
+  },
+  {
+    id:       'reminders',
+    title:    'Reminders',
+    emoji:    '⏰',
+    body:     'Set one-time or repeating reminders. Quick presets like "Every morning 8 AM" or fully custom. On iPhone, sync to Apple Reminders with one tap.',
+    tip:      'Reminders can also be set directly when adding a habit, goal, to-do, or journal entry.',
+    target:   'nav-reminders',
+    page:     'reminders',
+    grad:     'linear-gradient(135deg,#5A9898,#A8D8D8)',
+    color:    '#5A9898',
+    navFn:    ()=>navigate('reminders',document.getElementById('nav-reminders')),
+  },
+  {
+    id:       'friends',
+    title:    'Friends & Groups',
+    emoji:    '👥',
+    body:     'Connect with friends via a 6-character code. Create shared expense lists and split-expense groups together. All data syncs in real time.',
+    tip:      'Share your code from the Friends tab — your friend enters it on their device.',
+    target:   'nav-sub-friends',
+    page:     'spending',
+    grad:     'linear-gradient(135deg,#3D5C42,#A8D8B8)',
+    color:    '#3D5C42',
+    navFn:    ()=>{ navigate('spending',document.getElementById('nav-spending-parent'));
+                   setTimeout(()=>navToSpend('friends',document.getElementById('nav-sub-friends')),300); },
+  },
+  {
+    id:       'vision',
+    title:    'Vision Board',
+    emoji:    '🌟',
+    body:     'Add cards with your dreams, affirmations, and goals in beautiful handwriting fonts. Choose from Glass, Sticky, Pinned, or Polaroid styles. Upload images too.',
+    tip:      'Double-tap any card to edit it. Drag cards to rearrange on the board.',
+    target:   'nav-home',
+    page:     'home',
+    grad:     'linear-gradient(135deg,#6C3CE1,#EC4899)',
+    color:    '#6C3CE1',
+    navFn:    ()=>navigate('home',document.getElementById('nav-home')),
+  },
+  {
+    id:       'feedback',
+    title:    'Share Your Feedback',
+    emoji:    '💬',
+    body:     'Found a bug? Have an idea? Tap the purple <strong>💬 Feedback</strong> button at the bottom-left of any page. Every suggestion goes directly to the team.',
+    tip:      'Choose Bug or Feature, describe what you\'d like, and hit Send. It takes 30 seconds!',
+    target:   'feedback-fab',
+    page:     'home',
+    grad:     'linear-gradient(135deg,#6C3CE1,#A855F7,#EC4899)',
+    color:    '#6C3CE1',
+    navFn:    ()=>navigate('home',document.getElementById('nav-home')),
+  },
+  {
+    id:       'done',
+    title:    'You\'re all set! 🎉',
+    emoji:    '🌿',
+    body:     'That\'s everything LifeFlow has to offer. Start small — add one habit, log one expense, write one journal entry. Consistency is the magic ingredient.',
+    tip:      'Tap <strong>🗺️ Take a tour</strong> in the sidebar footer any time to replay this.',
+    target:   null,
+    page:     'home',
+    grad:     'linear-gradient(135deg,#3D5C42,#6B8F71,#B8845A)',
+    color:    '#3D5C42',
+    navFn:    ()=>navigate('home',document.getElementById('nav-home')),
+  },
+];
+
+let _tourStep   = 0;
+let _tourActive = false;
+
+function startTour(force){
+  // Auto-start on first login unless already seen
+  const seen = localStorage.getItem('lf3_tour_seen');
+  if(!force && seen) return;
+  _tourStep  = 0;
+  _tourActive= true;
+  closeSidebar?.();
+  _renderTourStep();
+}
+
+function endTour(completed){
+  _tourActive = false;
+  localStorage.setItem('lf3_tour_seen', '1');
+  document.getElementById('tour-overlay')?.remove();
+  document.getElementById('tour-card')?.remove();
+  document.getElementById('tour-ring')?.remove();
+  if(completed){
+    // Navigate home and show a small toast
+    navigate('home', document.getElementById('nav-home'));
+    setTimeout(()=>showToast('🌿 Welcome to LifeFlow! You\'re ready to go.'), 400);
+  }
+}
+
+function _renderTourStep(){
+  const step  = TOUR_STEPS[_tourStep];
+  const total = TOUR_STEPS.length;
+  const isFirst= _tourStep === 0;
+  const isLast = _tourStep === total - 1;
+
+  // Navigate to the step's page first
+  if(step.navFn) step.navFn();
+
+  // Build/update the dark overlay
+  let overlay = document.getElementById('tour-overlay');
+  if(!overlay){
+    overlay = document.createElement('div');
+    overlay.className = 'tour-overlay active';
+    overlay.id = 'tour-overlay';
+    // Semi-dark backdrop (not too dark — user can still see the UI)
+    overlay.style.background = 'rgba(0,0,0,.45)';
+    document.body.appendChild(overlay);
+  }
+
+  // Highlight ring around target
+  document.getElementById('tour-ring')?.remove();
+  if(step.target){
+    setTimeout(()=>{
+      const target = document.getElementById(step.target);
+      if(target){
+        const r = target.getBoundingClientRect();
+        const ring = document.createElement('div');
+        ring.id = 'tour-ring';
+        ring.className = 'tour-highlight-ring';
+        ring.style.cssText = `
+          left:${r.left-6}px; top:${r.top-6}px;
+          width:${r.width+12}px; height:${r.height+12}px;
+          --tour-color:${step.color};
+        `;
+        document.body.appendChild(ring);
+      }
+    }, step.navFn ? 350 : 0);
+  }
+
+  // Progress dots HTML
+  const dots = TOUR_STEPS.map((_,i)=>`
+    <div class="tour-dot ${i===_tourStep?'active':i<_tourStep?'done':''}"
+      style="${i===_tourStep||i<_tourStep?'--tour-color:'+step.color:''}"></div>
+  `).join('');
+
+  // Build tooltip card
+  document.getElementById('tour-card')?.remove();
+  const card = document.createElement('div');
+  card.className = 'tour-card';
+  card.id = 'tour-card';
+  card.innerHTML = `
+    <div class="tour-card-header" style="--tour-grad:${step.grad};background:${step.grad}">
+      <div class="tour-step-badge">${step.emoji} Step ${_tourStep+1} of ${total}</div>
+      <div class="tour-card-title">${step.title}</div>
+    </div>
+    <div class="tour-card-body">
+      ${step.body}
+      ${step.tip?`<div class="tour-card-tip">💡 ${step.tip}</div>`:''}
+    </div>
+    <div class="tour-card-footer">
+      <div style="display:flex;align-items:center;gap:8px">
+        ${!isFirst?`<button class="tour-btn tour-btn-prev" onclick="_tourPrev()">← Back</button>`:''}
+        <button class="tour-btn tour-btn-skip" onclick="endTour(false)">Skip tour</button>
+      </div>
+      <div style="display:flex;align-items:center;gap:10px">
+        <div class="tour-progress">${dots}</div>
+        <button class="tour-btn tour-btn-next" onclick="_tourNext()"
+          style="background:${step.color}">
+          ${isLast ? 'Start using LifeFlow 🌿' : 'Next →'}
+        </button>
+      </div>
+    </div>`;
+
+  // Position: centred for welcome/done, near target otherwise
+  document.body.appendChild(card);
+  _positionTourCard(card, step);
+}
+
+function _positionTourCard(card, step){
+  // Give it a frame to render so we can read dimensions
+  requestAnimationFrame(()=>{
+    const vw = window.innerWidth, vh = window.innerHeight;
+    const cw = card.offsetWidth, ch = card.offsetHeight;
+
+    if(!step.target){
+      // Centred
+      card.style.left = Math.max(8, (vw-cw)/2) + 'px';
+      card.style.top  = Math.max(8, (vh-ch)/2) + 'px';
+      return;
+    }
+
+    const target = document.getElementById(step.target);
+    if(!target){
+      card.style.left = Math.max(8, (vw-cw)/2) + 'px';
+      card.style.top  = Math.max(8, (vh-ch)/2) + 'px';
+      return;
+    }
+
+    const r = target.getBoundingClientRect();
+    // Try to place the card to the right of the target (sidebar items)
+    let left = r.right + 16;
+    let top  = r.top;
+    // If off-screen right, place above/below
+    if(left + cw > vw - 8) left = Math.max(8, vw - cw - 16);
+    // If off-screen bottom, shift up
+    if(top + ch > vh - 8) top = Math.max(8, vh - ch - 16);
+    card.style.left = left + 'px';
+    card.style.top  = top  + 'px';
+  });
+}
+
+function _tourNext(){
+  if(_tourStep >= TOUR_STEPS.length - 1){ endTour(true); return; }
+  _tourStep++;
+  _renderTourStep();
+}
+function _tourPrev(){
+  if(_tourStep <= 0) return;
+  _tourStep--;
+  _renderTourStep();
 }
 
 function showToast(msg){
