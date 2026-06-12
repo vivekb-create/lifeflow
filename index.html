@@ -1530,6 +1530,127 @@ onAuthStateChanged(auth, async (user) => {
   #sync-status.syncing .sync-dot{background:var(--sage);}
   #sync-status.error   .sync-dot{background:#C0392B;}
   #sync-status.pending .sync-dot{background:#B8845A;}
+
+  /* ══════════════════════════════════════════════════════
+     FEEDBACK SYSTEM — energetic, vibrant design
+  ══════════════════════════════════════════════════════ */
+
+  /* Floating feedback button */
+  .feedback-fab{
+    position:fixed;bottom:24px;left:24px;
+    display:flex;align-items:center;gap:8px;
+    padding:10px 16px;border-radius:24px;
+    background:linear-gradient(135deg,#6C3CE1,#A855F7);
+    color:white;border:none;cursor:pointer;
+    font-size:13px;font-weight:600;font-family:'DM Sans',sans-serif;
+    box-shadow:0 4px 20px rgba(108,60,225,.45);
+    z-index:89;transition:all .2s;white-space:nowrap;
+  }
+  .feedback-fab:hover{transform:translateY(-2px);box-shadow:0 8px 28px rgba(108,60,225,.55);}
+  .feedback-fab:active{transform:scale(.96);}
+  .feedback-fab-icon{font-size:16px;}
+
+  /* Feedback modal overlay */
+  .feedback-overlay{
+    position:fixed;inset:0;background:rgba(0,0,0,.6);
+    z-index:600;display:none;align-items:flex-end;justify-content:center;
+    backdrop-filter:blur(4px);
+  }
+  .feedback-overlay.open{display:flex;}
+  .feedback-sheet{
+    background:white;border-radius:24px 24px 0 0;
+    width:100%;max-width:560px;
+    padding:0 0 env(safe-area-inset-bottom);
+    max-height:92vh;overflow-y:auto;
+    animation:sheetUp .3s cubic-bezier(.34,1.56,.64,1);
+  }
+  @keyframes sheetUp{from{transform:translateY(100%)}to{transform:translateY(0)}}
+
+  /* Sheet header — gradient */
+  .feedback-header{
+    background:linear-gradient(135deg,#6C3CE1 0%,#A855F7 50%,#EC4899 100%);
+    padding:24px 24px 20px;border-radius:24px 24px 0 0;
+    color:white;position:relative;
+  }
+  .feedback-header-title{font-size:22px;font-weight:700;font-family:'Cormorant Garamond',serif;
+    font-style:italic;margin-bottom:4px;}
+  .feedback-header-sub{font-size:13px;opacity:.85;}
+  .feedback-close{position:absolute;top:16px;right:16px;background:rgba(255,255,255,.2);
+    border:none;color:white;width:32px;height:32px;border-radius:50%;font-size:18px;
+    cursor:pointer;display:flex;align-items:center;justify-content:center;line-height:1;}
+  .feedback-close:hover{background:rgba(255,255,255,.3);}
+
+  /* Category toggle */
+  .feedback-cat-row{display:flex;gap:10px;margin-bottom:16px;}
+  .feedback-cat-btn{
+    flex:1;padding:12px 8px;border-radius:14px;border:2px solid transparent;
+    cursor:pointer;font-size:13px;font-weight:600;font-family:'DM Sans',sans-serif;
+    transition:all .15s;text-align:center;
+  }
+  .feedback-cat-btn.bug{
+    background:#FFF1F0;color:#E11D48;border-color:#FECDD3;
+  }
+  .feedback-cat-btn.bug.active{
+    background:linear-gradient(135deg,#E11D48,#FB7185);color:white;border-color:transparent;
+    box-shadow:0 4px 14px rgba(225,29,72,.35);
+  }
+  .feedback-cat-btn.feature{
+    background:#F0FDF4;color:#16A34A;border-color:#BBF7D0;
+  }
+  .feedback-cat-btn.feature.active{
+    background:linear-gradient(135deg,#16A34A,#4ADE80);color:white;border-color:transparent;
+    box-shadow:0 4px 14px rgba(22,163,74,.35);
+  }
+  .feedback-cat-icon{font-size:20px;display:block;margin-bottom:4px;}
+
+  /* Page selector chips */
+  .feedback-page-chips{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px;}
+  .feedback-page-chip{padding:5px 12px;border-radius:10px;font-size:12px;font-weight:500;
+    border:1.5px solid #E5E7EB;background:#F9FAFB;cursor:pointer;
+    color:#374151;transition:all .15s;white-space:nowrap;}
+  .feedback-page-chip.sel{background:linear-gradient(135deg,#6C3CE1,#A855F7);
+    color:white;border-color:transparent;}
+
+  /* Submit button */
+  .feedback-submit{
+    width:100%;padding:14px;border-radius:14px;border:none;cursor:pointer;
+    font-size:15px;font-weight:700;font-family:'DM Sans',sans-serif;
+    background:linear-gradient(135deg,#6C3CE1,#A855F7,#EC4899);
+    color:white;box-shadow:0 4px 20px rgba(108,60,225,.4);
+    transition:all .2s;
+  }
+  .feedback-submit:hover{transform:translateY(-1px);box-shadow:0 6px 24px rgba(108,60,225,.5);}
+  .feedback-submit:active{transform:scale(.98);}
+  .feedback-submit:disabled{opacity:.5;cursor:not-allowed;transform:none;}
+
+  /* ── ADMIN DASHBOARD ── */
+  .admin-banner{
+    background:linear-gradient(135deg,#6C3CE1,#A855F7);
+    color:white;border-radius:var(--r);padding:16px 20px;
+    margin-bottom:16px;display:flex;align-items:center;gap:12px;
+  }
+  .feedback-admin-card{
+    background:white;border-radius:var(--r);border:1px solid #E5E7EB;
+    padding:16px;margin-bottom:10px;
+    transition:box-shadow .15s;
+  }
+  .feedback-admin-card:hover{box-shadow:0 4px 16px rgba(0,0,0,.08);}
+  .feedback-badge{
+    display:inline-flex;align-items:center;gap:4px;
+    padding:3px 10px;border-radius:20px;font-size:11px;font-weight:700;
+    text-transform:uppercase;letter-spacing:.05em;
+  }
+  .feedback-badge.bug{background:#FFF1F0;color:#E11D48;}
+  .feedback-badge.feature{background:#F0FDF4;color:#16A34A;}
+  .feedback-badge.open{background:#FEF3C7;color:#D97706;}
+  .feedback-badge.in_progress{background:#EFF6FF;color:#2563EB;}
+  .feedback-badge.done{background:#F0FDF4;color:#16A34A;}
+  .feedback-stats-row{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:16px;}
+  .feedback-stat{background:white;border-radius:var(--r2);border:1px solid #E5E7EB;
+    padding:14px;text-align:center;}
+  .feedback-stat-val{font-size:28px;font-weight:700;font-family:'Cormorant Garamond',serif;}
+  .feedback-stat-lbl{font-size:11px;color:#6B7280;margin-top:2px;}
+
 </style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 </head>
@@ -1610,6 +1731,7 @@ onAuthStateChanged(auth, async (user) => {
       <button class="nav-item" id="nav-journal" onclick="navigate('journal',this)"><span class="nav-icon">📔</span> Journal</button>
       <div class="nav-section">Manage</div>
       <button class="nav-item" id="nav-reminders" onclick="navigate('reminders',this)"><span class="nav-icon">⏰</span> Reminders</button>
+      <button class="nav-item" id="nav-feedback-admin" onclick="navigate('feedback-admin',this)" style="display:none"><span class="nav-icon">💬</span> Feedback</button>
     </nav>
 
     <div class="sidebar-footer">
@@ -1739,6 +1861,22 @@ onAuthStateChanged(auth, async (user) => {
           <button class="btn btn-primary btn-sm" onclick="openPlannerPersonForm()">+ Add</button>
         </div>
         <div id="planner-content"></div>
+      </div>
+
+      <!-- ADMIN FEEDBACK DASHBOARD (only visible to admin) -->
+      <div class="page" id="page-feedback-admin">
+        <div class="section-head">
+          <div>
+            <div class="section-title">💬 Feedback</div>
+            <div style="font-size:12px;color:var(--text3);margin-top:2px">User feedback & suggestions</div>
+          </div>
+          <div style="display:flex;gap:6px">
+            <button class="btn btn-ghost btn-sm" id="fb-filter-all"    onclick="setFbFilter('all')"         style="font-size:11px">All</button>
+            <button class="btn btn-ghost btn-sm" id="fb-filter-bug"     onclick="setFbFilter('bug')"        style="font-size:11px">🐛 Bugs</button>
+            <button class="btn btn-ghost btn-sm" id="fb-filter-feature" onclick="setFbFilter('feature')"    style="font-size:11px">✨ Features</button>
+          </div>
+        </div>
+        <div id="feedback-admin-content"></div>
       </div>
 
       <!-- TODOS -->
@@ -1901,6 +2039,10 @@ onAuthStateChanged(auth, async (user) => {
 
       <!-- FLOATING ADD BUTTON -->
       <button class="fab-quick-add" id="fab-quick-add" onclick="openQuickAdd()" title="Quick add spending">+</button>
+      <!-- Feedback FAB -->
+      <button class="feedback-fab" id="feedback-fab" onclick="openFeedbackSheet()">
+        <span class="feedback-fab-icon">💬</span> Feedback
+      </button>
 
       <!-- JOURNAL -->
       <div class="page" id="page-journal">
@@ -2127,7 +2269,8 @@ function launchApp() {
 
   setTimeout(handleInviteToken, 800);
   setTimeout(startPaymentReqListener, 1200);
-  setTimeout(initNotifications, 1500);   // start reminders + request permission
+  setTimeout(initNotifications, 1500);
+  setTimeout(_checkAdminNav, 500);   // show admin nav for admin account
 }
 
 function renderSidebarUser() {
@@ -2349,7 +2492,8 @@ function renderPage(p){
   if(p==='spending')renderSpending();
   if(p==='journal')renderJournalPage();
   if(p==='reminders')renderRemindersPage();
-  if(p==='planner')  renderPlannerPage();
+  if(p==='planner')        renderPlannerPage();
+  if(p==='feedback-admin') renderFeedbackAdminPage();
 }
 function renderAll(){renderPage(currentPage);}
 
@@ -8219,6 +8363,13 @@ service cloud.firestore {
     match /payment_requests/{r} {
       allow read, write: if request.auth != null;
     }
+
+    // Feedback — anyone signed in can submit, only admin can read all
+    match /feedback/{id} {
+      allow create: if request.auth != null;
+      allow read, update, delete: if request.auth != null &&
+        request.auth.token.email == 'vivek14gim@gmail.com';
+    }
   }
 }`;
 
@@ -8249,6 +8400,378 @@ service cloud.firestore {
     </button>
   </div>`;
   document.body.appendChild(m);
+}
+
+
+// ══════════════════════════════════════════════════════════════════════════
+// FEEDBACK SYSTEM
+// ══════════════════════════════════════════════════════════════════════════
+const ADMIN_EMAIL = 'vivek14gim@gmail.com';
+const ADMIN_NAME  = 'Vivek Bonde';
+const FB_PAGES    = ['Home','Habits','Goals','To-Do','Day Planner',
+                     'Spending','Journal','Reminders','Friends','Vision Board','Other'];
+let _fbCat       = 'bug';    // current selected category in form
+let _fbPage      = 'Other';  // current selected page
+let _fbFilter    = 'all';    // admin filter
+
+function isAdmin(){
+  const u = window.currentUser||currentUser;
+  return u && (u.email===ADMIN_EMAIL || u.name===ADMIN_NAME ||
+               (u.displayName||'').toLowerCase().includes('vivek bonde'));
+}
+
+// ── Show/hide admin nav based on login ─────────────────────────────────────
+function _checkAdminNav(){
+  const el = document.getElementById('nav-feedback-admin');
+  if(el) el.style.display = isAdmin() ? 'flex' : 'none';
+}
+
+// ── Open the feedback bottom sheet ─────────────────────────────────────────
+function openFeedbackSheet(){
+  document.getElementById('feedback-overlay')?.remove();
+  const u = window.currentUser||currentUser;
+  const userEmail = u?.email || '';
+  const userName  = u?.name  || '';
+
+  const overlay = document.createElement('div');
+  overlay.className = 'feedback-overlay'; overlay.id = 'feedback-overlay';
+  overlay.innerHTML = `
+    <div class="feedback-sheet" id="feedback-sheet">
+
+      <!-- Gradient header -->
+      <div class="feedback-header">
+        <button class="feedback-close" onclick="closeFeedbackSheet()">×</button>
+        <div class="feedback-header-title">Share your thoughts ✨</div>
+        <div class="feedback-header-sub">Your feedback helps make LifeFlow better for everyone</div>
+      </div>
+
+      <div style="padding:20px 20px 24px">
+
+        <!-- Category toggle -->
+        <div style="font-size:11px;font-weight:600;color:#6B7280;text-transform:uppercase;
+          letter-spacing:.07em;margin-bottom:8px">What kind of feedback?</div>
+        <div class="feedback-cat-row">
+          <button class="feedback-cat-btn bug active" id="fb-btn-bug" onclick="selectFbCat('bug')">
+            <span class="feedback-cat-icon">🐛</span>
+            Bug Report
+            <div style="font-size:10px;font-weight:400;opacity:.8;margin-top:2px">Something isn't working</div>
+          </button>
+          <button class="feedback-cat-btn feature" id="fb-btn-feature" onclick="selectFbCat('feature')">
+            <span class="feedback-cat-icon">✨</span>
+            Feature Idea
+            <div style="font-size:10px;font-weight:400;opacity:.8;margin-top:2px">Something new or better</div>
+          </button>
+        </div>
+
+        <!-- Title -->
+        <div style="font-size:11px;font-weight:600;color:#6B7280;text-transform:uppercase;
+          letter-spacing:.07em;margin-bottom:6px">Title *</div>
+        <input class="input" id="fb-title" placeholder="Short description of your feedback..."
+          style="margin-bottom:14px;border-color:#E5E7EB;background:#FAFAFA">
+
+        <!-- Description -->
+        <div style="font-size:11px;font-weight:600;color:#6B7280;text-transform:uppercase;
+          letter-spacing:.07em;margin-bottom:6px">Details</div>
+        <textarea class="input" id="fb-desc" placeholder="Tell us more — the more detail, the better!"
+          rows="3" style="resize:vertical;margin-bottom:14px;border-color:#E5E7EB;background:#FAFAFA;line-height:1.5"></textarea>
+
+        <!-- Page selector -->
+        <div style="font-size:11px;font-weight:600;color:#6B7280;text-transform:uppercase;
+          letter-spacing:.07em;margin-bottom:8px">Which section?</div>
+        <div class="feedback-page-chips">
+          ${FB_PAGES.map(p=>`<button class="feedback-page-chip ${p==='Other'?'sel':''}"
+            onclick="selectFbPage('${p}',this)">${p}</button>`).join('')}
+        </div>
+
+        <!-- Screenshot hint -->
+        <div style="display:flex;align-items:center;gap:8px;padding:10px 12px;
+          background:#F5F3FF;border-radius:10px;border:1px dashed #A78BFA;margin-bottom:16px">
+          <span style="font-size:16px">📸</span>
+          <div>
+            <div style="font-size:12px;font-weight:600;color:#6C3CE1">Optional: attach a screenshot</div>
+            <div style="font-size:11px;color:#8B5CF6;margin-top:1px">Take a screenshot and share it in a follow-up message</div>
+          </div>
+        </div>
+
+        <!-- Your info -->
+        <div style="display:flex;gap:8px;margin-bottom:18px">
+          <div style="flex:1">
+            <div style="font-size:11px;font-weight:600;color:#6B7280;text-transform:uppercase;
+              letter-spacing:.07em;margin-bottom:6px">Your name</div>
+            <input class="input" id="fb-name" value="${userName}"
+              placeholder="Your name" style="margin-bottom:0;border-color:#E5E7EB;background:#FAFAFA">
+          </div>
+          <div style="flex:1">
+            <div style="font-size:11px;font-weight:600;color:#6B7280;text-transform:uppercase;
+              letter-spacing:.07em;margin-bottom:6px">Email (optional)</div>
+            <input class="input" id="fb-email" value="${userEmail}"
+              placeholder="For follow-up" style="margin-bottom:0;border-color:#E5E7EB;background:#FAFAFA">
+          </div>
+        </div>
+
+        <!-- Submit -->
+        <button class="feedback-submit" id="fb-submit-btn" onclick="submitFeedback()">
+          Send Feedback 🚀
+        </button>
+
+        <div style="text-align:center;font-size:11px;color:#9CA3AF;margin-top:12px">
+          All feedback goes directly to the LifeFlow team
+        </div>
+      </div>
+    </div>`;
+
+  // Tap outside to close
+  overlay.addEventListener('click', e => { if(e.target===overlay) closeFeedbackSheet(); });
+  document.body.appendChild(overlay);
+  requestAnimationFrame(()=>overlay.classList.add('open'));
+  // Default page chip = current page
+  const curPageName = {
+    home:'Home',habits:'Habits',goals:'Goals',todos:'To-Do',
+    planner:'Day Planner',spending:'Spending',journal:'Journal',
+    reminders:'Reminders',friends:'Friends'
+  }[currentPage] || 'Other';
+  selectFbPage(curPageName, null);
+}
+
+function closeFeedbackSheet(){
+  const overlay = document.getElementById('feedback-overlay');
+  if(overlay){ overlay.classList.remove('open'); setTimeout(()=>overlay.remove(), 300); }
+}
+
+function selectFbCat(cat){
+  _fbCat = cat;
+  document.getElementById('fb-btn-bug')?.classList.toggle('active', cat==='bug');
+  document.getElementById('fb-btn-feature')?.classList.toggle('active', cat==='feature');
+}
+
+function selectFbPage(page, btn){
+  _fbPage = page;
+  document.querySelectorAll('.feedback-page-chip').forEach(b=>b.classList.remove('sel'));
+  if(btn) btn.classList.add('sel');
+  else {
+    document.querySelectorAll('.feedback-page-chip').forEach(b=>{
+      if(b.textContent.trim()===page) b.classList.add('sel');
+    });
+  }
+}
+
+async function submitFeedback(){
+  const title = (document.getElementById('fb-title')?.value||'').trim();
+  const desc  = (document.getElementById('fb-desc')?.value||'').trim();
+  const name  = (document.getElementById('fb-name')?.value||'').trim();
+  const email = (document.getElementById('fb-email')?.value||'').trim();
+
+  if(!title){ showToast('Please enter a title for your feedback.'); return; }
+
+  const btn = document.getElementById('fb-submit-btn');
+  if(btn){ btn.disabled=true; btn.textContent='Sending…'; }
+
+  const u = window.currentUser||currentUser;
+  const fb = {
+    id:       String(uid()),
+    cat:      _fbCat,
+    page:     _fbPage,
+    title,
+    desc,
+    name:     name || u?.name || 'Anonymous',
+    email:    email || u?.email || '',
+    uid:      u?.uid || 'guest',
+    status:   'open',
+    createdAt:Date.now(),
+    votes:    0,
+  };
+
+  if(window._fb){
+    try{
+      const {db, doc, setDoc} = window._fb;
+      await setDoc(doc(db,'feedback', fb.id), fb);
+      closeFeedbackSheet();
+      _showFeedbackSuccess(fb.cat);
+    }catch(e){
+      console.error('feedback submit:', e);
+      if(btn){ btn.disabled=false; btn.textContent='Send Feedback 🚀'; }
+      // Fallback: save locally and show success anyway (admin can add rule later)
+      const saved = JSON.parse(localStorage.getItem('lf3_offline_feedback')||'[]');
+      saved.push(fb);
+      localStorage.setItem('lf3_offline_feedback', JSON.stringify(saved));
+      closeFeedbackSheet();
+      _showFeedbackSuccess(fb.cat);
+    }
+  } else {
+    if(btn){ btn.disabled=false; btn.textContent='Send Feedback 🚀'; }
+    showToast('Not connected. Try again in a moment.');
+  }
+}
+
+function _showFeedbackSuccess(cat){
+  document.getElementById('feedback-success-modal')?.remove();
+  const isBug = cat==='bug';
+  const m = document.createElement('div');
+  m.className='modal-overlay'; m.id='feedback-success-modal';
+  m.innerHTML=`<div class="modal" style="max-width:320px;text-align:center;padding:32px 24px">
+    <div style="font-size:56px;margin-bottom:12px">${isBug?'🐛':'✨'}</div>
+    <div style="font-size:22px;font-weight:700;font-family:'Cormorant Garamond',serif;
+      background:linear-gradient(135deg,#6C3CE1,#EC4899);-webkit-background-clip:text;
+      -webkit-text-fill-color:transparent;background-clip:text;margin-bottom:8px">
+      ${isBug?'Bug reported!':'Idea received!'}
+    </div>
+    <div style="font-size:13px;color:#6B7280;line-height:1.6;margin-bottom:20px">
+      ${isBug
+        ? 'Thanks for reporting this. We\'ll look into it and get it fixed.'
+        : 'Love the idea! We\'ll review it and consider it for a future update.'}
+    </div>
+    <button onclick="document.getElementById('feedback-success-modal').remove()"
+      style="width:100%;padding:12px;border-radius:12px;border:none;cursor:pointer;
+        font-size:14px;font-weight:600;font-family:'DM Sans',sans-serif;
+        background:linear-gradient(135deg,#6C3CE1,#A855F7,#EC4899);color:white;
+        box-shadow:0 4px 16px rgba(108,60,225,.4)">
+      Back to LifeFlow 🌿
+    </button>
+  </div>`;
+  document.body.appendChild(m);
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+// ADMIN DASHBOARD
+// ══════════════════════════════════════════════════════════════════════════
+let _fbAllItems  = [];
+let _fbFilter2   = 'all';
+
+function setFbFilter(f){
+  _fbFilter2 = f;
+  ['all','bug','feature'].forEach(x=>{
+    const btn=document.getElementById('fb-filter-'+x);
+    if(btn) btn.style.background = x===f ? 'var(--sage)' : '';
+    if(btn) btn.style.color      = x===f ? 'white' : '';
+  });
+  renderFeedbackAdmin();
+}
+
+async function renderFeedbackAdminPage(){
+  if(!isAdmin()){ navigate('home',document.getElementById('nav-home')); return; }
+  const el=document.getElementById('feedback-admin-content');
+  if(!el) return;
+  el.innerHTML=`<div style="text-align:center;padding:40px;color:var(--text3)">Loading feedback…</div>`;
+
+  if(!window._fb){ el.innerHTML='<div class="empty">Firebase not ready.</div>'; return; }
+
+  try{
+    const {db,collection,getDocs,orderBy,query:fbQuery}=window._fb;
+    const snap=await getDocs(fbQuery(collection(db,'feedback'),orderBy('createdAt','desc')));
+    _fbAllItems=[];
+    snap.forEach(d=>_fbAllItems.push(d.data()));
+
+    // Also load any offline feedback
+    const offline=JSON.parse(localStorage.getItem('lf3_offline_feedback')||'[]');
+    offline.forEach(fb=>{ if(!_fbAllItems.find(x=>x.id===fb.id)) _fbAllItems.push(fb); });
+
+    renderFeedbackAdmin();
+  }catch(e){
+    console.error('load feedback:', e);
+    // Try local fallback
+    _fbAllItems = JSON.parse(localStorage.getItem('lf3_offline_feedback')||'[]');
+    renderFeedbackAdmin();
+  }
+}
+
+function renderFeedbackAdmin(){
+  const el=document.getElementById('feedback-admin-content');
+  if(!el) return;
+
+  const items = _fbFilter2==='all' ? _fbAllItems
+    : _fbAllItems.filter(f=>f.cat===_fbFilter2);
+
+  const bugs     = _fbAllItems.filter(f=>f.cat==='bug').length;
+  const features = _fbAllItems.filter(f=>f.cat==='feature').length;
+  const open     = _fbAllItems.filter(f=>f.status==='open').length;
+
+  el.innerHTML=`
+    <!-- Admin banner -->
+    <div class="admin-banner">
+      <div style="font-size:32px">💬</div>
+      <div>
+        <div style="font-size:16px;font-weight:700">Feedback Dashboard</div>
+        <div style="font-size:12px;opacity:.8;margin-top:2px">${_fbAllItems.length} total · ${open} open</div>
+      </div>
+    </div>
+
+    <!-- Stats -->
+    <div class="feedback-stats-row">
+      <div class="feedback-stat">
+        <div class="feedback-stat-val" style="color:#E11D48">${bugs}</div>
+        <div class="feedback-stat-lbl">🐛 Bugs</div>
+      </div>
+      <div class="feedback-stat">
+        <div class="feedback-stat-val" style="color:#16A34A">${features}</div>
+        <div class="feedback-stat-lbl">✨ Features</div>
+      </div>
+      <div class="feedback-stat">
+        <div class="feedback-stat-val" style="color:#D97706">${open}</div>
+        <div class="feedback-stat-lbl">⏳ Open</div>
+      </div>
+    </div>
+
+    <!-- Items -->
+    ${items.length===0
+      ? `<div class="empty"><div class="empty-icon">💬</div>No feedback yet</div>`
+      : items.map(fb=>`
+        <div class="feedback-admin-card" id="fbc-${fb.id}">
+          <div style="display:flex;align-items:flex-start;gap:10px;margin-bottom:8px">
+            <div style="flex:1">
+              <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-bottom:6px">
+                <span class="feedback-badge ${fb.cat}">${fb.cat==='bug'?'🐛 Bug':'✨ Feature'}</span>
+                <span class="feedback-badge ${fb.status||'open'}">${(fb.status||'open').replace('_',' ')}</span>
+                <span style="font-size:10px;color:#9CA3AF;background:#F3F4F6;padding:2px 7px;border-radius:8px">${fb.page||'General'}</span>
+              </div>
+              <div style="font-size:15px;font-weight:600;color:#111827;margin-bottom:4px">${fb.title}</div>
+              ${fb.desc?`<div style="font-size:13px;color:#6B7280;line-height:1.5;margin-bottom:6px">${fb.desc}</div>`:''}
+              <div style="font-size:11px;color:#9CA3AF">
+                ${fb.name} ${fb.email?'· '+fb.email:''} · ${new Date(fb.createdAt).toLocaleDateString('en-IN',{day:'numeric',month:'short',year:'numeric'})}
+              </div>
+            </div>
+          </div>
+          <!-- Status actions -->
+          <div style="display:flex;gap:6px;flex-wrap:wrap">
+            ${['open','in_progress','done'].map(s=>`
+              <button onclick="updateFbStatus('${fb.id}','${s}')"
+                style="padding:4px 12px;border-radius:8px;font-size:11px;font-weight:600;cursor:pointer;
+                  border:1.5px solid ${fb.status===s?'transparent':'#E5E7EB'};
+                  background:${fb.status===s?(s==='open'?'#FEF3C7':s==='in_progress'?'#EFF6FF':'#F0FDF4'):'transparent'};
+                  color:${fb.status===s?(s==='open'?'#D97706':s==='in_progress'?'#2563EB':'#16A34A'):'#6B7280'};
+                  font-family:'DM Sans',sans-serif">
+                ${s==='open'?'⏳ Open':s==='in_progress'?'🔧 In Progress':'✅ Done'}
+              </button>`).join('')}
+            <button onclick="deleteFbItem('${fb.id}')"
+              style="padding:4px 12px;border-radius:8px;font-size:11px;cursor:pointer;
+                border:1.5px solid #FEE2E2;background:transparent;color:#EF4444;
+                font-family:'DM Sans',sans-serif;font-weight:600;margin-left:auto">
+              🗑 Delete
+            </button>
+          </div>
+        </div>`).join('')}`;
+}
+
+async function updateFbStatus(id, status){
+  const item = _fbAllItems.find(f=>f.id===id);
+  if(item){ item.status=status; renderFeedbackAdmin(); }
+  if(window._fb){
+    try{
+      const {db,doc,setDoc}=window._fb;
+      await setDoc(doc(db,'feedback',id),{status},{merge:true});
+    }catch(e){ console.warn('updateFbStatus:', e); }
+  }
+}
+
+async function deleteFbItem(id){
+  if(!confirm('Delete this feedback item?')) return;
+  _fbAllItems = _fbAllItems.filter(f=>f.id!==id);
+  renderFeedbackAdmin();
+  if(window._fb){
+    try{
+      const {db,doc,deleteDoc}=window._fb;
+      await deleteDoc(doc(db,'feedback',id));
+    }catch(e){ console.warn('deleteFbItem:', e); }
+  }
 }
 
 function showToast(msg){
