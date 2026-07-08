@@ -285,7 +285,7 @@ window._saveToFirestore = async function() {
       ...state,
       updatedAt: ts,
       updatedBy: DEVICE_ID
-    });
+    }, { merge: true });   // merge:true — never wipe pendingFriendReqs or other fields
     if(typeof setSyncStatus === 'function') setSyncStatus('synced', 'Saved ✓');
   } catch(e) {
     console.warn('Firestore save error:', e);
@@ -2373,6 +2373,21 @@ function launchApp() {
   setTimeout(startPaymentReqListener, 1200);
   setTimeout(initNotifications, 1500);
   setTimeout(_checkAdminNav, 500);
+  // Fetch once on launch to catch pending requests that arrived while offline
+  setTimeout(async ()=>{
+    const u = window.currentUser||currentUser;
+    if(!u?.uid||!window._fb) return;
+    try{
+      const {db,doc,getDoc} = window._fb;
+      const snap = await getDoc(doc(db,'users',u.uid));
+      if(snap.exists()){
+        const data = snap.data();
+        if(Array.isArray(data.pendingFriendReqs) && data.pendingFriendReqs.length > 0){
+          if(window._processPendingFriendReqs) window._processPendingFriendReqs(data.pendingFriendReqs);
+        }
+      }
+    }catch(e){ console.warn('launchApp fetch pendingFriendReqs:', e); }
+  }, 2000);
   // Auto-start tour on first login
   setTimeout(()=>startTour(false), 1200);
 }
@@ -3858,7 +3873,12 @@ function renderFriends(){
   </div>`;
 
   const ffEl=document.getElementById('friends-form');
-  if(ffEl)ffEl.innerHTML=`<button class="add-btn" onclick="openInviteModal()">+ Add friend via Link or QR</button>`;
+  if(ffEl)ffEl.innerHTML=`
+    <button class="add-btn" onclick="openInviteModal()">+ Add friend via Link or QR</button>
+    <button class="btn btn-ghost btn-sm" onclick="checkForFriendRequests()"
+      style="width:100%;margin-top:6px;font-size:12px">
+      🔄 Check for new friend requests
+    </button>`;
 
   const frEl=document.getElementById('friend-requests-list');
   if(frEl){
@@ -8416,8 +8436,8 @@ async function forceSyncNow(){
       updatedAt: ts,
       updatedBy: DEVICE_ID_LOCAL
     };
-    // Write only to OWN user document — never touch other users' docs here
-    await setDoc(doc(db, 'users', u.uid), baseState);
+    // Write only to OWN user document — merge:true preserves pendingFriendReqs etc.
+    await setDoc(doc(db, 'users', u.uid), baseState, { merge: true });
 
     setSyncStatus('synced', 'Synced ✓');
     showToast('✅ Data synced to cloud!');
@@ -9204,6 +9224,29 @@ function _tourPrev(){
   if(_tourStep <= 0) return;
   _tourStep--;
   _renderTourStep();
+}
+
+
+async function checkForFriendRequests(){
+  const u = window.currentUser||currentUser;
+  if(!u?.uid||!window._fb){ showToast('Not connected.'); return; }
+  showToast('Checking for friend requests...');
+  try{
+    const {db,doc,getDoc} = window._fb;
+    const snap = await getDoc(doc(db,'users',u.uid));
+    if(!snap.exists()){ showToast('Could not fetch your data.'); return; }
+    const data = snap.data();
+    const pending = (data.pendingFriendReqs||[]).filter(r=>r.status==='pending');
+    if(pending.length===0){
+      showToast('No pending friend requests.');
+      return;
+    }
+    if(window._processPendingFriendReqs) window._processPendingFriendReqs(pending);
+    showToast(`📬 Found ${pending.length} friend request${pending.length>1?'s':''}!`);
+  }catch(e){
+    console.error('checkForFriendRequests:', e);
+    showToast('Error: '+(e.message||'Could not check requests.'));
+  }
 }
 
 function showToast(msg){
@@ -11089,9 +11132,13 @@ window._applySync = function(data) {
       });
     }
   }
-  // Process incoming friend requests from main doc
-  if(data.pendingFriendReqs !== undefined && data.pendingFriendReqs.length > 0){
-    if(window._processPendingFriendReqs) window._processPendingFriendReqs(data.pendingFriendReqs);
+  // Process incoming friend requests — always run, even if data hasn't changed
+  // (user may open app with a pending request already in their doc)
+  if(Array.isArray(data.pendingFriendReqs) && data.pendingFriendReqs.length > 0){
+    // Delay slightly so _processPendingFriendReqs and renderFriends are ready
+    setTimeout(() => {
+      if(window._processPendingFriendReqs) window._processPendingFriendReqs(data.pendingFriendReqs);
+    }, 600);
   }
   if(changed){
     // Re-schedule reminder/schedule timers when data arrives from another device
