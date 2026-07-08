@@ -3840,7 +3840,22 @@ function renderFriends(){
     }).join('');
 
   const pending=friends.filter(f=>f.status==='pending_sent');
-  if(pending.length>0)flEl.innerHTML+=`<div style="margin-top:12px;border-top:1px solid var(--warm2);padding-top:12px"><div class="card-title">Pending (sent)</div>${pending.map(f=>`<div class="friend-card"><div class="friend-avatar" style="background:var(--warm3);color:var(--text3)">${f.name[0].toUpperCase()}</div><div class="friend-info"><div class="friend-name">${f.name}</div><div class="friend-contact">${f.contact} · awaiting</div></div><button class="del" onclick="deleteFriend(${f.id})">×</button></div>`).join('')}</div>`;
+  if(pending.length>0)flEl.innerHTML+=`<div style="margin-top:12px;border-top:1px solid var(--warm2);padding-top:12px">
+    <div class="card-title" style="margin-bottom:6px">Pending (sent)</div>
+    ${pending.map(f=>`<div class="friend-card">
+      <div class="friend-avatar" style="background:var(--warm3);color:var(--text3)">${f.name[0].toUpperCase()}</div>
+      <div class="friend-info">
+        <div class="friend-name">${f.name}</div>
+        <div class="friend-contact">${f.contact||'Awaiting acceptance'} · Sent · pending</div>
+      </div>
+      <button onclick="cancelFriendRequest('${f.id}')"
+        style="background:none;border:1.5px solid var(--warm3);border-radius:8px;padding:4px 10px;
+               font-size:11px;font-weight:600;color:var(--text3);cursor:pointer;white-space:nowrap;
+               font-family:'DM Sans',sans-serif">
+        Withdraw
+      </button>
+    </div>`).join('')}
+  </div>`;
 
   const ffEl=document.getElementById('friends-form');
   if(ffEl)ffEl.innerHTML=`<button class="add-btn" onclick="openInviteModal()">+ Add friend via Link or QR</button>`;
@@ -9288,17 +9303,47 @@ function computeNet(){
   });
   return net;
 }
+async function cancelFriendRequest(id){
+  // Find the pending_sent entry
+  const f = friends.find(x => String(x.id) === String(id));
+  if(!f){ showToast('Request not found.'); return; }
+
+  // Remove locally
+  friends = friends.filter(x => String(x.id) !== String(id));
+  persist();
+  renderFriends();
+  showToast('Friend request withdrawn.');
+
+  // Remove from recipient's pendingFriendReqs in Firestore
+  const u = window.currentUser || currentUser;
+  if(!u?.uid || !window._fb || !f.fromUid) return;
+  try{
+    const {db, doc, getDoc, setDoc} = window._fb;
+    const recipSnap = await getDoc(doc(db, 'users', f.fromUid));
+    if(!recipSnap.exists()) return;
+    const data = recipSnap.data();
+    const filtered = (data.pendingFriendReqs || []).filter(r => r.fromUid !== u.uid);
+    await setDoc(doc(db, 'users', f.fromUid), {pendingFriendReqs: filtered}, {merge:true});
+  } catch(e){
+    console.warn('cancelFriendRequest Firestore:', e);
+    // Local removal already done — not critical if Firestore fails
+  }
+}
+
 function deleteFriend(id){
-  const net=computeNet();
-  const bal=Math.round((net[String(id)]||0)*100)/100;
-  if(Math.abs(bal)>0.01){
-    const fname=friends.find(f=>f.id===id)?.name||'Friend';
-    const dir=bal>0?`${fname} still owes you ₹${fmt(Math.abs(bal))}`:`You still owe ${fname} ₹${fmt(Math.abs(bal))}`;
-    alert('Cannot remove friend — '+dir+'. Please settle up first.');
+  // Called for active friends — check balance before removing
+  const net = computeNet();
+  const bal = Math.round((net[String(id)]||0)*100)/100;
+  if(Math.abs(bal) > 0.01){
+    const fname = friends.find(f => String(f.id) === String(id))?.name || 'Friend';
+    const dir   = bal > 0
+      ? `${fname} still owes you ₹${fmt(Math.abs(bal))}`
+      : `You still owe ${fname} ₹${fmt(Math.abs(bal))}`;
+    alert('Cannot remove friend — ' + dir + '. Please settle up first.');
     return;
   }
-  friends=friends.filter(f=>f.id!==id);
-  persistSpend();renderFriends();
+  friends = friends.filter(f => String(f.id) !== String(id));
+  persistSpend(); renderFriends();
 }
 
 // (demo seed removed)
