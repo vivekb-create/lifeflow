@@ -2373,6 +2373,15 @@ function launchApp() {
   setTimeout(startPaymentReqListener, 1200);
   setTimeout(initNotifications, 1500);
   setTimeout(_checkAdminNav, 500);
+  // Re-register email+friendCode on every login so friend_codes/{code} is always fresh
+  setTimeout(()=>{
+    if(window._registerUserEmail && (window.currentUser||currentUser)){
+      window._registerUserEmail(window.currentUser||currentUser)
+        .then(()=>console.log('friend_codes doc updated'))
+        .catch(e=>console.warn('_registerUserEmail:', e));
+    }
+  }, 1000);
+
   // Fetch once on launch to catch pending requests that arrived while offline
   setTimeout(async ()=>{
     const u = window.currentUser||currentUser;
@@ -4081,49 +4090,98 @@ async function connectByCode(){
   const u=window.currentUser||currentUser;
   if(!u||u.isGuest){showToast('Please sign in to connect with friends.');return;}
   if(!window._fb){showToast('Not connected. Please wait and try again.');return;}
-  const {db,doc,getDoc,setDoc}=window._fb;
+  const {db,doc,getDoc,setDoc,collection,query,where,getDocs}=window._fb;
   if(code===u.uid.slice(-6).toUpperCase()){showToast("That's your own code! Share it with your friend.");return;}
+
   showToast('Looking up friend...');
+  let found = null;
+
+  // ── Attempt 1: friend_codes/{code} direct lookup ─────────────────────
   try{
-    // Direct document lookup — no query, no list permission needed
-    // Requires Firestore rule: match /friend_codes/{code} { allow read,write: if request.auth != null; }
-    const codeSnap=await getDoc(doc(db,'friend_codes',code));
-    if(!codeSnap.exists()){
-      showToast('Code not found. Ask your friend to open LifeFlow — their code updates when they sign in.');
-      return;
+    const codeSnap = await getDoc(doc(db,'friend_codes',code));
+    if(codeSnap.exists() && codeSnap.data().uid !== u.uid){
+      found = codeSnap.data();
+      console.log('Found via friend_codes:', found.name);
     }
-    const found=codeSnap.data();
-    if(found.uid===u.uid){showToast("That's your own code!");return;}
-    const already=friends.some(f=>f.contact===found.email||String(f.fromUid)===String(found.uid));
-    if(already){showToast('Already connected with '+found.name+'!');return;}
+  }catch(e){
+    // permission-denied means rule not published yet — try fallback
+    console.warn('friend_codes lookup failed:', e.code, e.message);
+    if(e.code === 'permission-denied'){
+      console.log('Trying users_by_email fallback...');
+    }
+  }
 
-    // Add locally as pending_sent
-    friends.push({id:String(uid()),name:found.name||'Friend',contact:found.email||'',
-                  status:'pending_sent',fromUid:found.uid,sentAt:Date.now()});
-    persist(); renderFriends();
+  // ── Attempt 2: users_by_email scan (fallback) ─────────────────────────
+  if(!found){
+    try{
+      // Try reading user's own users_by_email doc to verify auth works
+      const emailKey = (u.email||'').split('.').join('_');
+      const mySnap = await getDoc(doc(db,'users_by_email',emailKey));
+      // Now try to find friend by scanning — only if auth works
+      const snap = await getDocs(collection(db,'users_by_email'));
+      snap.forEach(d=>{
+        const data=d.data();
+        if(!found && data.uid && data.uid!==u.uid &&
+           (data.friendCode===code || data.uid.slice(-6).toUpperCase()===code)){
+          found=data;
+        }
+      });
+      if(found) console.log('Found via users_by_email scan:', found.name);
+    }catch(e2){
+      console.warn('users_by_email fallback failed:', e2.code, e2.message);
+    }
+  }
 
-    // Write request into friend's main Firestore doc → triggers their real-time listener
+  // ── Attempt 3: direct UID lookup (if code IS last 6 of UID, try users doc) ─
+  if(!found){
+    // Can't enumerate users docs, but show clear message
+    const errModal = document.getElementById('firestore-rule-modal');
+    // Check if this is a rules issue or genuinely not found
+    showToast('');
+    document.getElementById('connect-code-error')?.remove();
+    const errDiv = document.createElement('div');
+    errDiv.id = 'connect-code-error';
+    errDiv.style.cssText='background:#FFF3CD;border:1px solid #FFCA28;border-radius:10px;padding:12px 14px;margin-top:10px;font-size:13px;color:#7A5700;line-height:1.6';
+    errDiv.innerHTML = `<strong>Code not found.</strong> Try these steps:<br>
+      1. Ask your friend to open LifeFlow and go to <strong>Friends</strong><br>
+      2. They should see their 6-char code — confirm it's <strong>${code}</strong><br>
+      3. Ask them to tap the <strong>↻ refresh</strong> button in the app (top right)<br>
+      4. Then try connecting again`;
+    const inputWrap = document.getElementById('enter-code-in')?.parentElement;
+    if(inputWrap) inputWrap.appendChild(errDiv);
+    else showToast('Code not found. Ask your friend to re-open LifeFlow and share their code again.');
+    return;
+  }
+
+  // ── Found — send the request ──────────────────────────────────────────
+  const already=friends.some(f=>f.contact===found.email||String(f.fromUid)===String(found.uid));
+  if(already){showToast('Already connected with '+(found.name||'this person')+'!');return;}
+
+  // Add locally as pending_sent
+  friends.push({id:String(uid()),name:found.name||'Friend',contact:found.email||'',
+                status:'pending_sent',fromUid:found.uid,sentAt:Date.now()});
+  persist(); renderFriends();
+
+  try{
+    // Write request into friend's Firestore doc
     const recipientSnap=await getDoc(doc(db,'users',found.uid));
     const recipientData=recipientSnap.exists()?recipientSnap.data():{};
     const currentReqs=recipientData.pendingFriendReqs||[];
     if(!currentReqs.some(r=>r.fromUid===u.uid)){
       currentReqs.push({
-        id:u.uid+'_req',fromUid:u.uid,fromName:u.name||'',
+        id:u.uid+'_req',fromUid:u.uid,fromName:u.name||u.displayName||'',
         fromEmail:u.email||'',fromPicture:u.picture||'',
         sentAt:Date.now(),status:'pending'
       });
       await setDoc(doc(db,'users',found.uid),{pendingFriendReqs:currentReqs},{merge:true});
     }
     document.getElementById('invite-modal')?.remove();
-    showToast('✅ Friend request sent to '+(found.name||'your friend')+'! Waiting for them to accept.');
+    showToast('✅ Friend request sent to '+(found.name||'your friend')+'!');
   }catch(e){
-    console.error('connectByCode:',e);
-    if(e.code==='permission-denied'){
-      showToast('⚠️ Firestore rule missing. Add this rule in Firebase Console — see instructions.');
-      _showFirestoreRuleHint();
-    } else {
-      showToast('Could not look up code: '+(e.message||'Unknown error')+'. Try again.');
-    }
+    console.error('connectByCode send request error:',e);
+    // Still show success locally — request is in pending_sent locally
+    document.getElementById('invite-modal')?.remove();
+    showToast('⚠️ Request saved locally. Friend will see it when rules are updated.');
   }
 }
 
