@@ -2658,6 +2658,7 @@ function renderHome(){
     {q:"An investment in knowledge pays the best interest.",a:"Benjamin Franklin"},
     {q:"Energy and persistence conquer all things.",a:"Benjamin Franklin"},
   ];
+  if(typeof updateNotifBadge==='function') updateNotifBadge();
   const qEl=document.getElementById('home-quote');
   if(qEl){
     const qi=new Date().getDate()%MQUOTES.length;
@@ -4147,6 +4148,150 @@ async function checkForFriendRequests(){
     console.error('checkForFriendRequests:', e);
     showToast('Error: '+(e.message||'Could not check requests.'));
   }
+}
+
+
+// ══════════════════════════════════════════════════════════════════════════
+// NOTIFICATION SYSTEM
+// ══════════════════════════════════════════════════════════════════════════
+let notifications = JSON.parse(localStorage.getItem('lf3_notifs')||'[]');
+
+function saveNotifs(){
+  try{ localStorage.setItem('lf3_notifs', JSON.stringify(notifications)); }catch(e){}
+  if(window._saveToFirestore) window._saveToFirestore();
+}
+
+function updateNotifBadge(){
+  const unread = (notifications||[]).filter(n=>!n.read).length;
+  const badge  = document.getElementById('notif-badge');
+  if(badge){ badge.textContent=unread; badge.style.display=unread>0?'flex':'none'; }
+}
+
+function pushNotif(title, body, type, icon){
+  const n = {
+    id: String(Date.now()+Math.random()),
+    title, body, type: type||'info', icon: icon||'🔔',
+    read: false, ts: Date.now()
+  };
+  notifications = [n, ...(notifications||[])].slice(0,100);
+  saveNotifs();
+  updateNotifBadge();
+  fireBrowserNotif(title, body, icon);
+}
+
+function fireBrowserNotif(title, body, icon){
+  if(!('Notification' in window)||Notification.permission!=='granted') return;
+  try{
+    if(navigator.serviceWorker?.controller){
+      navigator.serviceWorker.controller.postMessage({type:'SHOW_NOTIF',title,body,icon:icon||'🔔'});
+    } else {
+      new Notification(title,{body,icon:'/favicon.ico'});
+    }
+  }catch(e){}
+}
+
+// Named helpers used by _applySync
+function notifyFriendRequest(name){ pushNotif(name+' sent you a friend request','Tap to view','friend','📬'); }
+function notifyFriendAccepted(name){ pushNotif(name+' accepted your request','You are now connected!','friend','🎉'); }
+function notifyGroupExpense(grpName,amount,who){ pushNotif('New expense in '+grpName, who+' added ₹'+amount,'group','🏕️'); }
+function notifySharedListExpense(lstName,amount,who){ pushNotif('New expense in '+lstName, who+' added ₹'+amount,'group','📋'); }
+function notifyPaymentReceived(from,amount){ pushNotif('Payment request from '+from,'₹'+amount+' requested','payment','💸'); }
+
+// ── Drawer UI ──────────────────────────────────────────────────────────────
+function openNotifDrawer(){
+  let drawer = document.getElementById('notif-drawer');
+  if(!drawer){
+    drawer = document.createElement('div');
+    drawer.id = 'notif-drawer';
+    drawer.className = 'notif-drawer';
+    document.body.appendChild(drawer);
+    const ov = document.createElement('div');
+    ov.className='notif-drawer-overlay'; ov.id='notif-overlay';
+    ov.onclick = closeNotifDrawer;
+    document.body.appendChild(ov);
+  }
+  renderNotifList();
+  requestAnimationFrame(()=>{
+    drawer.classList.add('open');
+    document.getElementById('notif-overlay')?.classList.add('show');
+  });
+}
+
+function closeNotifDrawer(){
+  document.getElementById('notif-drawer')?.classList.remove('open');
+  document.getElementById('notif-overlay')?.classList.remove('show');
+}
+
+function renderNotifList(){
+  const drawer = document.getElementById('notif-drawer');
+  if(!drawer) return;
+  const list = (notifications||[]);
+  const unread = list.filter(n=>!n.read).length;
+  const TYPE_BG = {friend:'#E8F5E9',group:'#E3F2FD',payment:'#FFF3E0',info:'#F3F4F6'};
+
+  drawer.innerHTML = `
+    <div class="notif-drawer-head">
+      <div>
+        <div class="notif-drawer-title">Notifications</div>
+        ${unread>0?`<div style="font-size:11px;color:var(--text3)">${unread} unread</div>`:''}
+      </div>
+      <div style="display:flex;gap:8px;margin-left:auto">
+        <button onclick="markAllNotifsRead()" style="background:none;border:none;cursor:pointer;font-size:12px;color:var(--sage);font-weight:600;font-family:'DM Sans',sans-serif">Mark all read</button>
+        <button onclick="clearAllNotifs()" style="background:none;border:none;cursor:pointer;font-size:12px;color:var(--red,#C0392B);font-weight:600;font-family:'DM Sans',sans-serif">Clear all</button>
+        <button onclick="closeNotifDrawer()" style="background:none;border:none;cursor:pointer;font-size:20px;color:var(--text3);line-height:1;padding:0 0 0 4px">×</button>
+      </div>
+    </div>
+    <div style="overflow-y:auto;flex:1">
+      ${list.length===0
+        ? '<div class="empty" style="padding:40px 20px"><div style="font-size:32px;margin-bottom:8px">🔔</div><div>No notifications yet</div></div>'
+        : list.map(n=>{
+            const bg = TYPE_BG[n.type]||'#F3F4F6';
+            const time = _formatNotifTime(n.ts);
+            return `<div class="notif-item ${n.read?'':'unread'}" onclick="readNotif('${n.id}')">
+              <div class="notif-icon" style="background:${bg};width:36px;height:36px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0">${n.icon||'🔔'}</div>
+              <div class="notif-content" style="flex:1;min-width:0">
+                <div class="notif-title" style="font-size:13px;font-weight:600;color:var(--text)">${n.title}</div>
+                <div class="notif-body-text" style="font-size:12px;color:var(--text3);margin-top:2px;line-height:1.4">${n.body}</div>
+                <div class="notif-time" style="font-size:10px;color:var(--text3);margin-top:4px">${time}</div>
+              </div>
+              <div style="display:flex;flex-direction:column;align-items:center;gap:4px;flex-shrink:0;margin-left:4px">
+                ${!n.read?'<div style="width:8px;height:8px;border-radius:50%;background:var(--sage);flex-shrink:0"></div>':''}
+                <button onclick="event.stopPropagation();deleteNotif('${n.id}')"
+                  style="background:none;border:none;cursor:pointer;font-size:15px;color:#C0C0BC;padding:2px 4px;line-height:1">×</button>
+              </div>
+            </div>`;
+          }).join('')}
+    </div>`;
+}
+
+function _formatNotifTime(ts){
+  if(!ts) return '';
+  const diff = Date.now()-ts;
+  if(diff<60000) return 'Just now';
+  if(diff<3600000) return Math.floor(diff/60000)+'m ago';
+  if(diff<86400000) return Math.floor(diff/3600000)+'h ago';
+  return new Date(ts).toLocaleDateString('en-IN',{day:'numeric',month:'short'});
+}
+
+function readNotif(id){
+  const n=(notifications||[]).find(x=>x.id===id);
+  if(n){ n.read=true; saveNotifs(); updateNotifBadge(); renderNotifList(); }
+}
+
+function markAllNotifsRead(){
+  (notifications||[]).forEach(n=>n.read=true);
+  saveNotifs(); updateNotifBadge(); renderNotifList();
+}
+
+function clearAllNotifs(){
+  if(!confirm('Clear all notifications?')) return;
+  notifications=[];
+  saveNotifs(); updateNotifBadge(); renderNotifList();
+}
+
+function deleteNotif(id){
+  notifications=(notifications||[]).filter(n=>n.id!==id);
+  saveNotifs(); updateNotifBadge(); renderNotifList();
 }
 
 function showToast(msg){
@@ -6074,13 +6219,15 @@ window._getState = function() {
 window.renderPage  = renderPage;
 window.renderHome  = renderHome;
 window.launchApp   = launchApp;
-// Expose notification helpers for use from Firebase module
-window.pushNotif              = pushNotif;
-window.notifyFriendRequest    = notifyFriendRequest;
-window.notifyFriendAccepted   = notifyFriendAccepted;
-window.notifyGroupExpense     = notifyGroupExpense;
-window.notifyPaymentReceived  = notifyPaymentReceived;
-window.notifySharedListExpense= notifySharedListExpense;
+// Notification helpers exposed for Firebase module
+window.pushNotif               = pushNotif;
+window.notifyFriendRequest     = notifyFriendRequest;
+window.notifyFriendAccepted    = notifyFriendAccepted;
+window.notifyGroupExpense      = notifyGroupExpense;
+window.notifyPaymentReceived   = notifyPaymentReceived;
+window.notifySharedListExpense = notifySharedListExpense;
+window.updateNotifBadge        = updateNotifBadge;
+window.openNotifDrawer         = openNotifDrawer;
 window._lastSaveTime = 0;
 
 // Show a loading spinner while Firebase initialises
