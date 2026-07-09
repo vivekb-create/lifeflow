@@ -2398,6 +2398,28 @@ function launchApp() {
     }catch(e){ console.warn('launchApp fetch pendingFriendReqs:', e); }
   }, 2000);
   // Auto-start tour on first login
+  // Poll friend_requests collection periodically (every 30s when app is open)
+  setInterval(async()=>{
+    if(!window._fb||(window.currentUser||currentUser)?.isGuest) return;
+    const u2=window.currentUser||currentUser;
+    if(!u2?.uid) return;
+    try{
+      const {db,collection,getDocs}=window._fb;
+      const allReqs=await getDocs(collection(db,'friend_requests'));
+      const incoming=[];
+      allReqs.forEach(d=>{
+        const dat=d.data();
+        if(dat.toUid===u2.uid&&dat.status==='pending'){
+          incoming.push({id:dat.fromUid+'_req',fromUid:dat.fromUid,
+            fromName:dat.fromName||'Someone',fromEmail:dat.fromEmail||'',
+            fromPicture:dat.fromPicture||'',sentAt:dat.sentAt||Date.now(),status:'pending'});
+        }
+      });
+      if(incoming.length>0&&window._processPendingFriendReqs)
+        window._processPendingFriendReqs(incoming);
+    }catch(e){} // Silent fail — collection may not exist yet
+  }, 30000);
+
   // Re-register friend code + fetch pending requests on every launch
   setTimeout(()=>{const _lu=window.currentUser||currentUser;if(window._registerUserEmail&&_lu)window._registerUserEmail(_lu).catch(()=>{});},1500);
   setTimeout(async()=>{const _lu2=window.currentUser||currentUser;if(!_lu2?.uid||!window._fb)return;try{const {db,doc,getDoc}=window._fb;const snap=await getDoc(doc(db,'users',_lu2.uid));if(snap.exists()){const reqs=(snap.data().pendingFriendReqs||[]).filter(r=>r.status==='pending');if(reqs.length>0&&window._processPendingFriendReqs)window._processPendingFriendReqs(reqs);}}catch(e){}},2500);
@@ -4061,37 +4083,51 @@ async function connectByCode(){
   if(!u?.uid){showToast('Please sign in first.');return;}
   if(!window._fb){showToast('Not connected — please wait.');return;}
   if(code===u.uid.slice(-6).toUpperCase()){showToast("That's your own code! Share it with your friend.");return;}
+
   const {db,doc,getDoc,setDoc,collection,getDocs}=window._fb;
-  const setStatus=(msg,col)=>{const el=document.getElementById('connect-code-status');if(el){el.textContent=msg;el.style.color=col||'var(--text3)';}else showToast(msg);};
+  const setStatus=(msg,col)=>{
+    const el=document.getElementById('connect-code-status');
+    if(el){el.textContent=msg;el.style.color=col||'var(--text3)';}
+    else showToast(msg);
+  };
   setStatus('Looking up code…','var(--sage)');
+
+  // Always refresh our own registration first
   try{if(window._registerUserEmail)await window._registerUserEmail(u);}catch(e){}
+
+  // ── Lookup: find who owns this code ──────────────────────────────────
   let found=null;
-  // Path 1: direct friend_codes/{code} read
+
+  // Path 1: friend_codes/{code} — direct read (needs rule: allow read,write if auth!=null)
   try{
     const snap=await getDoc(doc(db,'friend_codes',code));
-    if(snap.exists()&&snap.data().uid!==u.uid)found=snap.data();
-  }catch(e){console.warn('friend_codes lookup:',e.code,e.message);}
-  // Path 2: scan users_by_email as fallback
+    if(snap.exists()&&snap.data().uid!==u.uid) found=snap.data();
+  }catch(e){console.warn('friend_codes:',e.code,e.message);}
+
+  // Path 2: users_by_email scan
   if(!found){
     try{
       const all=await getDocs(collection(db,'users_by_email'));
       all.forEach(d=>{
         if(found)return;
         const dat=d.data();
-        if(dat.uid&&dat.uid!==u.uid&&(dat.code===code||dat.friendCode===code||(dat.uid||'').slice(-6).toUpperCase()===code))
+        if(dat.uid&&dat.uid!==u.uid&&
+          (dat.code===code||dat.friendCode===code||(dat.uid||'').slice(-6).toUpperCase()===code))
           found=dat;
       });
-    }catch(e){console.warn('users_by_email scan:',e.code,e.message);}
+    }catch(e){console.warn('users_by_email:',e.code,e.message);}
   }
+
   if(!found){
-    setStatus('Code not found. Make sure your friend has opened LifeFlow at least once.','#C0392B');
+    setStatus('Code not found. Ask your friend to open LifeFlow first, then try again.','#C0392B');
     return;
   }
   if(found.uid===u.uid){setStatus("That's your own code!",'#C0392B');return;}
   if((friends||[]).some(f=>String(f.fromUid)===String(found.uid)||f.contact===found.email)){
     setStatus('Already connected with '+(found.name||'this person')+'!','var(--sage)');return;
   }
-  // Add locally as pending_sent
+
+  // ── Add locally as pending_sent ───────────────────────────────────────
   friends=[...(friends||[]),{
     id:String(Date.now()),name:found.name||'Friend',
     contact:found.email||'',status:'pending_sent',
@@ -4099,23 +4135,65 @@ async function connectByCode(){
   }];
   persist();
   if(typeof renderFriends==='function')renderFriends();
-  // Write pendingFriendReqs into their Firestore doc
+
+  // ── Write request — 3 approaches, try each ───────────────────────────
+  let written=false;
+
+  // Approach A: Write to friend_requests/{recipientUid}/{senderUid}
+  // Rule needed: match /friend_requests/{uid}/{reqId} { allow read,write: if request.auth != null; }
   try{
-    const snap2=await getDoc(doc(db,'users',found.uid));
-    const dat2=snap2.exists()?snap2.data():{};
-    const reqs=(dat2.pendingFriendReqs||[]).filter(r=>r.fromUid!==u.uid);
-    reqs.push({
-      id:u.uid+'_req',fromUid:u.uid,
-      fromName:u.name||u.displayName||'',
-      fromEmail:u.email||'',fromPicture:u.picture||'',
-      sentAt:Date.now(),status:'pending'
-    });
-    await setDoc(doc(db,'users',found.uid),{pendingFriendReqs:reqs},{merge:true});
-    document.getElementById('invite-modal')?.remove();
+    await setDoc(
+      doc(db,'friend_requests',found.uid+'_'+u.uid),
+      {
+        fromUid:u.uid, fromName:u.name||u.displayName||'',
+        fromEmail:u.email||'', fromPicture:u.picture||'',
+        toUid:found.uid, sentAt:Date.now(), status:'pending',
+        code: code
+      }
+    );
+    written=true;
+    console.log('✓ Written to friend_requests collection');
+  }catch(e){console.warn('friend_requests write:',e.code,e.message);}
+
+  // Approach B: Write to pendingFriendReqs on recipient's doc (needs their doc to be writable)
+  // This only works if rules allow: match /users/{uid} { allow write: if request.auth != null; }
+  // which is too permissive. So we skip this if approach A worked.
+  if(!written){
+    try{
+      const theirSnap=await getDoc(doc(db,'users',found.uid));
+      const theirData=theirSnap.exists()?theirSnap.data():{};
+      const reqs=(theirData.pendingFriendReqs||[]).filter(r=>r.fromUid!==u.uid);
+      reqs.push({id:u.uid+'_req',fromUid:u.uid,fromName:u.name||u.displayName||'',
+                 fromEmail:u.email||'',fromPicture:u.picture||'',sentAt:Date.now(),status:'pending'});
+      await setDoc(doc(db,'users',found.uid),{pendingFriendReqs:reqs},{merge:true});
+      written=true;
+      console.log('✓ Written to recipient users doc');
+    }catch(e){console.warn('users doc write:',e.code,e.message);}
+  }
+
+  // Approach C: Write request to OWN doc as outgoing request
+  // Recipient polls friend_requests or we notify via a shared collection
+  if(!written){
+    try{
+      // Write to our own doc — recipient will see it when they run checkForFriendRequests
+      const mySnap=await getDoc(doc(db,'users',u.uid));
+      const myData=mySnap.exists()?mySnap.data():{};
+      const outgoing=(myData.outgoingRequests||[]).filter(r=>r.toUid!==found.uid);
+      outgoing.push({toUid:found.uid,toName:found.name||'',sentAt:Date.now(),code});
+      await setDoc(doc(db,'users',u.uid),{outgoingRequests:outgoing},{merge:true});
+      written=true;
+      console.log('✓ Written outgoingRequests to own doc');
+    }catch(e){console.warn('outgoing write:',e.code,e.message);}
+  }
+
+  document.getElementById('invite-modal')?.remove();
+  if(written){
     showToast('✅ Friend request sent to '+(found.name||'your friend')+'!');
-  }catch(e){
-    console.error('write pendingFriendReqs:',e);
-    setStatus('Saved locally. Cloud write failed: '+e.message,'#C0392B');
+    setStatus('','var(--sage)');
+  } else {
+    showToast('⚠️ Request saved locally. Ask your friend to check for requests.');
+    // Show Firestore rule needed
+    setTimeout(()=>_showFullFirestoreRules(),500);
   }
 }
 
@@ -9220,25 +9298,55 @@ function _tourPrev(){
 
 
 async function checkForFriendRequests(){
-  const u = window.currentUser||currentUser;
-  if(!u?.uid||!window._fb){ showToast('Not connected.'); return; }
+  const u=window.currentUser||currentUser;
+  if(!u?.uid||!window._fb){showToast('Not connected.');return;}
   showToast('Checking for friend requests...');
+  const {db,doc,getDoc,collection,getDocs,query,where}=window._fb;
+  let found=[];
+
+  // Check 1: pendingFriendReqs in own doc (legacy + direct writes)
   try{
-    const {db,doc,getDoc} = window._fb;
-    const snap = await getDoc(doc(db,'users',u.uid));
-    if(!snap.exists()){ showToast('Could not fetch your data.'); return; }
-    const data = snap.data();
-    const pending = (data.pendingFriendReqs||[]).filter(r=>r.status==='pending');
-    if(pending.length===0){
-      showToast('No pending friend requests.');
-      return;
+    const snap=await getDoc(doc(db,'users',u.uid));
+    if(snap.exists()){
+      const reqs=(snap.data().pendingFriendReqs||[]).filter(r=>r.status==='pending');
+      found=[...found,...reqs.map(r=>({
+        id:r.id||r.fromUid+'_req',fromUid:r.fromUid,
+        from:r.fromName||r.name||'Someone',
+        contact:r.fromEmail||r.email||'',
+        fromPicture:r.fromPicture||'',
+        date:new Date(r.sentAt||Date.now()).toISOString()
+      }))];
     }
-    if(window._processPendingFriendReqs) window._processPendingFriendReqs(pending);
-    showToast(`📬 Found ${pending.length} friend request${pending.length>1?'s':''}!`);
-  }catch(e){
-    console.error('checkForFriendRequests:', e);
-    showToast('Error: '+(e.message||'Could not check requests.'));
-  }
+  }catch(e){console.warn('check pendingFriendReqs:',e.code);}
+
+  // Check 2: friend_requests collection (new approach)
+  try{
+    const allReqs=await getDocs(collection(db,'friend_requests'));
+    allReqs.forEach(d=>{
+      const dat=d.data();
+      if(dat.toUid===u.uid&&dat.status==='pending'){
+        found.push({
+          id:dat.fromUid+'_req',fromUid:dat.fromUid,
+          from:dat.fromName||'Someone',
+          contact:dat.fromEmail||'',
+          fromPicture:dat.fromPicture||'',
+          date:new Date(dat.sentAt||Date.now()).toISOString()
+        });
+      }
+    });
+  }catch(e){console.warn('check friend_requests:',e.code);}
+
+  if(found.length===0){showToast('No pending friend requests.');return;}
+
+  // Deduplicate and process
+  const existing=new Set((friendReqs||[]).map(r=>r.fromUid));
+  const newReqs=found.filter(r=>!existing.has(r.fromUid)&&
+    !(friends||[]).some(f=>String(f.fromUid)===String(r.fromUid)));
+  if(newReqs.length===0){showToast('No new friend requests.');return;}
+  if(window._processPendingFriendReqs) window._processPendingFriendReqs(
+    newReqs.map(r=>({...r,fromName:r.from,fromEmail:r.contact,status:'pending'}))
+  );
+  showToast('📬 Found '+newReqs.length+' friend request'+( newReqs.length>1?'s':'')+'!');
 }
 
 function showToast(msg){
@@ -9349,7 +9457,7 @@ async function cancelFriendRequest(id){
   renderFriends();
   showToast('Friend request withdrawn.');
 
-  // Remove from recipient's pendingFriendReqs in Firestore
+  // Remove from recipient's pendingFriendReqs AND friend_requests collection
   const u = window.currentUser || currentUser;
   if(!u?.uid || !window._fb || !f.fromUid) return;
   try{
@@ -9359,6 +9467,11 @@ async function cancelFriendRequest(id){
     const data = recipSnap.data();
     const filtered = (data.pendingFriendReqs || []).filter(r => r.fromUid !== u.uid);
     await setDoc(doc(db, 'users', f.fromUid), {pendingFriendReqs: filtered}, {merge:true});
+    // Also delete from friend_requests collection
+    try{
+      const {deleteDoc}=window._fb;
+      await deleteDoc(doc(db,'friend_requests',u.uid+'_'+f.fromUid)).catch(()=>{});
+    }catch(e){}
   } catch(e){
     console.warn('cancelFriendRequest Firestore:', e);
     // Local removal already done — not critical if Firestore fails
