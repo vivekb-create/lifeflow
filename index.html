@@ -6,7 +6,7 @@
 <title>LifeFlow — Your Personal Sanctuary</title>
 
 <!-- ═══ PWA META TAGS ═══════════════════════════════════════════════════ -->
-<!-- Web Apps Manifest -->
+<!-- Web App Manifest -->
 <link rel="manifest" href="manifest.json">
 
 <!-- iOS / Safari PWA -->
@@ -4837,7 +4837,7 @@ function openQuickAdd(){
       <select class="input" id="qa-paidby" style="margin-bottom:0">
         <option value="me">Me</option>
         ${members.filter(m=>m!=='me').map(fid=>{
-          const f=friends.find(x=>x.id===fid);
+          const f=friends.find(x=>String(x.id)===String(fid));
           return f?`<option value="${fid}">${f.name}</option>`:'';
         }).join('')}
       </select>
@@ -5228,12 +5228,12 @@ async function saveEditSharedList(listId){
   const name  = (document.getElementById('esl-name')?.value||'').trim() || lst.name;
   const emoji = (document.getElementById('esl-emoji')?.value||'').trim() || lst.emoji;
   const cbs   = document.querySelectorAll('.esl-member-cb:checked');
-  const selectedIds = Array.from(cbs).map(cb => Number(cb.value));
+  const selectedIds = Array.from(cbs).map(cb => cb.value); // keep as STRING
   const u = window.currentUser||currentUser;
   const newMemberIds  = ['me', ...selectedIds];
   const newMemberUids = [u?.uid||''];
   selectedIds.forEach(fid=>{
-    const f=friends.find(x=>x.id===fid);
+    const f=friends.find(x=>String(x.id)===String(fid));
     if(f?.fromUid) newMemberUids.push(f.fromUid);
   });
 
@@ -5307,12 +5307,12 @@ async function createSharedExpenseList(){
   const emoji = (document.getElementById('sl-emoji')?.value||'').trim() || '📋';
   if(!name){ showToast('Please enter a list name.'); return; }
   const cbs = document.querySelectorAll('.sl-member-cb:checked');
-  const selectedIds = Array.from(cbs).map(cb => Number(cb.value));
+  const selectedIds = Array.from(cbs).map(cb => cb.value); // STRING — not Number
   const memberIds   = ['me', ...selectedIds];
   const u = window.currentUser || currentUser;
   const memberUids  = [u?.uid||''];
   selectedIds.forEach(fid => {
-    const f = friends.find(x => x.id === fid);
+    const f = friends.find(x => String(x.id) === String(fid));
     if(f?.fromUid) memberUids.push(f.fromUid);
   });
 
@@ -9552,7 +9552,7 @@ async function createGroup(){
   if(!name) return;
 
   const cbs = document.querySelectorAll('.grp-member-cb:checked');
-  const selectedIds = Array.from(cbs).map(cb=>Number(cb.value));
+  const selectedIds = Array.from(cbs).map(cb=>cb.value); // keep as STRING — don't convert to Number
   const memberIds   = ['me', ...selectedIds];
   const u = window.currentUser || currentUser;
 
@@ -9560,7 +9560,7 @@ async function createGroup(){
   const memberUids  = [u?.uid||''];
   const memberEmails= [u?.email||''];
   selectedIds.forEach(fid=>{
-    const f = friends.find(x=>x.id===fid);
+    const f = friends.find(x=>String(x.id)===String(fid)); // String comparison
     if(f){
       if(f.fromUid)  memberUids.push(f.fromUid);
       if(f.contact && /^[^@]+@[^@]+/.test(f.contact)) memberEmails.push(f.contact);
@@ -9938,7 +9938,7 @@ async function saveGroupEdit(gid){
   const name  = (document.getElementById('eg-name')?.value||'').trim() || g.name;
   const emoji = (document.getElementById('eg-emoji')?.value||'').trim() || g.emoji;
   const cbs   = document.querySelectorAll('.eg-member-cb:checked');
-  const selectedIds = Array.from(cbs).map(cb=>Number(cb.value));
+  const selectedIds = Array.from(cbs).map(cb=>cb.value); // STRING — not Number
   const u = window.currentUser||currentUser;
 
   // Build new member lists
@@ -9946,7 +9946,7 @@ async function saveGroupEdit(gid){
   const newMemberUids = [u?.uid||''];
   const newMemberEmails=[u?.email||''];
   selectedIds.forEach(fid=>{
-    const f=friends.find(x=>x.id===fid);
+    const f=friends.find(x=>String(x.id)===String(fid));
     if(f){
       if(f.fromUid) newMemberUids.push(f.fromUid);
       if(f.contact) newMemberEmails.push(f.contact);
