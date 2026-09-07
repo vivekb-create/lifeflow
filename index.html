@@ -2398,6 +2398,29 @@ function launchApp() {
     }catch(e){ console.warn('launchApp fetch pendingFriendReqs:', e); }
   }, 2000);
   // Auto-start tour on first login
+  // Poll shared_groups to catch splits added by group members
+  setTimeout(async()=>{
+    const _u3=window.currentUser||currentUser;
+    if(!_u3?.uid||!window._fb) return;
+    try{
+      const {db,collection,getDocs}=window._fb;
+      const snaps=await getDocs(collection(db,'shared_groups'));
+      snaps.forEach(d=>{
+        const gdata=d.data();
+        const myGroup=groups.find(g=>String(g.id)===String(gdata.id));
+        if(!myGroup)return;
+        const remSplits=gdata.splits||[];
+        let changed=false;
+        remSplits.forEach(rs=>{
+          const idx=splits.findIndex(ls=>String(ls.id)===String(rs.id));
+          if(idx>=0){ if(JSON.stringify(splits[idx])!==JSON.stringify(rs)){splits[idx]=rs;changed=true;} }
+          else { splits.push(rs); changed=true; }
+        });
+        if(changed){ persistSpend(); if(openGroupId===myGroup.id)renderGroupDetail(openGroupId); }
+      });
+    }catch(e){}
+  },3000);
+
   // Poll friend_requests collection periodically (every 30s when app is open)
   setInterval(async()=>{
     if(!window._fb||(window.currentUser||currentUser)?.isGuest) return;
@@ -7169,12 +7192,12 @@ function _renderGrpTxOnly(gid){
           <span style="font-size:16px">${allPaid?'✅':'💸'}</span>
           <div style="flex:1;min-width:0"><div style="font-size:14px;font-weight:500;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${sp.desc}</div><div style="font-size:11px;color:var(--text3)">₹${fmt(sp.totalAmount)} · ${mName(sp.paidBy)} paid · ${paidCount}/${sp.members.length} paid</div></div>
           <span style="font-size:11px;color:var(--text3);margin-right:4px">${isOpen?'▲':'▼'}</span>
-          <button onclick="event.stopPropagation();editGroupSplitRow(${sp.id},${gid})" style="background:none;border:none;cursor:pointer;font-size:13px;padding:2px 4px;opacity:.6">✏️</button>
-          <button class="del" onclick="event.stopPropagation();deleteSplit(${sp.id})">×</button>
+          <button onclick="event.stopPropagation();editGroupSplitRow('${sp.id}','${gid}')" style="background:none;border:none;cursor:pointer;font-size:13px;padding:2px 4px;opacity:.6">✏️</button>
+          <button class="del" onclick="event.stopPropagation();deleteSplit('${sp.id}')">×</button>
         </div>
         <div id="exp-body-${sp.id}" style="display:${isOpen?'block':'none'};padding:0 14px 12px">
           <div style="font-size:11px;color:var(--text3);margin-bottom:8px">${sp.splitType==='percent'?'Percentage split':'Equal split'} · ${sp.date}</div>
-          ${sp.members.map(m=>`<div class="split-row"><div class="friend-avatar" style="width:28px;height:28px;font-size:11px">${mName(m.friendId)[0]}</div><span style="flex:1;font-size:13px">${mName(m.friendId)}</span><span class="split-amount">₹${fmt(m.share)}</span><button class="split-paid-btn ${m.paid?'paid':'unpaid'}" onclick="toggleSplitPaid(${sp.id},'${m.friendId}')">${m.paid?'✓ Paid':'Mark Paid'}</button></div>`).join('')}
+          ${sp.members.map(m=>`<div class="split-row"><div class="friend-avatar" style="width:28px;height:28px;font-size:11px">${mName(m.friendId)[0]}</div><span style="flex:1;font-size:13px">${mName(m.friendId)}</span><span class="split-amount">₹${fmt(m.share)}</span><button class="split-paid-btn ${m.paid?'paid':'unpaid'}" onclick="toggleSplitPaid('${sp.id}','${m.friendId}')">${m.paid?'✓ Paid':'Mark Paid'}</button></div>`).join('')}
         </div>
       </div>`;
     }).join('')
@@ -9755,12 +9778,12 @@ function renderGroupDetail(gid){
             <div style="font-size:11px;color:var(--text3)">₹${fmt(sp.totalAmount)} · ${mName(sp.paidBy)} paid · ${paidCount}/${sp.members.length} paid</div>
           </div>
           <span style="font-size:11px;color:var(--text3);margin-right:4px">${isOpen?'▲':'▼'}</span>
-          <button onclick="event.stopPropagation();editGroupSplitRow(${sp.id},${gid})" style="background:none;border:none;cursor:pointer;font-size:13px;padding:2px 4px;opacity:.6">✏️</button>
-          <button class="del" onclick="event.stopPropagation();deleteSplit(${sp.id})">×</button>
+          <button onclick="event.stopPropagation();editGroupSplitRow('${sp.id}','${gid}')" style="background:none;border:none;cursor:pointer;font-size:13px;padding:2px 4px;opacity:.6">✏️</button>
+          <button class="del" onclick="event.stopPropagation();deleteSplit('${sp.id}')">×</button>
         </div>
         <div id="exp-body-${sp.id}" style="display:${isOpen?'block':'none'};padding:0 14px 12px">
           <div style="font-size:11px;color:var(--text3);margin-bottom:8px">${sp.splitType==='percent'?'Percentage split':'Equal split'} · ${sp.date}</div>
-          ${sp.members.map(m=>`<div class="split-row"><div class="friend-avatar" style="width:28px;height:28px;font-size:11px">${mName(m.friendId)[0]}</div><span style="flex:1;font-size:13px">${mName(m.friendId)}</span><span class="split-amount">₹${fmt(m.share)}</span><button class="split-paid-btn ${m.paid?'paid':'unpaid'}" onclick="toggleSplitPaid(${sp.id},'${m.friendId}')">${m.paid?'✓ Paid':'Mark Paid'}</button></div>`).join('')}
+          ${sp.members.map(m=>`<div class="split-row"><div class="friend-avatar" style="width:28px;height:28px;font-size:11px">${mName(m.friendId)[0]}</div><span style="flex:1;font-size:13px">${mName(m.friendId)}</span><span class="split-amount">₹${fmt(m.share)}</span><button class="split-paid-btn ${m.paid?'paid':'unpaid'}" onclick="toggleSplitPaid('${sp.id}','${m.friendId}')">${m.paid?'✓ Paid':'Mark Paid'}</button></div>`).join('')}
         </div>
       </div>`;
     }).join('');
@@ -9839,18 +9862,87 @@ function renderGroupDetail(gid){
         </div>`:''}
 
 
-      <!-- Who paid breakdown -->
-      ${payerSorted.length>1?`
-        <div style="margin-bottom:14px;padding:12px;background:var(--warm);border-radius:var(--r2)">
-          <div style="font-size:12px;font-weight:600;color:var(--text3);margin-bottom:8px;text-transform:uppercase;letter-spacing:.05em">Who paid</div>
-          ${payerSorted.map(([name,amt])=>`
-            <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
-              <div class="friend-avatar" style="width:26px;height:26px;font-size:11px">${name[0].toUpperCase()}</div>
-              <span style="flex:1;font-size:13px">${name}</span>
-              <span style="font-size:13px;font-weight:600">₹${fmt(Math.round(amt))}</span>
-              <span style="font-size:10px;color:var(--text3)">${fTotal>0?Math.round(amt/fTotal*100):0}%</span>
-            </div>`).join('')}
-        </div>`:''}
+      <!-- Person-wise balances + settlement -->
+      ${(()=>{
+        // Build member name → uid map for this group
+        const memberList = g.members || [];
+        // Compute net for each pair: how much does memberA owe memberB
+        // netMatrix[fromId][toId] = amount fromId owes toId
+        const netMatrix = {};
+        const memberNames = {};
+        // Register all members
+        memberList.forEach(mid=>{
+          const name=mName(mid);
+          memberNames[String(mid)]=name;
+          netMatrix[String(mid)]={};
+        });
+        // Process all splits
+        grpSplits.forEach(sp=>{
+          const payerId=String(sp.paidBy);
+          sp.members.forEach(m=>{
+            const mid=String(m.friendId);
+            if(mid===payerId||m.paid)return;
+            // mid owes payerId m.share
+            if(!netMatrix[mid])netMatrix[mid]={};
+            netMatrix[mid][payerId]=(netMatrix[mid][payerId]||0)+m.share;
+            // Offset: payerId owes mid (reverse)
+            if(!netMatrix[payerId])netMatrix[payerId]={};
+            netMatrix[payerId][mid]=(netMatrix[payerId][mid]||0)-m.share;
+          });
+        });
+        // Simplify: net[A][B] and net[B][A] → single direction
+        const settlements=[];
+        const seen=new Set();
+        Object.keys(netMatrix).forEach(a=>{
+          Object.keys(netMatrix[a]||{}).forEach(b=>{
+            const key=[a,b].sort().join('_');
+            if(seen.has(key))return; seen.add(key);
+            const aOwesB=(netMatrix[a]?.[b]||0);
+            const bOwesA=(netMatrix[b]?.[a]||0);
+            const net=aOwesB-bOwesA;
+            if(Math.abs(net)<0.5)return; // settled
+            const debtor=net>0?a:b;
+            const creditor=net>0?b:a;
+            const amount=Math.abs(net);
+            settlements.push({debtor,creditor,amount,
+              debtorName:memberNames[debtor]||mName(debtor),
+              creditorName:memberNames[creditor]||mName(creditor)});
+          });
+        });
+        // Who paid section
+        const whoPayedHtml=payerSorted.length>0?payerSorted.map(([name,amt])=>`
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:5px">
+            <div class="friend-avatar" style="width:26px;height:26px;font-size:11px">${name[0].toUpperCase()}</div>
+            <span style="flex:1;font-size:13px">${name}</span>
+            <span style="font-size:13px;font-weight:600">₹${fmt(Math.round(amt))}</span>
+            <span style="font-size:10px;color:var(--text3)">${fTotal>0?Math.round(amt/fTotal*100):0}%</span>
+          </div>`).join(''):'';
+        // Settlement section
+        const settleHtml=settlements.length===0
+          ?'<div style="font-size:12px;color:var(--sage);text-align:center;padding:8px 0">✅ All settled up!</div>'
+          :settlements.map(s=>`
+            <div style="display:flex;align-items:center;gap:8px;padding:10px 12px;background:white;border-radius:var(--r2);margin-bottom:6px;box-shadow:0 1px 3px rgba(0,0,0,.06)">
+              <div class="friend-avatar" style="width:28px;height:28px;font-size:11px;background:var(--red-l);color:var(--red)">${s.debtorName[0]}</div>
+              <div style="flex:1">
+                <span style="font-size:13px;font-weight:500;color:var(--text)">${s.debtorName}</span>
+                <span style="font-size:12px;color:var(--text3)"> owes </span>
+                <span style="font-size:13px;font-weight:500;color:var(--text)">${s.creditorName}</span>
+              </div>
+              <span style="font-size:16px;font-weight:700;color:var(--red)">₹${fmt(Math.round(s.amount))}</span>
+            </div>`).join('');
+        return settlements.length>0||payerSorted.length>0?`
+          <div style="margin-bottom:14px">
+            ${payerSorted.length>0?`
+              <div style="padding:12px;background:var(--warm);border-radius:var(--r2);margin-bottom:10px">
+                <div style="font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">💳 Who paid</div>
+                ${whoPayedHtml}
+              </div>`:''}
+            <div style="padding:12px;background:var(--warm);border-radius:var(--r2)">
+              <div style="font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">⚖️ Who owes whom</div>
+              ${settleHtml}
+            </div>
+          </div>` : '';
+      })()}
 
       <!-- Expenses with search + pagination -->
       <div class="card-title" style="margin-bottom:8px">Expenses <span style="font-size:11px;font-weight:400;color:var(--text3)">(${grpSplits.length})</span></div>
@@ -9871,12 +9963,12 @@ function renderGroupDetail(gid){
               <span style="font-size:16px">${allPaid?'✅':'💸'}</span>
               <div style="flex:1;min-width:0"><div style="font-size:14px;font-weight:500;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${sp.desc}</div><div style="font-size:11px;color:var(--text3)">₹${fmt(sp.totalAmount)} · ${mName(sp.paidBy)} paid · ${paidCount}/${sp.members.length} paid</div></div>
               <span style="font-size:11px;color:var(--text3);margin-right:4px">${isOpen?'▲':'▼'}</span>
-              <button onclick="event.stopPropagation();editGroupSplitRow(${sp.id},${gid})" style="background:none;border:none;cursor:pointer;font-size:13px;padding:2px 4px;opacity:.6">✏️</button>
-              <button class="del" onclick="event.stopPropagation();deleteSplit(${sp.id})">×</button>
+              <button onclick="event.stopPropagation();editGroupSplitRow('${sp.id}','${gid}')" style="background:none;border:none;cursor:pointer;font-size:13px;padding:2px 4px;opacity:.6">✏️</button>
+              <button class="del" onclick="event.stopPropagation();deleteSplit('${sp.id}')">×</button>
             </div>
             <div id="exp-body-${sp.id}" style="display:${isOpen?'block':'none'};padding:0 14px 12px">
               <div style="font-size:11px;color:var(--text3);margin-bottom:8px">${sp.splitType==='percent'?'Percentage split':'Equal split'} · ${sp.date}</div>
-              ${sp.members.map(m=>`<div class="split-row"><div class="friend-avatar" style="width:28px;height:28px;font-size:11px">${mName(m.friendId)[0]}</div><span style="flex:1;font-size:13px">${mName(m.friendId)}</span><span class="split-amount">₹${fmt(m.share)}</span><button class="split-paid-btn ${m.paid?'paid':'unpaid'}" onclick="toggleSplitPaid(${sp.id},'${m.friendId}')">${m.paid?'✓ Paid':'Mark Paid'}</button></div>`).join('')}
+              ${sp.members.map(m=>`<div class="split-row"><div class="friend-avatar" style="width:28px;height:28px;font-size:11px">${mName(m.friendId)[0]}</div><span style="flex:1;font-size:13px">${mName(m.friendId)}</span><span class="split-amount">₹${fmt(m.share)}</span><button class="split-paid-btn ${m.paid?'paid':'unpaid'}" onclick="toggleSplitPaid('${sp.id}','${m.friendId}')">${m.paid?'✓ Paid':'Mark Paid'}</button></div>`).join('')}
             </div>
           </div>`;
         }).join('');
@@ -10014,7 +10106,32 @@ function toggleExpense(key,bodyId){
   const row=el?.previousElementSibling;
   if(row){const arrow=row.querySelector('span:nth-last-child(2)');if(arrow)arrow.textContent=window._expandedSplits[key]?'▲':'▼';}
 }
-function deleteSplit(id){splits=splits.filter(s=>String(s.id)!==String(id));persistSpend();if(openGroupId)renderGroupDetail(openGroupId);else renderSettle();}
+async function deleteSplit(id){
+  const sp=splits.find(s=>String(s.id)===String(id));
+  const gid=sp?.groupId;
+  splits=splits.filter(s=>String(s.id)!==String(id));
+  persistSpend();
+  if(openGroupId)renderGroupDetail(openGroupId);else renderSettle();
+  // Push deletion to group members
+  if(gid&&window._fb){
+    const grp=groups.find(g=>g.id===gid);
+    const {db,doc,getDoc,setDoc}=window._fb;
+    const u=window.currentUser||currentUser;
+    const gSplits=splits.filter(s=>s.groupId===gid);
+    // Update shared_groups
+    if(grp) try{await setDoc(doc(db,'shared_groups',String(gid)),{splits:gSplits,updatedAt:Date.now()},{merge:true});}catch(e){}
+    // Update member docs
+    for(const mUid of (grp?.memberUids||[])){
+      if(mUid===u?.uid)continue;
+      try{
+        const snap=await getDoc(doc(db,'users',mUid));
+        const data=snap.exists()?snap.data():{};
+        const others=(data.splits||[]).filter(s=>String(s.groupId)!==String(gid));
+        await setDoc(doc(db,'users',mUid),{splits:[...others,...gSplits]},{merge:true});
+      }catch(e){console.warn('deleteSplit push:',e.code);}
+    }
+  }
+}
 async function toggleSplitPaid(splitId,friendId){
   const sp=splits.find(x=>x.id===splitId);if(!sp)return;
   const m=sp.members.find(x=>String(x.friendId)===String(friendId));if(m)m.paid=!m.paid;
@@ -10096,22 +10213,30 @@ async function addSplit(gid){
   const grpName = groups.find(x=>x.id===gid)?.name || 'Group';
   if(typeof notifyGroupExpense === 'function') notifyGroupExpense(grpName, total, 'You');
 
-  // Push updated splits to every group member's Firestore document
-  const grp = groups.find(x=>x.id===gid);
-  if(grp && window._fb){
+  const grp2 = groups.find(x=>x.id===gid);
+  if(grp2 && window._fb){
     const {db, doc, getDoc, setDoc} = window._fb;
-    const u = window.currentUser||currentUser;
-    const groupSplits = splits.filter(s=>s.groupId===gid);
-    const memberUids  = grp.memberUids || [];
-    for(const memberUid of memberUids){
-      if(memberUid===u?.uid) continue;
+    const u2 = window.currentUser||currentUser;
+    const groupSplits2 = splits.filter(s=>s.groupId===gid);
+
+    // A: Push to shared_groups/{gid} — any member can read this
+    // Rule: match /shared_groups/{id} { allow read,write: if request.auth != null; }
+    try{
+      await setDoc(doc(db,'shared_groups',String(gid)),{
+        ...grp2, splits: groupSplits2, updatedAt: Date.now()
+      }, {merge:true});
+    }catch(e){ console.warn('addSplit shared_groups write:',e.code,e.message); }
+
+    // B: Push to each member's users/{uid} doc (merges, doesn't replace)
+    for(const mUid of (grp2.memberUids||[])){
+      if(mUid===u2?.uid) continue;
       try{
-        const snap = await getDoc(doc(db,'users',memberUid));
+        const snap = await getDoc(doc(db,'users',mUid));
         const data = snap.exists() ? snap.data() : {};
-        // Replace or add splits for this group
-        const otherSplits = (data.splits||[]).filter(s=>String(s.groupId)!==String(gid));
-        await setDoc(doc(db,'users',memberUid),{splits:[...otherSplits,...groupSplits]},{merge:true});
-      }catch(e){console.warn('addSplit push to member',memberUid,e);}
+        // Merge: keep all their splits + update/add this group's splits
+        const others = (data.splits||[]).filter(s=>String(s.groupId)!==String(gid));
+        await setDoc(doc(db,'users',mUid),{splits:[...others,...groupSplits2]},{merge:true});
+      }catch(e){ console.warn('addSplit push member',mUid,':',e.code,e.message); }
     }
   }
 }
@@ -11220,13 +11345,29 @@ window._applySync = function(data) {
   syncVar('friendReqs',  v=>{_friendReqs=v;  friendReqs=v;});
   syncVar('groups',      v=>{_groups=v;      groups=v;});
   syncVar('splits', v=>{
-    // Detect newly added group expenses for cross-device notification
     const prevSplits = splits || [];
-    _splits=v; splits=v;
-    if(typeof pushNotif === 'function' && v.length > prevSplits.length) {
-      const newSplits = v.filter(ns => !prevSplits.some(ps => ps.id === ns.id));
+    // MERGE: don't replace — update existing by ID, add new ones
+    // This prevents a friend's push from wiping splits they don't know about
+    const merged = [...prevSplits];
+    v.forEach(rs=>{
+      const idx = merged.findIndex(ls=>String(ls.id)===String(rs.id));
+      if(idx>=0) merged[idx]=rs; // remote wins for existing (paid status syncs)
+      else merged.push(rs);      // new split from remote
+    });
+    // Also remove splits that remote explicitly removed (if remote has fewer for that group)
+    // Only remove splits for groups where remote has authoritative data
+    const remoteGroupIds=new Set(v.map(s=>String(s.groupId)));
+    const remoteIds=new Set(v.map(s=>String(s.id)));
+    const finalSplits=merged.filter(s=>
+      !remoteGroupIds.has(String(s.groupId)) || // not a group remote touched — keep
+      remoteIds.has(String(s.id))               // remote knows about this split — keep
+    );
+    _splits=finalSplits; splits=finalSplits;
+    // Notify about new splits
+    if(typeof pushNotif === 'function') {
+      const newSplits = v.filter(ns => !prevSplits.some(ps => String(ps.id)===String(ns.id)));
       newSplits.forEach(ns => {
-        const grp = (typeof groups !== 'undefined' ? groups : []).find(g => g.id === ns.groupId);
+        const grp = (typeof groups !== 'undefined' ? groups : []).find(g => String(g.id)===String(ns.groupId));
         if(grp) pushNotif('New expense in ' + grp.name, (ns.addedBy||'Someone') + ' added ₹' + fmt(ns.totalAmount||0), 'group', '🏕️');
       });
     }
