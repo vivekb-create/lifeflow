@@ -3641,7 +3641,16 @@ function renderPersonal(){
   renderDateRangeBar();
   const rangeSpends = spendsInRange();
   const rangeTotal  = rangeSpends.reduce((a,b)=>a+b.amount,0);
-  const monthTotal  = spends.reduce((a,b)=>a+b.amount,0);
+  // Always calculate the banner's "This month" value from the current calendar month,
+  // independent of the active date-range filter.
+  const nowForMonth = new Date();
+  const monthStartKey = nowForMonth.getFullYear()+'-'+String(nowForMonth.getMonth()+1).padStart(2,'0')+'-01';
+  const nextMonth = new Date(nowForMonth.getFullYear(), nowForMonth.getMonth()+1, 1);
+  const nextMonthKey = nextMonth.getFullYear()+'-'+String(nextMonth.getMonth()+1).padStart(2,'0')+'-01';
+  const monthTotal = spends.reduce((sum,s)=>{
+    const key = normalizeDate(s.date);
+    return sum + (key >= monthStartKey && key < nextMonthKey ? Number(s.amount||0) : 0);
+  },0);
   const rangeLabel  = spendDateMode==='today'?'Today':
                       spendDateMode==='week'?'This Week':
                       spendDateMode==='last_week'?'Last Week':
@@ -4788,7 +4797,9 @@ function openQuickAdd(){
   if(!sheet||!overlay) return;
 
   // Detect context: what is currently visible on the groups panel?
-  let qaContext = 'personal'; // default
+  // When the Groups tab is active, start in a neutral groups context so we can
+  // detect an open group/shared-list detail. Never silently fall back to Personal.
+  let qaContext = spendTab === 'groups' ? 'groups' : 'personal';
   let qaGroupId = null;
   let qaListId  = null;
 
@@ -4899,7 +4910,7 @@ async function submitQuickAdd(){
   let dateKey   = todayKey();
   if(dateRaw){
     const parts = dateRaw.split('-');
-    dateKey = parseInt(parts[0])+'-'+parseInt(parts[1])+'-'+parseInt(parts[2]);
+    dateKey = parts[0]+'-'+String(parseInt(parts[1])).padStart(2,'0')+'-'+String(parseInt(parts[2])).padStart(2,'0');
   }
 
   const sheet   = document.getElementById('quick-add-sheet');
@@ -4941,8 +4952,13 @@ async function submitQuickAdd(){
     if(!grp){ showToast('Group not found.'); return; }
     const paidBy  = document.getElementById('qa-paidby')?.value || 'me';
     const members = grp.members || ['me'];
-    const share   = Math.round((amount/members.length)*100)/100;
-    const splitMembers = members.map(m=>({friendId:m, share, paid:m===paidBy}));
+    const baseShare = Math.floor((amount/members.length)*100)/100;
+    let allocated = 0;
+    const splitMembers = members.map((m,idx)=>{
+      const share = idx===members.length-1 ? Math.round((amount-allocated)*100)/100 : baseShare;
+      allocated += share;
+      return {friendId:String(m), share, paid:String(m)===String(paidBy)};
+    });
     const spFabCat = document.getElementById('qa-paidby') ? (quickAddCat||'Other') : 'Other';
     const newSplit = {id:uid(), groupId, cat:spFabCat, desc, totalAmount:amount,
                       paidBy, date:dateKey, members:splitMembers, splitType:'equal'};
@@ -9528,8 +9544,7 @@ async function cancelFriendRequest(id){
 
 function deleteFriend(id){
   // Called for active friends — check balance before removing
-  const net = computeNet();
-  const bal = Math.round((net[String(id)]||0)*100)/100;
+  const bal = Math.round(getNetForFriend(id)*100)/100;
   if(Math.abs(bal) > 0.01){
     const fname = friends.find(f => String(f.id) === String(id))?.name || 'Friend';
     const dir   = bal > 0
@@ -9557,7 +9572,7 @@ function renderGroups(){
     ?'<div class="empty"><div class="empty-icon">🏕️</div>No groups yet. Create a trip!</div>'
     :groups.map(g=>{
       const memberNames=g.members.map(mid=>mName(mid));
-      const total=splits.filter(s=>s.groupId===g.id).reduce((a,b)=>a+b.totalAmount,0);
+      const total=splits.filter(s=>String(s.groupId)===String(g.id)).reduce((a,b)=>a+Number(b.totalAmount||0),0);
       return `<div class="group-card" onclick="openGroup(${g.id})">
         <div class="group-card-head"><span class="group-emoji">${g.emoji}</span><div><div class="group-name">${g.name}</div><div class="group-meta">${g.members.length} members · ₹${fmt(total)} total</div></div><button class="del" style="margin-left:auto" onclick="event.stopPropagation();deleteGroup(${g.id})">×</button></div>
         <div class="group-members">${memberNames.map(n=>`<span class="member-chip">${n}</span>`).join('')}</div>
@@ -10133,9 +10148,36 @@ async function deleteSplit(id){
   }
 }
 async function toggleSplitPaid(splitId,friendId){
-  const sp=splits.find(x=>x.id===splitId);if(!sp)return;
-  const m=sp.members.find(x=>String(x.friendId)===String(friendId));if(m)m.paid=!m.paid;
-  persistSpend();if(openGroupId)renderGroupDetail(openGroupId);else renderSettle();
+  // onclick passes IDs as strings while locally-created IDs are often numbers.
+  // Compare normalized values so the button always finds the intended split.
+  const sp=splits.find(x=>String(x.id)===String(splitId));
+  if(!sp)return;
+  const m=sp.members.find(x=>String(x.friendId)===String(friendId));
+  if(!m)return;
+  m.paid=!m.paid;
+  persistSpend();
+  if(openGroupId)renderGroupDetail(openGroupId);else renderSettle();
+
+  // Keep the paid/unpaid state in sync for every member of the group.
+  const gid=sp.groupId;
+  const grp=groups.find(g=>String(g.id)===String(gid));
+  if(grp&&window._fb){
+    const {db,doc,getDoc,setDoc}=window._fb;
+    const u=window.currentUser||currentUser;
+    const gSplits=splits.filter(s=>String(s.groupId)===String(gid));
+    try{
+      await setDoc(doc(db,'shared_groups',String(gid)),{splits:gSplits,updatedAt:Date.now()},{merge:true});
+    }catch(e){console.warn('toggleSplitPaid shared group sync:',e.code||e.message);}
+    for(const mUid of (grp.memberUids||[])){
+      if(!mUid||mUid===u?.uid)continue;
+      try{
+        const snap=await getDoc(doc(db,'users',mUid));
+        const data=snap.exists()?snap.data():{};
+        const others=(data.splits||[]).filter(s=>String(s.groupId)!==String(gid));
+        await setDoc(doc(db,'users',mUid),{splits:[...others,...gSplits]},{merge:true});
+      }catch(e){console.warn('toggleSplitPaid member sync:',e.code||e.message);}
+    }
+  }
 }
 
 function openSplitModal(gid){
@@ -10194,12 +10236,17 @@ async function addSplit(gid){
   const shareInputs=document.querySelectorAll('.sp-share');
   let members=[];
   if(type==='equal'){
-    const share=Math.round(total/g.members.length*100)/100;
-    members=g.members.map(mid=>{return{friendId:String(mid),share,paid:String(mid)===String(paidBy)};});
+    const baseShare=Math.floor((total/g.members.length)*100)/100;
+    let allocated=0;
+    members=g.members.map((mid,idx)=>{
+      const share=idx===g.members.length-1 ? Math.round((total-allocated)*100)/100 : baseShare;
+      allocated+=share;
+      return{friendId:String(mid),share,paid:String(mid)===String(paidBy)};
+    });
   } else {
     let totalPct=0;
     shareInputs.forEach(inp=>{totalPct+=parseFloat(inp.value)||0;});
-    if(Math.abs(totalPct-100)>1){alert('Percentages must add up to 100%.');return;}
+    if(Math.abs(totalPct-100)>0.01){alert('Percentages must add up to 100%.');return;}
     shareInputs.forEach(inp=>{
       const pct=parseFloat(inp.value)||0;
       const mid=inp.dataset.mid;
