@@ -3845,36 +3845,24 @@ function addSpend(){
   const cat    = document.getElementById('spend-cat-in').value;
   const desc   = document.getElementById('spend-desc-in').value.trim();
   const amount = parseFloat(document.getElementById('spend-amount-in').value);
-  if(!desc||isNaN(amount)||amount<=0) return;
+  if(!desc){ showToast('Please enter a description.'); return; }
+  if(isNaN(amount)||amount<=0){ showToast('Please enter a valid amount.'); return; }
   const dateRaw = document.getElementById('spend-date-in')?.value || '';
   let dateKey = todayKey();
   if(dateRaw){
     const parts = dateRaw.split('-');
-    dateKey = parseInt(parts[0])+'-'+parseInt(parts[1])+'-'+parseInt(parts[2]);
+    dateKey = parts[0]+'-'+String(parseInt(parts[1])).padStart(2,'0')+'-'+String(parseInt(parts[2])).padStart(2,'0');
   }
   spends.push({id:uid(), cat, desc, amount, date:dateKey});
   persistSpend(); showSpendForm=false; renderPersonal();
 }
-function deleteSpend(id){spends=spends.filter(s=>s.id!==id);persistSpend();renderPersonal();}
+function deleteSpend(id){spends=spends.filter(s=>String(s.id)!==String(id));persistSpend();renderPersonal();}
 
 // ── FRIENDS ─────────────────────────────────
 function mName(id){if(String(id)==='me')return currentUser&&!currentUser.isGuest?currentUser.firstName||'Me':'Me';const f=friends.find(x=>String(x.id)===String(id));return f?f.name:'?';}
 
 function renderFriends(){
-  // Compute balances
-  const balances={};
-  splits.forEach(sp=>{
-    sp.members.forEach(m=>{
-      const fid=String(m.friendId);
-      if(fid==='me')return;
-      if(!balances[fid])balances[fid]=0;
-      if(String(sp.paidBy)==='me'&&!m.paid)balances[fid]+=m.share;
-      else if(String(sp.paidBy)===fid){
-        const myM=sp.members.find(x=>String(x.friendId)==='me');
-        if(myM&&!myM.paid)balances[fid]-=myM.share;
-      }
-    });
-  });
+  // Balances computed per-friend via getNetForFriend()
 
   const activeFriends=friends.filter(f=>f.status==='active');
   const flEl=document.getElementById('friends-list');
@@ -3882,10 +3870,18 @@ function renderFriends(){
   flEl.innerHTML=activeFriends.length===0
     ?'<div class="empty"><div class="empty-icon">👥</div>No friends yet. Add one!</div>'
     :activeFriends.map(f=>{
-      const bal=Math.round((balances[f.id]||0)*100)/100;
+      const bal=Math.round(getNetForFriend(f.id)*100)/100;
       const bc=bal>0?'owed':bal<0?'owes':'clear';
       const bt=bal===0?'Settled':bal>0?`Owes you ₹${fmt(Math.abs(bal))}`:`You owe ₹${fmt(Math.abs(bal))}`;
-      return `<div class="friend-card"><div class="friend-avatar">${f.name[0].toUpperCase()}</div><div class="friend-info"><div class="friend-name">${f.name}</div><div class="friend-contact">${f.contact}</div></div><span class="friend-balance ${bc}">${bt}</span><button class="del" onclick="deleteFriend(${f.id})">×</button></div>`;
+      return `<div class="friend-card">
+        <div class="friend-avatar">${f.name[0].toUpperCase()}</div>
+        <div class="friend-info">
+          <div class="friend-name">${f.name}</div>
+          <div class="friend-contact">${f.contact||''}</div>
+        </div>
+        <span class="friend-balance ${bc}">${bt}</span>
+        <button class="del" onclick="deleteFriend('${f.id}')">×</button>
+      </div>`;
     }).join('');
 
   const pending=friends.filter(f=>f.status==='pending_sent');
@@ -4992,6 +4988,13 @@ function getDateRange(){
   }
 }
 
+function normalizeDate(d){
+  if(!d)return '';
+  const p=String(d).split('-');
+  if(p.length!==3)return d;
+  return p[0]+'-'+String(parseInt(p[1])).padStart(2,'0')+'-'+String(parseInt(p[2])).padStart(2,'0');
+}
+
 function spendsInRange(){
   const {from, to} = getDateRange();
   return spends.filter(s=>{
@@ -5601,7 +5604,7 @@ async function addSharedExpense(listId){
   if(!desc || isNaN(amt) || amt <= 0){ showToast('Please enter a description and amount.'); return; }
 
   let dateKey = todayKey();
-  if(dateRaw){ const p=dateRaw.split('-'); dateKey=parseInt(p[0])+'-'+parseInt(p[1])+'-'+parseInt(p[2]); }
+  if(dateRaw){ const p=dateRaw.split('-'); dateKey=p[0]+'-'+String(parseInt(p[1])).padStart(2,'0')+'-'+String(parseInt(p[2])).padStart(2,'0'); }
 
   const u = window.currentUser || currentUser;
   const newExp = {id:uid(), cat, desc, amount:amt, date:dateKey, addedBy: u?.name||'Me', addedByUid: u?.uid||''};
@@ -5612,7 +5615,7 @@ async function addSharedExpense(listId){
   if(window._fb){
     const {db:_db2,doc:_doc2,setDoc:_setDoc2}=window._fb;
     const _u2=window.currentUser||currentUser;
-    if(_u2?.uid) _setDoc2(_doc2(_db2,'users',_u2.uid),{sharedExpenseLists},{...{merge:true}}).catch(()=>{});
+    if(_u2?.uid) _setDoc2(_doc2(_db2,'users',_u2.uid),{sharedExpenseLists},{merge:true}).catch(()=>{});
   }
   openSharedListDetail(listId);
   showToast('Expense added!');
@@ -5841,7 +5844,7 @@ function saveSharedCsvRow(listId, idx){
   if(!desc){ showToast('Description cannot be empty.'); return; }
   if(isNaN(amt)||amt<=0){ showToast('Please enter a valid amount.'); return; }
   let dateKey = rows[idx].dateKey;
-  if(dateRaw){ const p=dateRaw.split('-'); dateKey=parseInt(p[0])+'-'+parseInt(p[1])+'-'+parseInt(p[2]); }
+  if(dateRaw){ const p=dateRaw.split('-'); dateKey=p[0]+'-'+String(parseInt(p[1])).padStart(2,'0')+'-'+String(parseInt(p[2])).padStart(2,'0'); }
   rows[idx] = {...rows[idx], cat, desc, amount:amt, dateKey};
   refreshSharedCsvPreview(listId);
 }
@@ -5922,7 +5925,7 @@ async function confirmSharedCsvImport(listId){
   if(window._fb){
     const {db:_db4,doc:_doc4,setDoc:_setDoc4}=window._fb;
     const _u4=window.currentUser||currentUser;
-    if(_u4?.uid) _setDoc4(_doc4(_db4,'users',_u4.uid),{sharedExpenseLists},{...{merge:true}}).catch(()=>{});
+    if(_u4?.uid) _setDoc4(_doc4(_db4,'users',_u4.uid),{sharedExpenseLists},{merge:true}).catch(()=>{});
   }
 
   const previewEl = document.getElementById('shared-csv-preview-'+listId);
@@ -5985,7 +5988,7 @@ async function saveSharedExpenseEdit(listId, expId){
   if(!desc){ showToast('Description cannot be empty.'); return; }
   if(isNaN(amt)||amt<=0){ showToast('Please enter a valid amount.'); return; }
   let dateKey = exp.date;
-  if(dateRaw){ const p=dateRaw.split('-'); dateKey=parseInt(p[0])+'-'+parseInt(p[1])+'-'+parseInt(p[2]); }
+  if(dateRaw){ const p=dateRaw.split('-'); dateKey=p[0]+'-'+String(parseInt(p[1])).padStart(2,'0')+'-'+String(parseInt(p[2])).padStart(2,'0'); }
   exp.cat=cat; exp.desc=desc; exp.amount=amt; exp.date=dateKey;
   persist();
   openSharedListDetail(listId);
@@ -6009,12 +6012,12 @@ async function saveSharedExpenseEdit(listId, expId){
 async function deleteSharedExpense(listId, expId){
   const lst = sharedExpenseLists.find(l => l.id === listId);
   if(!lst) return;
-  lst.expenses = (lst.expenses||[]).filter(e => e.id !== expId);
+  lst.expenses = (lst.expenses||[]).filter(e => String(e.id) !== String(expId));
   persist();
   if(window._fb){
     const {db:_db3,doc:_doc3,setDoc:_setDoc3}=window._fb;
     const _u3=window.currentUser||currentUser;
-    if(_u3?.uid) _setDoc3(_doc3(_db3,'users',_u3.uid),{sharedExpenseLists},{...{merge:true}}).catch(()=>{});
+    if(_u3?.uid) _setDoc3(_doc3(_db3,'users',_u3.uid),{sharedExpenseLists},{merge:true}).catch(()=>{});
   }
   openSharedListDetail(listId);
 }
@@ -9430,21 +9433,43 @@ function declineFriendReq(id){
   persist(); renderFriends();
 }
 function computeNet(){
+  // Returns {friendId → balance} where +ve = they owe me, -ve = I owe them
+  // friendId here matches the value stored in split.members[].friendId
+  // which may be friend.id (local) or 'me'
   const net={};
   splits.forEach(sp=>{
     sp.members.forEach(m=>{
-      if(m.paid)return;
       const fid=String(m.friendId);
-      if(fid==='me')return;
+      if(fid==='me')return; // skip my own share
       if(!net[fid])net[fid]=0;
-      if(String(sp.paidBy)==='me')net[fid]+=m.share;
-      else if(String(sp.paidBy)===fid){
+      if(m.paid)return; // already settled — skip
+      if(String(sp.paidBy)==='me'){
+        // I paid — friend owes me their share
+        net[fid]+=m.share;
+      } else if(String(sp.paidBy)===fid){
+        // Friend paid — I owe them my share
         const myM=sp.members.find(x=>String(x.friendId)==='me');
         if(myM&&!myM.paid)net[fid]-=myM.share;
       }
     });
   });
   return net;
+}
+
+// Resolve computeNet balance for a specific friend by their local friend.id
+// (handles friendId in splits being either friend.id or friend.fromUid)
+function getNetForFriend(friendId){
+  const net=computeNet();
+  const fStr=String(friendId);
+  // Direct match
+  if(net[fStr]!==undefined)return net[fStr];
+  // Try matching via fromUid: some splits store fromUid as friendId
+  const f=friends.find(x=>String(x.id)===fStr);
+  if(!f)return 0;
+  // Find net entry by fromUid
+  const byUid=Object.entries(net).find(([k])=>k===String(f.fromUid));
+  if(byUid)return byUid[1];
+  return 0;
 }
 async function cancelFriendRequest(id){
   // Find the pending_sent entry
@@ -9647,7 +9672,7 @@ async function saveGroupSplitEdit(splitId, gid){
   if(!desc){ showToast('Description cannot be empty.'); return; }
   if(isNaN(amt)||amt<=0){ showToast('Please enter a valid amount.'); return; }
   let dateKey = sp.date;
-  if(dateRaw){ const p=dateRaw.split('-'); dateKey=parseInt(p[0])+'-'+parseInt(p[1])+'-'+parseInt(p[2]); }
+  if(dateRaw){ const p=dateRaw.split('-'); dateKey=p[0]+'-'+String(parseInt(p[1])).padStart(2,'0')+'-'+String(parseInt(p[2])).padStart(2,'0'); }
   // Update each member share proportionally
   const share = Math.round(amt/(sp.members||[{share:1}]).length*100)/100;
   sp.cat=cat; sp.desc=desc; sp.totalAmount=amt; sp.date=dateKey;
@@ -9989,8 +10014,8 @@ function toggleExpense(key,bodyId){
   const row=el?.previousElementSibling;
   if(row){const arrow=row.querySelector('span:nth-last-child(2)');if(arrow)arrow.textContent=window._expandedSplits[key]?'▲':'▼';}
 }
-function deleteSplit(id){splits=splits.filter(s=>s.id!==id);persistSpend();if(openGroupId)renderGroupDetail(openGroupId);else renderSettle();}
-function toggleSplitPaid(splitId,friendId){
+function deleteSplit(id){splits=splits.filter(s=>String(s.id)!==String(id));persistSpend();if(openGroupId)renderGroupDetail(openGroupId);else renderSettle();}
+async function toggleSplitPaid(splitId,friendId){
   const sp=splits.find(x=>x.id===splitId);if(!sp)return;
   const m=sp.members.find(x=>String(x.friendId)===String(friendId));if(m)m.paid=!m.paid;
   persistSpend();if(openGroupId)renderGroupDetail(openGroupId);else renderSettle();
@@ -10046,15 +10071,14 @@ async function addSplit(gid){
   const g=groups.find(x=>x.id===gid);if(!g)return;
   const desc=(document.getElementById('sp-desc').value||'').trim();
   const total=parseFloat(document.getElementById('sp-amount').value);
-  const paidByRaw=document.getElementById('sp-paidby').value;
-  const paidBy=isNaN(Number(paidByRaw))?paidByRaw:Number(paidByRaw);
+  const paidBy=document.getElementById('sp-paidby')?.value||'me'; // always string
   const type=document.querySelector('input[name="sp-split"]:checked')?.value||'equal';
   if(!desc||isNaN(total)||total<=0){alert('Please fill in description and amount.');return;}
   const shareInputs=document.querySelectorAll('.sp-share');
   let members=[];
   if(type==='equal'){
     const share=Math.round(total/g.members.length*100)/100;
-    members=g.members.map(mid=>{const fid=isNaN(Number(mid))?mid:Number(mid);return{friendId:fid,share,paid:String(fid)===String(paidBy)};});
+    members=g.members.map(mid=>{return{friendId:String(mid),share,paid:String(mid)===String(paidBy)};});
   } else {
     let totalPct=0;
     shareInputs.forEach(inp=>{totalPct+=parseFloat(inp.value)||0;});
@@ -10062,8 +10086,7 @@ async function addSplit(gid){
     shareInputs.forEach(inp=>{
       const pct=parseFloat(inp.value)||0;
       const mid=inp.dataset.mid;
-      const fid=isNaN(Number(mid))?mid:Number(mid);
-      members.push({friendId:fid,share:Math.round(total*pct/100*100)/100,paid:String(fid)===String(paidBy)});
+      members.push({friendId:String(mid),share:Math.round(total*pct/100*100)/100,paid:String(mid)===String(paidBy)});
     });
   }
   const spCat2 = document.getElementById('sp-cat')?.value || 'Other';
