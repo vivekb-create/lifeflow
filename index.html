@@ -174,6 +174,11 @@ window._processPendingFriendReqs = function(pendingReqs) {
   let newFound = false;
   pendingReqs.forEach(r => {
     if (r.status !== 'pending') return;
+    // Requests explicitly declined / removed by this user are tombstoned locally.
+    // This prevents an old Firestore copy from recreating the same request forever.
+    let dismissed = [];
+    try { dismissed = JSON.parse(localStorage.getItem('lf3_dismissed_friend_uids') || '[]'); } catch(e) {}
+    if (dismissed.map(String).includes(String(r.fromUid||''))) return;
     const already = (friendReqs||[]).some(x => String(x.fromUid) === String(r.fromUid));
     const alreadyFriend = (friends||[]).some(f =>
       f.status === 'active' && String(f.fromUid||'') === String(r.fromUid||'')
@@ -2417,7 +2422,9 @@ function launchApp() {
         const myGroup=groups.find(g=>String(g.id)===remoteGid);
         if(!myGroup)return;
 
-        const remoteSplits=Array.isArray(gdata.splits)?gdata.splits:[];
+        const deletedIds = new Set((gdata.deletedSplitIds||[]).map(String));
+        const remoteSplits=(Array.isArray(gdata.splits)?gdata.splits:[])
+          .filter(sp=>!deletedIds.has(String(sp.id)));
         const localGroupSplits=splits.filter(sp=>String(sp.groupId)===remoteGid);
         if(JSON.stringify(localGroupSplits)!==JSON.stringify(remoteSplits)){
           // Replace this group's local slice completely. This is what makes a remote
@@ -2437,8 +2444,58 @@ function launchApp() {
       }
     }catch(e){console.warn('shared_groups sync:',e);}
   };
-  setTimeout(syncSharedGroupsFromCloud,3000);
+  // Expose one refresh entry point so opening a group / returning after idle can
+  // force fresh data immediately instead of waiting for the polling interval.
+  window._syncSharedGroupsFromCloud = syncSharedGroupsFromCloud;
+  window._refreshGroupData = async function(reason){
+    const u=window.currentUser||currentUser;
+    if(!u?.uid||!window._fb)return;
+    try{
+      const {db,doc,getDoc}=window._fb;
+      const snap=await getDoc(doc(db,'users',u.uid));
+      if(snap.exists() && window._applySync) window._applySync(snap.data());
+    }catch(e){console.warn('group user refresh:',e);}
+    await syncSharedGroupsFromCloud();
+    window._lastGroupRefreshAt=Date.now();
+  };
+
+  setTimeout(()=>window._refreshGroupData('launch'),3000);
   setInterval(syncSharedGroupsFromCloud,10000);
+
+  // Real-time shared-group listener: edits and deletes made by another member
+  // appear without requiring a manual reload.
+  try{
+    if(window._sharedGroupsUnsub) window._sharedGroupsUnsub();
+    const {db,collection,onSnapshot}=window._fb;
+    window._sharedGroupsUnsub=onSnapshot(collection(db,'shared_groups'),()=>{
+      syncSharedGroupsFromCloud();
+    },e=>console.warn('shared_groups listener:',e.code||e.message));
+  }catch(e){console.warn('shared_groups listener setup:',e);}
+
+  // Refresh when the user returns to the app, and after >60s of inactivity.
+  if(!window._groupRefreshActivityInstalled){
+    window._groupRefreshActivityInstalled=true;
+    window._lastLifeFlowActivity=Date.now();
+    const onActivity=()=>{
+      const now=Date.now();
+      const idleFor=now-(window._lastLifeFlowActivity||now);
+      window._lastLifeFlowActivity=now;
+      if(idleFor>=60000 && currentPage==='spending' && spendTab==='groups'){
+        window._refreshGroupData?.('idle-return');
+      }
+    };
+    ['pointerdown','keydown','touchstart'].forEach(ev=>document.addEventListener(ev,onActivity,{passive:true}));
+    document.addEventListener('visibilitychange',()=>{
+      if(!document.hidden && currentPage==='spending' && spendTab==='groups'){
+        window._refreshGroupData?.('visible');
+      }
+    });
+    window.addEventListener('focus',()=>{
+      if(currentPage==='spending' && spendTab==='groups'){
+        window._refreshGroupData?.('focus');
+      }
+    });
+  }
 
   // Poll friend_requests collection periodically (every 30s when app is open)
   setInterval(async()=>{
@@ -2451,7 +2508,10 @@ function launchApp() {
       const incoming=[];
       allReqs.forEach(d=>{
         const dat=d.data();
-        if(dat.toUid===u2.uid&&dat.status==='pending'){
+        let dismissed=[];
+        try{dismissed=JSON.parse(localStorage.getItem('lf3_dismissed_friend_uids')||'[]').map(String);}catch(e){}
+        const alreadyActive=(friends||[]).some(f=>f.status==='active'&&String(f.fromUid||'')===String(dat.fromUid||''));
+        if(dat.toUid===u2.uid&&dat.status==='pending'&&!dismissed.includes(String(dat.fromUid||''))&&!alreadyActive){
           incoming.push({id:dat.fromUid+'_req',fromUid:dat.fromUid,
             fromName:dat.fromName||'Someone',fromEmail:dat.fromEmail||'',
             fromPicture:dat.fromPicture||'',sentAt:dat.sentAt||Date.now(),status:'pending'});
@@ -3910,7 +3970,52 @@ function addSpend(){
 function deleteSpend(id){spends=spends.filter(s=>String(s.id)!==String(id));persistSpend();renderPersonal();}
 
 // ── FRIENDS ─────────────────────────────────
-function mName(id){if(String(id)==='me')return currentUser&&!currentUser.isGuest?currentUser.firstName||'Me':'Me';const f=friends.find(x=>String(x.id)===String(id));return f?f.name:'?';}
+const _dismissedFriendUids = new Set(load('lf3_dismissed_friend_uids',[]).map(String));
+function _saveDismissedFriendUids(){ save('lf3_dismissed_friend_uids',[..._dismissedFriendUids]); }
+function _dismissFriendUid(uidVal){ if(uidVal){_dismissedFriendUids.add(String(uidVal));_saveDismissedFriendUids();} }
+function _undismissFriendUid(uidVal){ if(uidVal){_dismissedFriendUids.delete(String(uidVal));_saveDismissedFriendUids();} }
+function _isFriendUidDismissed(uidVal){return !!uidVal&&_dismissedFriendUids.has(String(uidVal));}
+
+// Resolve a member name using both local friend IDs and stable Firebase UIDs.
+// For existing shared groups, members[] may contain the creator's local IDs, so
+// memberUids[] is used as the canonical mapping whenever a group context exists.
+function mName(id,gid=null){
+  const idStr=String(id);
+  const u=window.currentUser||currentUser;
+  const ctxGid=gid!=null?gid:openGroupId;
+  if(ctxGid!=null){
+    const g=(groups||[]).find(x=>String(x.id)===String(ctxGid));
+    if(g){
+      const idx=(g.members||[]).findIndex(mid=>String(mid)===idStr);
+      const canonicalUid=idx>=0?(g.memberUids||[])[idx]:null;
+      if(canonicalUid){
+        if(String(canonicalUid)===String(u?.uid||'')) return u?.name||u?.firstName||'Me';
+        const byUid=(friends||[]).find(f=>String(f.fromUid||'')===String(canonicalUid));
+        if(byUid?.name) return byUid.name;
+      }
+      if(idStr==='me' && g.createdBy){
+        if(String(g.createdBy)===String(u?.uid||'')) return u?.name||u?.firstName||'Me';
+        const creator=(friends||[]).find(f=>String(f.fromUid||'')===String(g.createdBy));
+        if(creator?.name) return creator.name;
+      }
+    }
+  }
+  if(idStr==='me') return u&&!u.isGuest?(u.name||u.firstName||'Me'):'Me';
+  const f=(friends||[]).find(x=>String(x.id)===idStr||String(x.fromUid||'')===idStr);
+  if(f?.name) return f.name;
+  if(f?.contact) return String(f.contact).split('@')[0]||'Friend';
+  // Last chance: locate this legacy local member ID in any group and map it to UID.
+  for(const g of (groups||[])){
+    const idx=(g.members||[]).findIndex(mid=>String(mid)===idStr);
+    const canonicalUid=idx>=0?(g.memberUids||[])[idx]:null;
+    if(canonicalUid){
+      if(String(canonicalUid)===String(u?.uid||'')) return u?.name||u?.firstName||'Me';
+      const byUid=(friends||[]).find(fr=>String(fr.fromUid||'')===String(canonicalUid));
+      if(byUid?.name) return byUid.name;
+    }
+  }
+  return 'Member';
+}
 
 function renderFriends(){
   // Balances computed per-friend via getNetForFriend()
@@ -4173,6 +4278,9 @@ async function connectByCode(){
   if((friends||[]).some(f=>String(f.fromUid)===String(found.uid)||f.contact===found.email)){
     setStatus('Already connected with '+(found.name||'this person')+'!','var(--sage)');return;
   }
+
+  // The user is intentionally reconnecting, so allow fresh requests from this UID again.
+  _undismissFriendUid(found.uid);
 
   // ── Add locally as pending_sent ───────────────────────────────────────
   friends=[...(friends||[]),{
@@ -5672,9 +5780,11 @@ async function addSharedExpense(listId){
   if(dateRaw){ const p=dateRaw.split('-'); dateKey=p[0]+'-'+String(parseInt(p[1])).padStart(2,'0')+'-'+String(parseInt(p[2])).padStart(2,'0'); }
 
   const u = window.currentUser || currentUser;
-  const newExp = {id:uid(), cat, desc, amount:amt, date:dateKey, addedBy: u?.name||'Me', addedByUid: u?.uid||''};
+  const nowTs=Date.now();
+  const newExp = {id:uid(), cat, desc, amount:amt, date:dateKey, addedBy: u?.name||'Me', addedByUid: u?.uid||'', updatedAt:nowTs};
   if(!lst.expenses) lst.expenses = [];
   lst.expenses.push(newExp);
+  lst.updatedAt=nowTs;
   persist();
   // Save sharedExpenseLists explicitly to own Firestore doc (triggers own listener)
   if(window._fb){
@@ -6054,7 +6164,8 @@ async function saveSharedExpenseEdit(listId, expId){
   if(isNaN(amt)||amt<=0){ showToast('Please enter a valid amount.'); return; }
   let dateKey = exp.date;
   if(dateRaw){ const p=dateRaw.split('-'); dateKey=p[0]+'-'+String(parseInt(p[1])).padStart(2,'0')+'-'+String(parseInt(p[2])).padStart(2,'0'); }
-  exp.cat=cat; exp.desc=desc; exp.amount=amt; exp.date=dateKey;
+  exp.cat=cat; exp.desc=desc; exp.amount=amt; exp.date=dateKey; exp.updatedAt=Date.now();
+  lst.updatedAt=exp.updatedAt;
   persist();
   openSharedListDetail(listId);
   showToast('Expense updated!');
@@ -6075,16 +6186,31 @@ async function saveSharedExpenseEdit(listId, expId){
 }
 
 async function deleteSharedExpense(listId, expId){
-  const lst = sharedExpenseLists.find(l => l.id === listId);
+  const lst = sharedExpenseLists.find(l => String(l.id) === String(listId));
   if(!lst) return;
-  lst.expenses = (lst.expenses||[]).filter(e => String(e.id) !== String(expId));
+  const deletedId=String(expId);
+  lst.deletedExpenseIds=[...new Set([...(lst.deletedExpenseIds||[]).map(String),deletedId])];
+  lst.expenses = (lst.expenses||[]).filter(e => String(e.id) !== deletedId);
+  lst.updatedAt=Date.now();
   persist();
-  if(window._fb){
-    const {db:_db3,doc:_doc3,setDoc:_setDoc3}=window._fb;
-    const _u3=window.currentUser||currentUser;
-    if(_u3?.uid) _setDoc3(_doc3(_db3,'users',_u3.uid),{sharedExpenseLists},{merge:true}).catch(()=>{});
-  }
   openSharedListDetail(listId);
+
+  // Push the authoritative list (including deletion tombstones) to every member.
+  // This makes a delete made by either user appear on the other user's screen.
+  if(window._fb){
+    const {db,doc,getDoc,setDoc}=window._fb;
+    const u=window.currentUser||currentUser;
+    for(const memberUid of (lst.memberUids||[])){
+      if(!memberUid) continue;
+      try{
+        const snap=await getDoc(doc(db,'users',memberUid));
+        const data=snap.exists()?snap.data():{};
+        const theirLists=(data.sharedExpenseLists||[]).filter(l=>String(l.id)!==String(listId));
+        theirLists.push(lst);
+        await setDoc(doc(db,'users',memberUid),{sharedExpenseLists:theirLists},{merge:true});
+      }catch(e){console.warn('deleteSharedExpense push:',memberUid,e.code||e.message);}
+    }
+  }
 }
 
 
@@ -8526,17 +8652,21 @@ async function forceSyncNow(){
       const remote2= remoteSL.find(l=>String(l.id)===id);
       if(!local)  { mergedSL.push(remote2); return; }
       if(!remote2){ mergedSL.push(local);   return; }
-      // Keep the one with more expenses, or merge both expense arrays
-      const localExps  = local.expenses  || [];
-      const remoteExps = remote2.expenses || [];
+      // Merge by expense ID, but deletion tombstones always win so a deleted
+      // expense cannot be resurrected by an older local/remote snapshot.
+      const deletedIds=new Set([...(local.deletedExpenseIds||[]),...(remote2.deletedExpenseIds||[])].map(String));
+      const localExps  = (local.expenses||[]).filter(e=>!deletedIds.has(String(e.id)));
+      const remoteExps = (remote2.expenses||[]).filter(e=>!deletedIds.has(String(e.id)));
       const allExpIds  = new Set([...localExps.map(e=>String(e.id)), ...remoteExps.map(e=>String(e.id))]);
       const mergedExps = [];
       allExpIds.forEach(eid => {
         const le = localExps.find(e=>String(e.id)===eid);
         const re = remoteExps.find(e=>String(e.id)===eid);
-        mergedExps.push(le || re);
+        if(le&&re) mergedExps.push(Number(le.updatedAt||0)>=Number(re.updatedAt||0)?le:re);
+        else mergedExps.push(le||re);
       });
-      mergedSL.push({...remote2, ...local, expenses: mergedExps});
+      const newer=Number(local.updatedAt||0)>=Number(remote2.updatedAt||0)?local:remote2;
+      mergedSL.push({...remote2,...local,...newer,expenses:mergedExps,deletedExpenseIds:[...deletedIds]});
     });
 
     // Update local state with merged lists
@@ -9409,6 +9539,7 @@ async function checkForFriendRequests(){
   // Deduplicate and process
   const existing=new Set((friendReqs||[]).map(r=>r.fromUid));
   const newReqs=found.filter(r=>!existing.has(r.fromUid)&&
+    !_isFriendUidDismissed(r.fromUid)&&
     !(friends||[]).some(f=>String(f.fromUid)===String(r.fromUid)));
   if(newReqs.length===0){showToast('No new friend requests.');return;}
   if(window._processPendingFriendReqs) window._processPendingFriendReqs(
@@ -9428,6 +9559,7 @@ async function acceptFriendReq(id){
   const r = friendReqs.find(x => String(x.id) === String(id));
   if(!r) return;
   const u = window.currentUser || currentUser;
+  _undismissFriendUid(r.fromUid);
 
   // 1. Add friend to MY local list as active
   const myNewFriend = {id:uid(), name:r.from, contact:r.contact||r.fromEmail||'',
@@ -9498,10 +9630,27 @@ async function acceptFriendReq(id){
     }
   } catch(e){ console.warn('acceptFriendReq Firestore:', e); }
 }
-function declineFriendReq(id){
+async function declineFriendReq(id){
+  const r=friendReqs.find(x=>String(x.id)===String(id));
+  if(!r)return;
+  _dismissFriendUid(r.fromUid);
   friendReqs=friendReqs.filter(x=>String(x.id)!==String(id));
   _friendReqs=friendReqs;
   persist(); renderFriends();
+  document.getElementById('friend-req-banner')?.remove();
+
+  const u=window.currentUser||currentUser;
+  if(!u?.uid||!window._fb||!r.fromUid)return;
+  try{
+    const {db,doc,getDoc,setDoc,deleteDoc}=window._fb;
+    const mySnap=await getDoc(doc(db,'users',u.uid));
+    if(mySnap.exists()){
+      const data=mySnap.data();
+      const cleaned=(data.pendingFriendReqs||[]).filter(req=>String(req.fromUid)!==String(r.fromUid));
+      await setDoc(doc(db,'users',u.uid),{pendingFriendReqs:cleaned},{merge:true});
+    }
+    await deleteDoc(doc(db,'friend_requests',u.uid+'_'+r.fromUid)).catch(()=>{});
+  }catch(e){console.warn('declineFriendReq permanent cleanup:',e);}
 }
 function computeNet(){
   // Returns {friendId → balance} where +ve = they owe me, -ve = I owe them
@@ -9574,8 +9723,9 @@ async function cancelFriendRequest(id){
   }
 }
 
-function deleteFriend(id){
+async function deleteFriend(id){
   // Called for active friends — check balance before removing
+  const targetFriend=friends.find(f=>String(f.id)===String(id));
   const bal = Math.round(getNetForFriend(id)*100)/100;
   if(Math.abs(bal) > 0.01){
     const fname = friends.find(f => String(f.id) === String(id))?.name || 'Friend';
@@ -9585,8 +9735,28 @@ function deleteFriend(id){
     alert('Cannot remove friend — ' + dir + '. Please settle up first.');
     return;
   }
+  if(targetFriend?.fromUid) _dismissFriendUid(targetFriend.fromUid);
   friends = friends.filter(f => String(f.id) !== String(id));
+  friendReqs = friendReqs.filter(r=>String(r.fromUid||'')!==String(targetFriend?.fromUid||''));
+  _friendReqs=friendReqs;
   persistSpend(); renderFriends();
+  document.getElementById('friend-req-banner')?.remove();
+
+  // Purge any stale incoming request copies so the removed friend cannot reappear
+  // from pendingFriendReqs or the shared friend_requests collection.
+  const u=window.currentUser||currentUser;
+  if(u?.uid&&window._fb&&targetFriend?.fromUid){
+    try{
+      const {db,doc,getDoc,setDoc,deleteDoc}=window._fb;
+      const mySnap=await getDoc(doc(db,'users',u.uid));
+      if(mySnap.exists()){
+        const data=mySnap.data();
+        const cleaned=(data.pendingFriendReqs||[]).filter(r=>String(r.fromUid)!==String(targetFriend.fromUid));
+        await setDoc(doc(db,'users',u.uid),{pendingFriendReqs:cleaned},{merge:true});
+      }
+      await deleteDoc(doc(db,'friend_requests',u.uid+'_'+targetFriend.fromUid)).catch(()=>{});
+    }catch(e){console.warn('deleteFriend request cleanup:',e);}
+  }
 }
 
 // (demo seed removed)
@@ -9603,7 +9773,7 @@ function renderGroups(){
   glEl.innerHTML=groups.length===0
     ?'<div class="empty"><div class="empty-icon">🏕️</div>No groups yet. Create a trip!</div>'
     :groups.map(g=>{
-      const memberNames=g.members.map(mid=>mName(mid));
+      const memberNames=g.members.map(mid=>mName(mid,g.id));
       const total=splits.filter(s=>String(s.groupId)===String(g.id)).reduce((a,b)=>a+Number(b.totalAmount||0),0);
       return `<div class="group-card" onclick="openGroup(${g.id})">
         <div class="group-card-head"><span class="group-emoji">${g.emoji}</span><div><div class="group-name">${g.name}</div><div class="group-meta">${g.members.length} members · ₹${fmt(total)} total</div></div><button class="del" style="margin-left:auto" onclick="event.stopPropagation();deleteGroup(${g.id})">×</button></div>
@@ -9703,7 +9873,14 @@ function deleteGroup(id){
   splits=splits.filter(s=>s.groupId!==id);
   persistSpend();renderGroups();
 }
-function openGroup(id){openGroupId=id;renderGroupDetail(id);}
+async function openGroup(id){
+  openGroupId=id;
+  renderGroupDetail(id); // immediate cached render
+  if(window._refreshGroupData){
+    await window._refreshGroupData('open-group');
+    if(String(openGroupId)===String(id)) renderGroupDetail(id);
+  }
+}
 
 function editGroupSplitRow(splitId, gid){
   const sp = splits.find(s=>String(s.id)===String(splitId)); if(!sp) return;
@@ -10174,8 +10351,15 @@ async function deleteSplit(id){
     const {db,doc,getDoc,setDoc}=window._fb;
     const u=window.currentUser||currentUser;
     const gSplits=splits.filter(s=>String(s.groupId)===String(gid));
-    // Update shared_groups
-    if(grp) try{await setDoc(doc(db,'shared_groups',String(gid)),{splits:gSplits,updatedAt:Date.now()},{merge:true});}catch(e){}
+    // Update shared_groups and record a deletion tombstone. A stale client may
+    // still upload an old copy later, but readers will never resurrect this ID.
+    if(grp) try{
+      const sharedRef=doc(db,'shared_groups',String(gid));
+      const sharedSnap=await getDoc(sharedRef);
+      const oldDeleted=sharedSnap.exists()?(sharedSnap.data().deletedSplitIds||[]):[];
+      const deletedSplitIds=[...new Set([...oldDeleted.map(String),String(id)])];
+      await setDoc(sharedRef,{splits:gSplits,deletedSplitIds,updatedAt:Date.now()},{merge:true});
+    }catch(e){console.warn('deleteSplit shared tombstone:',e);}
     // Update member docs
     for(const mUid of (grp?.memberUids||[])){
       if(mUid===u?.uid)continue;
@@ -11476,10 +11660,14 @@ window._applySync = function(data) {
   }
   if(data.sharedExpenseLists !== undefined){
     const prevLists = sharedExpenseLists || [];
-    sharedExpenseLists=data.sharedExpenseLists; save('lf3_shared_expense_lists',sharedExpenseLists);
+    sharedExpenseLists=(data.sharedExpenseLists||[]).map(lst=>{
+      const deleted=new Set((lst.deletedExpenseIds||[]).map(String));
+      return {...lst,expenses:(lst.expenses||[]).filter(e=>!deleted.has(String(e.id)))};
+    });
+    save('lf3_shared_expense_lists',sharedExpenseLists);
     // Notify if a new expense appeared in any shared list
     if(typeof pushNotif === 'function') {
-      data.sharedExpenseLists.forEach(lst => {
+      sharedExpenseLists.forEach(lst => {
         const prev = prevLists.find(p => p.id === lst.id);
         const prevCount = (prev?.expenses||[]).length;
         const newExps = (lst.expenses||[]).slice(prevCount);
