@@ -174,8 +174,11 @@ window._processPendingFriendReqs = function(pendingReqs) {
   let newFound = false;
   pendingReqs.forEach(r => {
     if (r.status !== 'pending') return;
-    const already = (friendReqs||[]).some(x => x.fromUid === r.fromUid);
-    if (!already) {
+    const already = (friendReqs||[]).some(x => String(x.fromUid) === String(r.fromUid));
+    const alreadyFriend = (friends||[]).some(f =>
+      f.status === 'active' && String(f.fromUid||'') === String(r.fromUid||'')
+    );
+    if (!already && !alreadyFriend) {
       friendReqs = [...(friendReqs||[]), {
         id: r.id||r.fromUid, from: r.fromName||'Someone',
         contact: r.fromEmail||'', fromUid: r.fromUid,
@@ -2398,28 +2401,44 @@ function launchApp() {
     }catch(e){ console.warn('launchApp fetch pendingFriendReqs:', e); }
   }, 2000);
   // Auto-start tour on first login
-  // Poll shared_groups to catch splits added by group members
-  setTimeout(async()=>{
+  // Keep shared_groups authoritative for each group so ADD / EDIT / DELETE all sync.
+  // We still push directly to member user docs for near-real-time updates; this is a
+  // fallback that also repairs missed writes or stale local state.
+  const syncSharedGroupsFromCloud = async()=>{
     const _u3=window.currentUser||currentUser;
     if(!_u3?.uid||!window._fb) return;
     try{
       const {db,collection,getDocs}=window._fb;
       const snaps=await getDocs(collection(db,'shared_groups'));
+      let anyChanged=false;
       snaps.forEach(d=>{
         const gdata=d.data();
-        const myGroup=groups.find(g=>String(g.id)===String(gdata.id));
+        const remoteGid=String(gdata.id ?? d.id);
+        const myGroup=groups.find(g=>String(g.id)===remoteGid);
         if(!myGroup)return;
-        const remSplits=gdata.splits||[];
-        let changed=false;
-        remSplits.forEach(rs=>{
-          const idx=splits.findIndex(ls=>String(ls.id)===String(rs.id));
-          if(idx>=0){ if(JSON.stringify(splits[idx])!==JSON.stringify(rs)){splits[idx]=rs;changed=true;} }
-          else { splits.push(rs); changed=true; }
-        });
-        if(changed){ persistSpend(); if(openGroupId===myGroup.id)renderGroupDetail(openGroupId); }
+
+        const remoteSplits=Array.isArray(gdata.splits)?gdata.splits:[];
+        const localGroupSplits=splits.filter(sp=>String(sp.groupId)===remoteGid);
+        if(JSON.stringify(localGroupSplits)!==JSON.stringify(remoteSplits)){
+          // Replace this group's local slice completely. This is what makes a remote
+          // deletion visible instead of only ever merging newly-added expenses.
+          splits=[
+            ...splits.filter(sp=>String(sp.groupId)!==remoteGid),
+            ...remoteSplits
+          ];
+          _splits=splits;
+          anyChanged=true;
+        }
       });
-    }catch(e){}
-  },3000);
+      if(anyChanged){
+        persistSpend();
+        if(openGroupId!=null) renderGroupDetail(openGroupId);
+        else if(currentPage==='spending'&&spendTab==='groups') renderGroups();
+      }
+    }catch(e){console.warn('shared_groups sync:',e);}
+  };
+  setTimeout(syncSharedGroupsFromCloud,3000);
+  setInterval(syncSharedGroupsFromCloud,10000);
 
   // Poll friend_requests collection periodically (every 30s when app is open)
   setInterval(async()=>{
@@ -4831,6 +4850,13 @@ function openQuickAdd(){
       showToast('Open a group or shared list first, then tap + to add an expense.');
       return;
     }
+  }
+
+  // On a real group, the floating + must behave exactly like the
+  // “Add expense & split” button — same Paid by, Split type and breakdown fields.
+  if(qaContext === 'group_split' && qaGroupId!=null){
+    openSplitModal(qaGroupId);
+    return;
   }
 
   // Sheet title based on context
@@ -9407,7 +9433,7 @@ async function acceptFriendReq(id){
   const myNewFriend = {id:uid(), name:r.from, contact:r.contact||r.fromEmail||'',
                        status:'active', fromUid:r.fromUid||null};
   friends.push(myNewFriend);
-  friendReqs = friendReqs.filter(x => x.id !== id);
+  friendReqs = friendReqs.filter(x => String(x.id) !== String(id));
   persist();
   renderFriends();
   showToast('✅ ' + r.from + ' added as a friend!');
@@ -9417,14 +9443,20 @@ async function acceptFriendReq(id){
 
   if(!u?.uid || !window._fb) return;
   try {
-    const {db, doc, setDoc, getDoc, collection, addDoc} = window._fb;
+    const {db, doc, setDoc, getDoc, deleteDoc} = window._fb;
 
     // 2. Remove this request from MY pendingFriendReqs in Firestore
     const mySnap = await getDoc(doc(db,'users',u.uid));
     if(mySnap.exists()){
       const myData = mySnap.data();
-      const cleaned = (myData.pendingFriendReqs||[]).filter(req => req.fromUid !== r.fromUid);
+      const cleaned = (myData.pendingFriendReqs||[]).filter(req => String(req.fromUid) !== String(r.fromUid));
       await setDoc(doc(db,'users',u.uid), {pendingFriendReqs: cleaned}, {merge:true});
+    }
+
+    // Also remove the shared friend_requests record. Otherwise the 30-second
+    // request poll sees the same pending document and recreates an accepted request.
+    if(r.fromUid){
+      await deleteDoc(doc(db,'friend_requests',u.uid+'_'+r.fromUid)).catch(()=>{});
     }
 
     // 3. Update SENDER's Firestore document:
@@ -9674,12 +9706,12 @@ function deleteGroup(id){
 function openGroup(id){openGroupId=id;renderGroupDetail(id);}
 
 function editGroupSplitRow(splitId, gid){
-  const sp = splits.find(s=>s.id===splitId); if(!sp) return;
+  const sp = splits.find(s=>String(s.id)===String(splitId)); if(!sp) return;
   const rowEl = document.getElementById('grp-split-row-'+splitId); if(!rowEl) return;
   const catNames = Object.keys(allCats()); // all including custom
   const dp = (sp.date||todayKey()).split('-');
   const dateVal = `${(dp[0]||new Date().getFullYear()).toString().padStart(4,'0')}-${(dp[1]||1).toString().padStart(2,'0')}-${(dp[2]||1).toString().padStart(2,'0')}`;
-  const grp = groups.find(g=>g.id===gid);
+  const grp = groups.find(g=>String(g.id)===String(gid));
   const mNames = (sp.members||[]).map(m=>{
     if(String(m.friendId)==='me') return (window.currentUser||currentUser)?.name||'Me';
     const f=friends.find(x=>x.id===m.friendId); return f?f.name:'Member';
@@ -9702,7 +9734,7 @@ function editGroupSplitRow(splitId, gid){
 }
 
 async function saveGroupSplitEdit(splitId, gid){
-  const sp = splits.find(s=>s.id===splitId); if(!sp) return;
+  const sp = splits.find(s=>String(s.id)===String(splitId)); if(!sp) return;
   const cat  = document.getElementById('gse-cat-'+splitId)?.value || sp.cat || 'Other';
   const desc = (document.getElementById('gse-desc-'+splitId)?.value||'').trim();
   const amt  = parseFloat(document.getElementById('gse-amt-'+splitId)?.value||0);
@@ -9719,11 +9751,20 @@ async function saveGroupSplitEdit(splitId, gid){
   renderGroupDetail(gid);
   showToast('Expense updated!');
   // Push updated splits to group members
-  const grp = groups.find(g=>g.id===gid);
+  const grp = groups.find(g=>String(g.id)===String(gid));
   if(grp && window._fb){
     const u=window.currentUser||currentUser;
     const {db,doc,getDoc,setDoc}=window._fb;
-    const groupSplits=splits.filter(s=>s.groupId===gid);
+    const groupSplits=splits.filter(s=>String(s.groupId)===String(gid));
+
+    // Update the shared group first so every member (and the fallback group sync)
+    // sees the edited expense, not only newly-added expenses.
+    try{
+      await setDoc(doc(db,'shared_groups',String(gid)),{
+        ...grp, splits:groupSplits, updatedAt:Date.now()
+      },{merge:true});
+    }catch(e){console.warn('saveGroupSplitEdit shared_groups:',e);}
+
     for(const mUid of (grp.memberUids||[])){
       if(mUid===u?.uid) continue;
       try{
@@ -10129,10 +10170,10 @@ async function deleteSplit(id){
   if(openGroupId)renderGroupDetail(openGroupId);else renderSettle();
   // Push deletion to group members
   if(gid&&window._fb){
-    const grp=groups.find(g=>g.id===gid);
+    const grp=groups.find(g=>String(g.id)===String(gid));
     const {db,doc,getDoc,setDoc}=window._fb;
     const u=window.currentUser||currentUser;
-    const gSplits=splits.filter(s=>s.groupId===gid);
+    const gSplits=splits.filter(s=>String(s.groupId)===String(gid));
     // Update shared_groups
     if(grp) try{await setDoc(doc(db,'shared_groups',String(gid)),{splits:gSplits,updatedAt:Date.now()},{merge:true});}catch(e){}
     // Update member docs
