@@ -278,6 +278,7 @@ window._saveToFirestore = async function() {
       friendUpiIds:       (typeof friendUpiIds       !== 'undefined') ? friendUpiIds       : {},
       todoCategories:     (typeof todoCategories     !== 'undefined') ? todoCategories     : [],
       sharedTodoLists:    (typeof sharedTodoLists    !== 'undefined') ? sharedTodoLists    : [],
+      deletedSharedListIds:(typeof deletedSharedListIds!== 'undefined') ? deletedSharedListIds : [],
       // sharedExpenseLists intentionally excluded from bulk save —
       // each shared list is pushed individually to member docs to prevent overwrite
       visionCards:        (typeof visionCards        !== 'undefined') ? visionCards        : [],
@@ -2095,7 +2096,7 @@ onAuthStateChanged(auth, async (user) => {
             </div>
             <!-- Split Groups -->
             <div class="card">
-              <div class="card-title">Split Expense Groups</div>
+              <div class="card-title">Split Expense Groups / Trips</div>
               <div id="groups-list"></div>
               <div id="groups-form"></div>
             </div>
@@ -3628,6 +3629,7 @@ const XKEYS={customCats:'lf3_custom_cats',friends:'lf3_friends',friendReqs:'lf3_
 const BUILTIN_CATS={Food:{emoji:'🍽️',color:'#6B8F71',bg:'#EAF0EB'},Travel:{emoji:'🚗',color:'#B8845A',bg:'#F5EAE0'},Shopping:{emoji:'🛍️',color:'#5A78B8',bg:'#E5EAF5'},Health:{emoji:'💊',color:'#B85A4A',bg:'#F5E8E5'},Bills:{emoji:'📄',color:'#8A6BC4',bg:'#EDE5F5'},Entertainment:{emoji:'🎬',color:'#5A9898',bg:'#E5F0F0'},Other:{emoji:'📦',color:'#9C9C98',bg:'#F0F0F0'}};
 let _customCats=load(XKEYS.customCats,[]);
 let sharedExpenseLists = load('lf3_shared_expense_lists', []);
+let deletedSharedListIds = load('lf3_deleted_shared_list_ids', []).map(String);
 // Day Planner: persons + schedule blocks
 // person: {id, name, avatar, color, isMe}
 // block:  {id, personId, day, startH, startM, endH, endM, title, icon, reminder}
@@ -5354,12 +5356,46 @@ function renderSharedExpenseLists(){
 }
 
 
-function deleteSharedList(listId){
-  if(!confirm('Delete this shared list and all its expenses?')) return;
-  sharedExpenseLists = sharedExpenseLists.filter(l => l.id !== listId);
+async function deleteSharedList(listId){
+  const listKey=String(listId);
+  const lst=sharedExpenseLists.find(l=>String(l.id)===listKey);
+  if(!lst) return;
+  if(!confirm('Delete this shared list and all its expenses? This will remove it for all members.')) return;
+
+  // Tombstone the list ID so stale clients / old Firestore snapshots cannot resurrect it.
+  if(!deletedSharedListIds.includes(listKey)) deletedSharedListIds.push(listKey);
+  sharedExpenseLists = sharedExpenseLists.filter(l => String(l.id) !== listKey);
+  save('lf3_deleted_shared_list_ids', deletedSharedListIds);
+  save('lf3_shared_expense_lists', sharedExpenseLists);
   persist();
   renderSharedExpenseLists();
-  showToast('Shared list deleted.');
+  showToast('Shared list deleted for everyone.');
+
+  const u=window.currentUser||currentUser;
+  if(!window._fb||!u?.uid) return;
+  const {db,doc,getDoc,setDoc}=window._fb;
+
+  // Old lists may not have memberUids, so derive them from memberIds when possible.
+  const memberUids=new Set((lst.memberUids||[]).filter(Boolean).map(String));
+  memberUids.add(String(u.uid));
+  (lst.memberIds||[]).forEach(mid=>{
+    if(String(mid)==='me') return;
+    const f=friends.find(x=>String(x.id)===String(mid)||String(x.fromUid)===String(mid));
+    if(f?.fromUid) memberUids.add(String(f.fromUid));
+  });
+
+  for(const memberUid of memberUids){
+    try{
+      const snap=await getDoc(doc(db,'users',memberUid));
+      const data=snap.exists()?snap.data():{};
+      const theirLists=(data.sharedExpenseLists||[]).filter(l=>String(l.id)!==listKey);
+      const tombs=[...new Set([...(data.deletedSharedListIds||[]).map(String),listKey])];
+      await setDoc(doc(db,'users',memberUid),{
+        sharedExpenseLists:theirLists,
+        deletedSharedListIds:tombs
+      },{merge:true});
+    }catch(e){console.warn('deleteSharedList push:',memberUid,e.code||e.message);}
+  }
 }
 
 async function openEditSharedListModal(listId){
@@ -8645,9 +8681,14 @@ async function forceSyncNow(){
     // (protects against local empty list overwriting remote data)
     const localSL  = sharedExpenseLists || [];
     const remoteSL = remote.sharedExpenseLists || [];
+    const deletedListIds = new Set([
+      ...(deletedSharedListIds||[]).map(String),
+      ...(remote.deletedSharedListIds||[]).map(String)
+    ]);
     const mergedSL = [];
     const allIds   = new Set([...localSL.map(l=>String(l.id)), ...remoteSL.map(l=>String(l.id))]);
     allIds.forEach(id => {
+      if(deletedListIds.has(String(id))) return; // permanent list deletion wins
       const local  = localSL.find(l=>String(l.id)===id);
       const remote2= remoteSL.find(l=>String(l.id)===id);
       if(!local)  { mergedSL.push(remote2); return; }
@@ -8671,7 +8712,9 @@ async function forceSyncNow(){
 
     // Update local state with merged lists
     sharedExpenseLists = mergedSL;
+    deletedSharedListIds = [...deletedListIds];
     localStorage.setItem('lf3_shared_expense_lists', JSON.stringify(mergedSL));
+    localStorage.setItem('lf3_deleted_shared_list_ids', JSON.stringify(deletedSharedListIds));
 
     // Step 3: Single write — all state + merged shared lists in one setDoc
     // (avoids race condition between _saveToFirestore and second setDoc)
@@ -8701,6 +8744,7 @@ async function forceSyncNow(){
       schedules:       (typeof schedules       !=='undefined')?schedules:[],
       notifications:   (typeof notifications   !=='undefined')?notifications.slice(0,50):[],
       sharedExpenseLists: mergedSL,
+      deletedSharedListIds: deletedSharedListIds,
       updatedAt: ts,
       updatedBy: DEVICE_ID_LOCAL
     };
@@ -10132,7 +10176,8 @@ function renderGroupDetail(gid){
             if(seen.has(key))return; seen.add(key);
             const aOwesB=(netMatrix[a]?.[b]||0);
             const bOwesA=(netMatrix[b]?.[a]||0);
-            const net=aOwesB-bOwesA;
+            // Each expense is stored twice in this signed matrix (forward + reverse), so divide by 2.
+            const net=(aOwesB-bOwesA)/2;
             if(Math.abs(net)<0.5)return; // settled
             const debtor=net>0?a:b;
             const creditor=net>0?b:a;
@@ -10217,6 +10262,7 @@ function renderGroupDetail(gid){
       <!-- Actions -->
       <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">
         <button class="add-btn" style="flex:1" onclick="openSplitModal(${gid})">+ Add expense &amp; split</button>
+        <button class="csv-btn export" style="flex:0 0 auto" onclick="exportGroupCsv(${gid})">📤 Export CSV</button>
       </div>
     </div>`;
 
@@ -10226,6 +10272,65 @@ function renderGroupDetail(gid){
     const amounts = gcs.map(([,amt])=>Math.round(amt));
     setTimeout(()=>renderDonutChart('grp-donut-'+gid, labels, amounts), 100);
   }
+}
+
+
+function exportGroupCsv(gid){
+  const g=groups.find(x=>String(x.id)===String(gid));
+  if(!g){ showToast('Group not found.'); return; }
+  const groupSplits=splits
+    .filter(sp=>String(sp.groupId)===String(gid))
+    .sort((a,b)=>String(a.date||'').localeCompare(String(b.date||'')));
+
+  if(groupSplits.length===0){
+    showToast('No group expenses to export yet.');
+    return;
+  }
+
+  const esc=(v)=>{
+    const text=String(v??'');
+    return /[",\n]/.test(text)?'"'+text.replace(/"/g,'""')+'"':text;
+  };
+  const rows=[[
+    'Date','Expense','Category','Total Amount','Paid By',
+    'Split Type','Member','Member Share','Payment Status'
+  ].map(esc).join(',')];
+
+  groupSplits.forEach(sp=>{
+    const members=(sp.members||[]);
+    if(members.length===0){
+      rows.push([
+        sp.date||'',sp.desc||'',sp.cat||'Other',Number(sp.totalAmount||0).toFixed(2),
+        mName(sp.paidBy,gid),sp.splitType||'equal','','',''
+      ].map(esc).join(','));
+      return;
+    }
+    members.forEach(m=>{
+      rows.push([
+        sp.date||'',
+        sp.desc||'',
+        sp.cat||'Other',
+        Number(sp.totalAmount||0).toFixed(2),
+        mName(sp.paidBy,gid),
+        sp.splitType==='percent'?'Percentage':'Equal',
+        mName(m.friendId,gid),
+        Number(m.share||0).toFixed(2),
+        m.paid?'Paid':'Owes'
+      ].map(esc).join(','));
+    });
+  });
+
+  const blob=new Blob(['\ufeff'+rows.join('\n')],{type:'text/csv;charset=utf-8;'});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');
+  const safeName=(g.name||'group').replace(/[^a-z0-9_-]+/gi,'-').replace(/^-+|-+$/g,'')||'group';
+  a.href=url;
+  a.download='lifeflow-'+safeName+'-'+todayKey()+'.csv';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+  showToast('📤 Exported '+groupSplits.length+' group expenses.');
 }
 
 function setGrpDateMode(gid, mode){
@@ -11658,13 +11763,25 @@ window._applySync = function(data) {
   if(data.notifications !== undefined && data.notifications.length > (notifications||[]).length){
     notifications=data.notifications; localStorage.setItem('lf3_notifs',JSON.stringify(notifications)); changed=true;
   }
+  if(data.deletedSharedListIds !== undefined){
+    deletedSharedListIds=[...new Set([
+      ...(deletedSharedListIds||[]).map(String),
+      ...(data.deletedSharedListIds||[]).map(String)
+    ])];
+    save('lf3_deleted_shared_list_ids',deletedSharedListIds);
+    changed=true;
+  }
   if(data.sharedExpenseLists !== undefined){
     const prevLists = sharedExpenseLists || [];
-    sharedExpenseLists=(data.sharedExpenseLists||[]).map(lst=>{
-      const deleted=new Set((lst.deletedExpenseIds||[]).map(String));
-      return {...lst,expenses:(lst.expenses||[]).filter(e=>!deleted.has(String(e.id)))};
-    });
+    const deletedLists=new Set((deletedSharedListIds||[]).map(String));
+    sharedExpenseLists=(data.sharedExpenseLists||[])
+      .filter(lst=>!deletedLists.has(String(lst.id)))
+      .map(lst=>{
+        const deleted=new Set((lst.deletedExpenseIds||[]).map(String));
+        return {...lst,expenses:(lst.expenses||[]).filter(e=>!deleted.has(String(e.id)))};
+      });
     save('lf3_shared_expense_lists',sharedExpenseLists);
+    changed=true;
     // Notify if a new expense appeared in any shared list
     if(typeof pushNotif === 'function') {
       sharedExpenseLists.forEach(lst => {
@@ -11725,7 +11842,8 @@ window._getState = function() {
     friendUpiIds:   friendUpiIds,
     todoCategories: todoCategories,
     sharedTodoLists: sharedTodoLists,
-    sharedExpenseLists: sharedExpenseLists
+    sharedExpenseLists: sharedExpenseLists,
+    deletedSharedListIds: deletedSharedListIds
   };
 };
 
